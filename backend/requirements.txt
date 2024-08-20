@@ -1,0 +1,16 @@
+shortuuid
+fastapi
+uvicorn
+pydantic==1.10.9
+pytz
+transformers
+peft
+datasets
+trl>=0.8.6
+python-dotenv
+mysql-connector-python
+sagemaker
+PyJWT
+sentencepiece
+modelscope
+aioboto3
