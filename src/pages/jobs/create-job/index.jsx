@@ -50,7 +50,8 @@ const defaultData = {
   instance_num: 1,
   datasetInfo: datasetInfoExample,
   booster_option: 'auto',
-  deepspeed: 'none'
+  deepspeed: 'none',
+  s3_checkpoint:''
 };
 
 

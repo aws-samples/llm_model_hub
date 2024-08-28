@@ -67,10 +67,10 @@ const defaultErrors = {
   s3DataPath: null,
   datasetInfo: null,
   stage: null,
-  // s3BucketSelectedOption: null,
   instance_num: null,
   instance_type: null,
   booster_option:null,
+  s3_checkpoint:null,
 };
 
 
@@ -130,7 +130,8 @@ export const FormWithValidation = ({
     s3DataPath:useRef(null),
     datasetInfo:useRef(null),
     booster_option:useRef(null),
-    deepspeed:useRef(null)
+    deepspeed:useRef(null),
+    s3_checkpoint:useRef(null)
   };
   const onCancelClick =()=>
   {
@@ -186,6 +187,8 @@ export const FormWithValidation = ({
           dataset_info:data.datasetInfo,
           booster_option:data.booster_option,
           deepspeed:data.deepspeed,
+          s3_checkpoint:data.s3_checkpoint,
+          // lora_r:data.lora_r,
           // lora_dropout:data.lora_dropout,
           // lora_bias:data.lora_bias,
           // lora_module_name:data.lora_module_name,

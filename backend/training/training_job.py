@@ -11,7 +11,7 @@ from pydantic import BaseModel,Field
 import sys
 sys.path.append('./')
 from logger_config import setup_logger
-from training.helper import prepare_dataset_info,to_datetime_string,list_s3_objects
+from training.helper import prepare_dataset_info,to_datetime_string,list_s3_objects,is_valid_s3_uri
 from model.data_model import JobInfo
 from utils.get_factory_config import get_model_path_by_name
 from utils.llamafactory.extras.constants import DEFAULT_TEMPLATE,DownloadSource
@@ -225,6 +225,7 @@ class TrainingJobExcutor(BaseModel):
                         sg_lora_merge_config:str,
                         instance_type:str ,
                         instance_num:int,
+                        s3_checkpoint:str,
                         merge_lora:str = '1',
                         training_input_path:str=None):
 
@@ -236,6 +237,7 @@ class TrainingJobExcutor(BaseModel):
         environment = {
             'NODE_NUMBER':str(instance_num),
             "s3_data_paths":f"{training_input_path}",
+            "s3_checkpoint":s3_checkpoint,
             "HUGGING_FACE_HUB_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
             "merge_lora":merge_lora,
             "sg_config":sg_config,
@@ -304,12 +306,21 @@ class TrainingJobExcutor(BaseModel):
             
             # Lora和没有设置量化时，merge lora
             merge_lora = '1' if job_payload['finetuning_method'] == 'lora' and job_payload['quantization_bit'] == 'none' else '0'
+            
+            #检查checkpoint地址
+            s3_checkpoint = job_payload['s3_checkpoint']
+            if s3_checkpoint:
+                if not is_valid_s3_uri(s3_checkpoint):
+                    logger.warn(f"checkpoint s3 path is invalid:{s3_checkpoint}")
+                    s3_checkpoint = ''
+                    
             self.create_training(sg_config=sg_config,
                                       instance_num = int(job_payload['instance_num']),
                                     model_id=model_id,
                                     sg_lora_merge_config=sg_lora_merge_config,
                                     training_input_path= s3_data_path,
                                     merge_lora=merge_lora,
+                                    s3_checkpoint=s3_checkpoint,
                                         instance_type=job_payload['instance_type'])
 
             return True,'create job success'
