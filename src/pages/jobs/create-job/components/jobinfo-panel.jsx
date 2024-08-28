@@ -445,6 +445,18 @@ export default function DistributionPanel({
           >
             <SelectModelName data={data} setData={setData} readOnly={readOnly} refs={refs} />
           </FormField>
+          <FormField
+            label="Existing Checkpoint (Optional)"
+            stretch={false}
+            description="使用已有的checkpoint文件继续训练（⚠️：如果是Lora训练，则选择Lora模型checkpoint）"
+            errorText={errors.s3_checkpoint}
+            i18nStrings={{ errorIconAriaLabel: 'Error' }}
+          >
+            <S3Selector 
+                    objectsIsItemDisabled={(item) => !item.IsFolder}
+                    setOutputPath={(value)=> setData({ s3_checkpoint:value})} 
+                  outputPath={data.job_payload?.s3_checkpoint|| data.s3_checkpoint}/>
+          </FormField>
           
           <FormField
             label="Prompte Template"
