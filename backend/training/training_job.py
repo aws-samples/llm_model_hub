@@ -251,8 +251,10 @@ class TrainingJobExcutor(BaseModel):
             "USE_MODELSCOPE_HUB": "1" if DEFAULT_REGION.startswith('cn') else '0'
             
         }
-        if  WANDB_API_KEY:
+        if WANDB_API_KEY:
             environment["WANDB_API_KEY"] = WANDB_API_KEY
+        else:
+            environment["WANDB_DISABLED"] = "true"
         entry_point = 'entry_single_lora.py' if instance_num == 1 else 'entry-multi-nodes.py'
         self.output_s3_path = output_s3_path
         self.estimator = PyTorch(entry_point=entry_point,
