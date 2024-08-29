@@ -136,11 +136,13 @@ class TrainingJobExcutor(BaseModel):
         else:
             doc['finetuning_type'] = 'full'
             
+
+        doc['model_name_or_path'] = model_id    
         doc['learning_rate']=  float(job_payload['learning_rate'])
         doc['cutoff_len'] = int(job_payload['cutoff_len'])
         doc['num_train_epochs'] = float(job_payload['num_train_epochs'])
         doc['warmup_steps'] = int(job_payload['warmup_steps'])
-        doc['model_name_or_path'] = model_id
+        
         if val_size:=float(job_payload['val_size']):
             doc['val_size'] = val_size
         doc['template'] =  DEFAULT_TEMPLATE[job_payload['prompt_template']]
@@ -226,6 +228,7 @@ class TrainingJobExcutor(BaseModel):
                         instance_type:str ,
                         instance_num:int,
                         s3_checkpoint:str,
+                        s3_model_path:str,
                         merge_lora:str = '1',
                         training_input_path:str=None):
 
@@ -238,6 +241,7 @@ class TrainingJobExcutor(BaseModel):
             'NODE_NUMBER':str(instance_num),
             "s3_data_paths":f"{training_input_path}",
             "s3_checkpoint":s3_checkpoint,
+            "s3_model_path":s3_model_path,
             "HUGGING_FACE_HUB_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
             "merge_lora":merge_lora,
             "sg_config":sg_config,
@@ -307,12 +311,18 @@ class TrainingJobExcutor(BaseModel):
             # Lora和没有设置量化时，merge lora
             merge_lora = '1' if job_payload['finetuning_method'] == 'lora' and job_payload['quantization_bit'] == 'none' else '0'
             
-            #检查checkpoint地址
+            #validate checkpoint地址
             s3_checkpoint = job_payload['s3_checkpoint']
             if s3_checkpoint:
                 if not is_valid_s3_uri(s3_checkpoint):
-                    logger.warn(f"checkpoint s3 path is invalid:{s3_checkpoint}")
+                    logger.warn(f"s3_checkpoint path is invalid:{s3_checkpoint}")
                     s3_checkpoint = ''
+            #validate s3_model_path
+            s3_model_path = job_payload['s3_model_path']
+            if s3_model_path:
+                if not is_valid_s3_uri(s3_model_path):
+                    logger.warn(f"s3_model_path is invalid:{s3_model_path}")
+                    s3_model_path = ''
                     
             self.create_training(sg_config=sg_config,
                                       instance_num = int(job_payload['instance_num']),
@@ -321,7 +331,8 @@ class TrainingJobExcutor(BaseModel):
                                     training_input_path= s3_data_path,
                                     merge_lora=merge_lora,
                                     s3_checkpoint=s3_checkpoint,
-                                        instance_type=job_payload['instance_type'])
+                                    s3_model_path=s3_model_path,
+                                    instance_type=job_payload['instance_type'])
 
             return True,'create job success'
         else:

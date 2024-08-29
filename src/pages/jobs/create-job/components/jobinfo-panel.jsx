@@ -439,16 +439,28 @@ export default function DistributionPanel({
           <FormField
             label="Model Name"
             stretch={false}
-            description="select a supported Model"
+            description="选择模型名称"
             errorText={errors.model_name}
             i18nStrings={{ errorIconAriaLabel: 'Error' }}
           >
             <SelectModelName data={data} setData={setData} readOnly={readOnly} refs={refs} />
           </FormField>
           <FormField
-            label="Existing Checkpoint (Optional)"
+            label="Use Existing Model Weight (Optional)"
             stretch={false}
-            description="使用已有的checkpoint文件继续训练（⚠️：如果是Lora训练，则选择Lora模型checkpoint）"
+            description="使用已有的模型文件进行训练"
+            errorText={errors.s3_model_path}
+            i18nStrings={{ errorIconAriaLabel: 'Error' }}
+          >
+              <S3Selector 
+                      objectsIsItemDisabled={(item) => !item.IsFolder}
+                      setOutputPath={(value)=> setData({ s3_model_path:value})} 
+                    outputPath={data.job_payload?.s3_model_path|| data.s3_model_path}/>
+          </FormField>
+          <FormField
+            label="Use Existing Checkpoint (Optional)"
+            stretch={false}
+            description="使用已有的checkpoint文件继续训练（⚠️：如果是Lora训练，选择Lora模型checkpoint）"
             errorText={errors.s3_checkpoint}
             i18nStrings={{ errorIconAriaLabel: 'Error' }}
           >
