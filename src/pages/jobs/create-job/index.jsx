@@ -51,7 +51,8 @@ const defaultData = {
   datasetInfo: datasetInfoExample,
   booster_option: 'auto',
   deepspeed: 'none',
-  s3_checkpoint:''
+  s3_checkpoint:'',
+  s3_model_path:'',
 };
 
 

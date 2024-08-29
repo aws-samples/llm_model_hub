@@ -28,7 +28,7 @@ export const TRAINING_PRECISION = [
 export const BOOSTER_OPTIONS = [
   { label: 'None', value: 'auto' },
   { label: 'FlashAttn2', value: 'fa2' },
-  { label: 'unsloth', value: 'use_unsloth' }
+  // { label: 'unsloth', value: 'use_unsloth' }
 ]
 
 export const  INSTANCE_TYPES =[
