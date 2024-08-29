@@ -246,12 +246,13 @@ class TrainingJobExcutor(BaseModel):
             "merge_lora":merge_lora,
             "sg_config":sg_config,
             "sg_lora_merge_config":sg_lora_merge_config,
-            "WANDB_API_KEY":WANDB_API_KEY if WANDB_API_KEY else None,
             'OUTPUT_MODEL_S3_PATH': output_s3_path, # destination 
             "PIP_INDEX":'https://pypi.tuna.tsinghua.edu.cn/simple' if DEFAULT_REGION.startswith('cn') else '',
             "USE_MODELSCOPE_HUB": "1" if DEFAULT_REGION.startswith('cn') else '0'
             
         }
+        if  WANDB_API_KEY:
+            environment["WANDB_API_KEY"] = WANDB_API_KEY
         entry_point = 'entry_single_lora.py' if instance_num == 1 else 'entry-multi-nodes.py'
         self.output_s3_path = output_s3_path
         self.estimator = PyTorch(entry_point=entry_point,
