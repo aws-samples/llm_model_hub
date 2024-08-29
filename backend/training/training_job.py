@@ -246,7 +246,7 @@ class TrainingJobExcutor(BaseModel):
             "merge_lora":merge_lora,
             "sg_config":sg_config,
             "sg_lora_merge_config":sg_lora_merge_config,
-            "WANDB_API_KEY":WANDB_API_KEY,
+            "WANDB_API_KEY":WANDB_API_KEY if WANDB_API_KEY else None,
             'OUTPUT_MODEL_S3_PATH': output_s3_path, # destination 
             "PIP_INDEX":'https://pypi.tuna.tsinghua.edu.cn/simple' if DEFAULT_REGION.startswith('cn') else '',
             "USE_MODELSCOPE_HUB": "1" if DEFAULT_REGION.startswith('cn') else '0'
