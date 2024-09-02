@@ -67,7 +67,7 @@ git config --global url."https://gitclone.com/".insteadOf https://
 ```
 - 使用--recurse-submodule下载代码  
 ```bash
-git clone --recurse-submodule https://github.com/xiehust/model_hub_v2.git
+git clone --recurse-submodule https://github.com/aws-samples/llm_model_hub.git
 ```
 
 ## 2.部署前端
