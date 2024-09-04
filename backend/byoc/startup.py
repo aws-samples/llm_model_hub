@@ -15,7 +15,7 @@ def init():
     bucket = sess.default_bucket() 
     s3_code_prefix = f"sagemaker_endpoint/vllm"
     os.system("tar czvf model.tar.gz model_tar/")
-    code_artifact = sess.upload_data("model.tar.gz", bucket, s3_code_prefix)
+    model_artifact = sess.upload_data("model.tar.gz", bucket, s3_code_prefix)
     print(f"S3 Code or Model tar ball uploaded to --- > {model_artifact}")
     
     #write code_artifact to .env file 
