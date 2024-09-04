@@ -106,18 +106,18 @@ Resources:
               RANDOM_PASSWORD=$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1) 
               aws ssm put-parameter --name "/${AWS::StackName}/RandomPassword" --value "$RANDOM_PASSWORD" --type "SecureString" --overwrite --region ${AWS::Region}
               cd /home/ubuntu/model_hub/backend
-              bash 01.setup.sh
+              sudo -u ubuntu bash 01.setup.sh
               sleep 30
               #add user in db
               source ../miniconda3/bin/activate py311
               conda activate py311
               python3 users/add_user.py demo_user $RANDOM_PASSWORD default
               #start backend
-              bash 02.start_backend.sh
+              sudo -u ubuntu bash 02.start_backend.sh
               sleep 15
               #start frontend
               cd /home/ubuntu/model_hub/
-              pm2 start pm2run.config.js 
+              sudo -u ubuntu pm2 start pm2run.config.js 
               # 安装 cfn-signal
               sudo pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
               # 发送成功信号
