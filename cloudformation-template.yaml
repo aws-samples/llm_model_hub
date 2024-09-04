@@ -100,7 +100,6 @@ Resources:
               echo "HUGGING_FACE_HUB_TOKEN=${HuggingFaceHubToken}" >> /home/ubuntu/llm_model_hub/backend/.env
               echo "WANDB_API_KEY=${WandbApiKey}" >> /home/ubuntu/llm_model_hub/backend/.env
               echo "MAX_MODEL_LEN=12288" >> /home/ubuntu/llm_model_hub/backend/.env
-              echo "model_artifact=s3://sagemaker-${AWS::Region}-${AWS::AccountId}/sagemaker_endpoint/vllm//model.tar.gz" >> /home/ubuntu/llm_model_hub/backend/.env
               # Set proper permissions 
               sudo chown -R ubuntu:ubuntu /home/ubuntu/
               RANDOM_PASSWORD=$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1) 
