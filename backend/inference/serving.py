@@ -110,10 +110,10 @@ def inference(endpoint_name:str,model_name:str, messages:List[Dict[str,Any]],par
     如果stream为True，返回处理流式推理输出的函数。
     """
     repo = DownloadSource.MODELSCOPE if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
-    model_path = get_model_path_by_name(model_name,repo)
+    # model_path = get_model_path_by_name(model_name,repo)
     model_args = {'cache_dir':'./cache',
                   "revision":None,
-                  "model_name_or_path":model_path,
+                  "model_name_or_path":model_name,
                   "trust_remote_code":True,
                   "token":os.environ['HUGGING_FACE_HUB_TOKEN']}
     predictor, tokenizer = get_predictor(endpoint_name,params,model_args)
