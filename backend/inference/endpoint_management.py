@@ -246,6 +246,7 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
 
 # 如果job_id="",则使用model_name原始模型
 def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str) -> Dict[bool,str]:
+    
     #如果是部署微调后的模型
     if not job_id == 'N/A(Not finetuned)':
         jobinfo = sync_get_job_by_id(job_id)
@@ -262,14 +263,13 @@ def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_
         #判断是否是中国区
         repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
         if repo_type == DownloadSource.DEFAULT:
-            model_path = get_model_path_by_name(model_name,repo=repo_type)
+            model_path = model_name
         else:
             #如果是模型scope，则需要下载到本地
-            model_repo = get_model_path_by_name(model_name,repo=repo_type)
-            model_path = ms_download_and_upload_model(model_repo=model_repo,s3_bucket=default_bucket,s3_prefix=f"original_model_file/{model_name}")
+            model_path = ms_download_and_upload_model(model_repo=model_name,s3_bucket=default_bucket,s3_prefix=f"original_model_file/{model_name}")
     #如果是使用自定义模型
     elif not cust_repo_addr == '' and model_name == '' :
-        model_name = cust_repo_addr.split('/')[1]
+        model_name = cust_repo_addr
         #判断是否是中国区
         repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
         #注册到supported_model中
@@ -316,13 +316,12 @@ def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_
     #patches   
     ##Mistral-7B 在g5.2x下kv cache不能超过12k，否则会报错  
     if engine == 'vllm' and instance_type.endswith('2xlarge'):
-        if model_name.startswith('Mistral-7B'): 
-            env['OPTION_MAX_MODEL_LEN'] = '12288' 
-
+        env['OPTION_MAX_MODEL_LEN'] = '12288'
+    
     
     create_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
-    endpoint_name = sagemaker.utils.name_from_base(model_name).replace('.','-').replace('_','-')
+    endpoint_name = sagemaker.utils.name_from_base(model_name.split('/')[1]).replace('.','-').replace('_','-')
 
     # Create the SageMaker Model object. In this example we let LMI configure the deployment settings based on the model architecture  
     model = Model(
