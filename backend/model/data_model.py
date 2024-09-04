@@ -155,6 +155,7 @@ class InferenceRequest(BaseModel):
     messages:List[Dict[str,Any]]
     params:Dict[str,Any]
     stream: Optional[bool]= False
+    mode: Optional[Literal["webui","api"]] = "webui"
     
 class LoginRequest(BaseModel):
     username:str

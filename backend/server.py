@@ -24,14 +24,15 @@ import asyncio
 from training.jobs import create_job,list_jobs,get_job_by_id,delete_job_by_id,fetch_training_log,get_job_status
 from utils.get_factory_config import get_factory_config
 from utils.outputs import list_s3_objects
-from inference.endpoint_management import deploy_endpoint,delete_endpoint,get_endpoint_status,list_endpoints
-from inference.serving import inference
+from inference.endpoint_management import deploy_endpoint,delete_endpoint,get_endpoint_status,list_endpoints,deploy_endpoint_byoc,get_endpoint_engine
+from inference.serving import inference,inference_byoc
 from users.login import login_auth
 from utils.config import DEFAULT_REGION
 from utils.llamafactory.extras.constants import DownloadSource
 
 
 dotenv.load_dotenv()
+
 logger = setup_logger('server.py', log_file='server.log', level=logging.INFO)
 api_keys = os.environ['api_keys'].split(',')
 print(api_keys)
@@ -178,32 +179,40 @@ async def handle_list_s3_path(request:ListS3ObjectsRequest):
 @app.post('/v1/deploy_endpoint',dependencies=[Depends(check_api_key)])
 async def handle_deploy_endpoint(request:DeployModelRequest):
     logger.info(request)
-    try:
-        ret,msg =  await asyncio.wait_for(
-            asyncio.to_thread(deploy_endpoint,
-                              job_id=request.job_id,
-                              engine=request.engine,
-                              instance_type=request.instance_type,
-                              quantize=request.quantize,
-                              enable_lora=request.enable_lora,
-                              cust_repo_type=request.cust_repo_type,
-                              cust_repo_addr=request.cust_repo_addr,
-                              model_name=request.model_name),
-                            timeout=600)
-        return CommonResponse(response_id=str(uuid.uuid4()),response={"result":ret, "endpoint_name": msg})
-    except asyncio.TimeoutError:
-        return CommonResponse(response_id=str(uuid.uuid4()),response={"result":False, "endpoint_name": "Operation timed out"}) 
+    #如果是中国区，或者engine不是'auto','vllm'，则使用lmi
+    if not os.environ.get('region').startswith('cn') and request.engine in ['auto','vllm'] :
+        try:
+            ret,msg =  await asyncio.wait_for(
+                asyncio.to_thread(deploy_endpoint_byoc,
+                                job_id=request.job_id,
+                                engine=request.engine,
+                                instance_type=request.instance_type,
+                                quantize=request.quantize,
+                                enable_lora=request.enable_lora,
+                                cust_repo_type=request.cust_repo_type,
+                                cust_repo_addr=request.cust_repo_addr,
+                                model_name=request.model_name),
+                                timeout=600)
+            return CommonResponse(response_id=str(uuid.uuid4()),response={"result":ret, "endpoint_name": msg})
+        except asyncio.TimeoutError:
+            return CommonResponse(response_id=str(uuid.uuid4()),response={"result":False, "endpoint_name": "Operation timed out"}) 
+    else:
+        try:
+            ret,msg =  await asyncio.wait_for(
+                asyncio.to_thread(deploy_endpoint,
+                                job_id=request.job_id,
+                                engine=request.engine,
+                                instance_type=request.instance_type,
+                                quantize=request.quantize,
+                                enable_lora=request.enable_lora,
+                                cust_repo_type=request.cust_repo_type,
+                                cust_repo_addr=request.cust_repo_addr,
+                                model_name=request.model_name),
+                                timeout=600)
+            return CommonResponse(response_id=str(uuid.uuid4()),response={"result":ret, "endpoint_name": msg})
+        except asyncio.TimeoutError:
+            return CommonResponse(response_id=str(uuid.uuid4()),response={"result":False, "endpoint_name": "Operation timed out"}) 
     
-    # ret,msg = deploy_endpoint(job_id=request.job_id,
-    #                           engine=request.engine,
-    #                           instance_type=request.instance_type,
-    #                           quantize=request.quantize,
-    #                           enable_lora=request.enable_lora,
-    #                           cust_repo_type=request.cust_repo_type,
-    #                           cust_repo_addr=request.cust_repo_addr,
-    #                           model_name=request.model_name)
-    
-    # return CommonResponse(response_id=str(uuid.uuid4()),response={"result":ret, "endpoint_name": msg})
 
 @app.post('/v1/delete_endpoint',dependencies=[Depends(check_api_key)])
 async def handle_delete_endpoint(request:EndpointRequest):
@@ -244,13 +253,12 @@ def construct_chunk_message(id,delta,finish_reason,model):
 def generator_callback(chunk):
     yield f'data: {json.dumps({"content": chunk})}\n\n'
     
-        
+    
 def stream_generator(inference_request:InferenceRequest) -> AsyncIterable[bytes]:
     id = inference_request.id if inference_request.id else str(uuid.uuid4())
     logger.info('--stream_generator---')
     response_stream = inference(inference_request.endpoint_name, inference_request.model_name, 
                                       inference_request.messages, inference_request.params, True)
-    logger.info('--response_stream---')
 
     chunk= construct_chunk_message(id=id,model=inference_request.model_name,finish_reason=None,delta={ "role": "assistant","content": ""})
     yield f"data: {json.dumps(chunk)}\n\n"
@@ -262,33 +270,52 @@ def stream_generator(inference_request:InferenceRequest) -> AsyncIterable[bytes]
     yield f"data: {json.dumps(chunk)}\n\n"
     yield f"data: [DONE]\n\n"
     
+def stream_generator_byoc(inference_request:InferenceRequest) -> AsyncIterable[bytes]:
+    id = inference_request.id if inference_request.id else str(uuid.uuid4())
+    logger.info('--stream_generator_byoc---')
+    response_stream = inference_byoc(inference_request.endpoint_name, inference_request.model_name, 
+                                      inference_request.messages, inference_request.params, True)
+    for chunk in response_stream:
+        yield chunk
     
 @app.post('/v1/chat/completions',dependencies=[Depends(check_api_key)])
 async def handle_inference(request:InferenceRequest):
     logger.info(request)
-    if not request.stream:
-        response = inference(request.endpoint_name,request.model_name,request.messages,request.params,False)
-        id = request.id if request.id else str(uuid.uuid4())
-        return CommonResponse(response_id=id,response={
-                                                            "model":request.model_name,
-                                                            "usage": None,
-                                                            "created":int(time.time()),
-                                                            "system_fingerprint": "fp",
-                                                            "choices":[
-                                                                {
-                                                                    "index": 0,
-                                                                    "finish_reason": "stop",
-                                                                    "logprobs": None,
-                                                                    "message": {
-                                                                        "role": "assistant",
-                                                                        "content": response
-                                                                    }
-                                                                }
-                                                            ],
-                                                            'id':id,
-                                                            })
+    engine = get_endpoint_engine(request.endpoint_name)
+    # logger.info(f"engine:{engine}")
+    #如果是中国区，或者engine不是'auto','vllm'，则使用lmi
+    if not os.environ.get('region').startswith('cn') and engine in ['auto','vllm'] :
+        if not request.stream:
+            response = inference_byoc(request.endpoint_name,request.model_name,request.messages,request.params,False)
+            id = request.id if request.id else str(uuid.uuid4())
+            return CommonResponse(response_id=id,response=response)
+        else:
+            return StreamingResponse(stream_generator_byoc(request), media_type="text/event-stream")
     else:
-        return StreamingResponse(stream_generator(request), media_type="text/event-stream")
+
+        if not request.stream:
+            response = inference(request.endpoint_name,request.model_name,request.messages,request.params,False)
+            id = request.id if request.id else str(uuid.uuid4())
+            return CommonResponse(response_id=id,response={
+                                                                "model":request.model_name,
+                                                                "usage": None,
+                                                                "created":int(time.time()),
+                                                                "system_fingerprint": "fp",
+                                                                "choices":[
+                                                                    {
+                                                                        "index": 0,
+                                                                        "finish_reason": "stop",
+                                                                        "logprobs": None,
+                                                                        "message": {
+                                                                            "role": "assistant",
+                                                                            "content": response
+                                                                        }
+                                                                    }
+                                                                ],
+                                                                'id':id,
+                                                                })
+        else:
+            return StreamingResponse(stream_generator(request), media_type="text/event-stream")
 
 
 def create_price_api_server():

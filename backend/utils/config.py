@@ -62,6 +62,8 @@ try:
 except Exception as e:
     print(e) 
 
+VLLM_IMAGE = os.environ.get('vllm_image','')
+MODEL_ARTIFACT = os.environ.get('model_artifact','')
 
 
 

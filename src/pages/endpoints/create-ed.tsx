@@ -141,7 +141,7 @@ const defaultData = {
         }}
         options={items.map(({ model_name, model_path }) => ({
           label: model_name,
-          value: model_name,
+          value: model_path,
           tags: [model_path]
         }))}
         selectedAriaLabel="Selected"

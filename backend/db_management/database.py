@@ -189,6 +189,12 @@ class DatabaseWrapper(BaseModel):
             with connection.cursor() as cursor:
                 cursor.execute(f"SELECT COUNT(*) FROM {EP_TABLE}")
                 return cursor.fetchone()[0]
+    
+    def get_endpoint(self, endpoint_name:str):
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(f"SELECT engine FROM {EP_TABLE} WHERE endpoint_name = %s",(endpoint_name,))
+                return cursor.fetchone()
                 
     def query_users(self, username:str):
         with self.connection_pool.get_connection() as connection:
