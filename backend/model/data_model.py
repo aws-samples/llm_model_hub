@@ -118,6 +118,7 @@ class DeployModelRequest(BaseModel):
     enable_lora:Optional[bool] = False
     cust_repo_type:Optional[str] = ''
     cust_repo_addr:Optional[str] = ''
+    extra_params:Optional[Dict[str,Any]] = None
     
 class EndpointRequest(BaseModel):
     endpoint_name:str

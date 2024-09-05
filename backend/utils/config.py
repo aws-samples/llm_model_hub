@@ -67,3 +67,16 @@ MODEL_ARTIFACT = os.environ.get('model_artifact','')
 
 
 
+instance_gpus_map={
+'ml.g4dn.2xlarge':1,
+'ml.g4dn.12xlarge':4, 
+'ml.g5.2xlarge':1,
+'ml.g5.12xlarge':4,
+'ml.g5.48xlarge':8,
+'ml.g6e.2xlarge':1, 
+'ml.g6e.12xlarge':4, 
+'ml.g6e.48xlarge':8,
+'ml.p4d.24xlarge':8,
+'ml.p4de.24xlarge':8,
+'ml.p5.48xlarge':8,
+}

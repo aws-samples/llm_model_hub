@@ -13,7 +13,7 @@ from model.data_model import *
 from db_management.database import DatabaseWrapper
 from datetime import datetime
 from training.jobs import sync_get_job_by_id
-from utils.config import boto_sess,role,sagemaker_session,DEFAULT_REGION,SUPPORTED_MODELS_FILE,DEFAULT_TEMPLATE_FILE,default_bucket,VLLM_IMAGE,MODEL_ARTIFACT
+from utils.config import boto_sess,role,sagemaker_session,DEFAULT_REGION,SUPPORTED_MODELS_FILE,DEFAULT_TEMPLATE_FILE,default_bucket,VLLM_IMAGE,MODEL_ARTIFACT,instance_gpus_map
 from utils.get_factory_config import get_model_path_by_name
 from utils.llamafactory.extras.constants import register_model_group,DownloadSource,DEFAULT_TEMPLATE,SUPPORTED_MODELS
 from collections import OrderedDict, defaultdict
@@ -137,7 +137,9 @@ def register_cust_model(cust_repo_type:DownloadSource,cust_repo_addr:str):
     with open(DEFAULT_TEMPLATE_FILE, 'wb') as f:
         pickle.dump(DEFAULT_TEMPLATE, f)
 
-def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str) -> Dict[bool,str]:
+def get_auto_tensor_parallel_size(instance_type:str) -> int:
+    return instance_gpus_map.get(instance_type, 1)
+def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str,extra_params:Dict[str,Any]) -> Dict[bool,str]:
     repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
     #统一处理成repo/modelname格式
     model_name=get_model_path_by_name(model_name,repo_type) if len(model_name.split('/')) < 2 else model_name
@@ -184,24 +186,11 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
         "HF_MODEL_ID": model_name,
         "S3_MODEL_PATH":model_path,
          "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
-         "MAX_MODEL_LEN":os.environ.get('MAX_MODEL_LEN',"12288")
+         "MAX_MODEL_LEN":extra_params.get('max_model_len', os.environ.get('MAX_MODEL_LEN',"12288")), 
+         "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type)))
     }
-    # if enable_lora:
-    #     env['OPTION_ENABLE_LORA'] = True
-        
-    # if engine == 'trt-llm':
-    #     env['OPTION_MAX_NUM_TOKENS'] = '50000'
-    #     env['OPTION_ENABLE_KV_CACHE_REUSE'] = "true"
-        
-    # #量化设置
-    # if engine == 'scheduler' and quantize in ['bitsandbytes8','bitsandbytes4']:
-    #     env['OPTION_QUANTIZE'] = quantize
-    # elif engine == 'llm-dist' and  quantize in ['awq','gptq']:
-    #     env['OPTION_QUANTIZE'] = quantize
-    # elif engine == 'trt-llm' and  quantize in ['awq','smoothquant']:
-    #     env['OPTION_QUANTIZE'] = quantize
-    
 
+    print(env)
     pure_model_name = model_name.split('/')[1]
 
     create_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -240,6 +229,7 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
                                  )
     except Exception as e:
         logger.error(f"create_endpoint:{e}")
+        print(e)
         return False,str(e)
     
     return True,endpoint_name
