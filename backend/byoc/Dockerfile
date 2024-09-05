@@ -24,8 +24,16 @@ async def invocations(request: Union[ChatCompletionRequest, CompletionRequest],\
     else:\n\
         return JSONResponse("unknow request paras",\n\
                             status_code=HTTPStatus.BAD_REQUEST)\n\
-' /usr/local/lib/python3.10/dist-packages/vllm/entrypoints/openai/api_server.py; \
-chmod +x /app/serve
+' /usr/local/lib/python3.10/dist-packages/vllm/entrypoints/openai/api_server.py; 
+
+# 修改serving_engine.py中的代码，以忽略modelname的检查:
+COPY serving_engine.py /usr/local/lib/python3.10/dist-packages/vllm/entrypoints/openai/serving_engine.py
+RUN chmod 644 /usr/local/lib/python3.10/dist-packages/vllm/entrypoints/openai/serving_engine.py
+
+# 替换 'model: str' 为 'model: Optional[str] = ""'
+RUN sed -i 's/model: str/model: Optional[str] = ""/' /usr/local/lib/python3.10/dist-packages/vllm/entrypoints/openai/protocol.py
+
+RUN chmod +x /app/serve
 
 # 让端口8080在容器外可用
 EXPOSE 8080
