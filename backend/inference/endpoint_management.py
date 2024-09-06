@@ -142,7 +142,7 @@ def get_auto_tensor_parallel_size(instance_type:str) -> int:
 def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str,extra_params:Dict[str,Any]) -> Dict[bool,str]:
     repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
     #统一处理成repo/modelname格式
-    model_name=get_model_path_by_name(model_name,repo_type) if len(model_name.split('/')) < 2 else model_name
+    model_name=get_model_path_by_name(model_name,repo_type) if model_name and len(model_name.split('/')) < 2 else model_name
 
     #如果是部署微调后的模型
     if not job_id == 'N/A(Not finetuned)':
