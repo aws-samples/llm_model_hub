@@ -109,27 +109,27 @@ def inference(endpoint_name:str,model_name:str, messages:List[Dict[str,Any]],par
     如果stream为False，返回推理的结果列表。
     如果stream为True，返回处理流式推理输出的函数。
     """
-    repo = DownloadSource.MODELSCOPE if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
-    # model_path = get_model_path_by_name(model_name,repo)
-    model_args = {'cache_dir':'./cache',
-                  "revision":None,
-                  "model_name_or_path":model_name,
-                  "trust_remote_code":True,
-                  "token":os.environ['HUGGING_FACE_HUB_TOKEN']}
-    predictor, tokenizer = get_predictor(endpoint_name,params,model_args)
-    try:
-        inputs = tokenizer.apply_chat_template(
-                    messages,
-                    tokenize=False,
-                    add_generation_prompt=True
-                )
-    except ValueError as e:
-        logger.error(e)
-        inputs = apply_default_chat_template(
-                    messages,
-                    tokenize=True,
-                    add_generation_prompt=True
-                )
+    # repo = DownloadSource.MODELSCOPE if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
+    # # model_path = get_model_path_by_name(model_name,repo)
+    # model_args = {'cache_dir':'./cache',
+    #               "revision":None,
+    #               "model_name_or_path":model_name,
+    #               "trust_remote_code":True,
+    #               "token":os.environ['HUGGING_FACE_HUB_TOKEN']}
+    predictor, tokenizer = get_predictor(endpoint_name,params,model_args={})
+    # try:
+    #     inputs = tokenizer.apply_chat_template(
+    #                 messages,
+    #                 tokenize=False,
+    #                 add_generation_prompt=True
+    #             )
+    # except ValueError as e:
+    #     logger.error(e)
+    #     inputs = apply_default_chat_template(
+    #                 messages,
+    #                 tokenize=True,
+    #                 add_generation_prompt=True
+    #             )
 
     payload = {
         "model":model_name,
