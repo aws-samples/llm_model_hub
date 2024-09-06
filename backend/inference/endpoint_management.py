@@ -143,7 +143,7 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
     repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
     #统一处理成repo/modelname格式
     model_name=get_model_path_by_name(model_name,repo_type) if model_name and len(model_name.split('/')) < 2 else model_name
-
+    model_path = ''
     #如果是部署微调后的模型
     if not job_id == 'N/A(Not finetuned)':
         jobinfo = sync_get_job_by_id(job_id)
@@ -155,26 +155,26 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
         else:
             model_path = jobinfo.output_s3_path + 'finetuned_model/'
     #如果是使用原始模型
-    elif not model_name == '':
+    # elif not model_name == '':
         #判断是否是中国区
-        model_path = ''
-        if not repo_type == DownloadSource.DEFAULT:
-            #如果是模型scope，则需要下载到本地
-            model_path = ms_download_and_upload_model(model_repo=model_name,s3_bucket=default_bucket,s3_prefix=f"original_model_file/{model_name}")
+        # model_path = ''
+        # if not repo_type == DownloadSource.DEFAULT:
+        #     #如果是模型scope，则需要下载到本地
+        #     model_path = ms_download_and_upload_model(model_repo=model_name,s3_bucket=default_bucket,s3_prefix=f"original_model_file/{model_name}")
     #如果是使用自定义模型
     elif not cust_repo_addr == '' and model_name == '' :
         # model_name = cust_repo_addr.split('/')[1]
         model_name = cust_repo_addr
         #判断是否是中国区
-        repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
+        # repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
         #注册到supported_model中
         register_cust_model(cust_repo_type=repo_type,cust_repo_addr=cust_repo_addr)
         #如果使用hf，则直接用hf repo
-        if repo_type == DownloadSource.DEFAULT:
-            model_path = ''
-        else:
-            #如果是模型scope，则需要下载到本地
-            model_path = ms_download_and_upload_model(model_repo=cust_repo_addr,s3_bucket=default_bucket,s3_prefix=f"original_model_file/{model_name}")
+        # if repo_type == DownloadSource.DEFAULT:
+        #     model_path = ''
+        # else:
+        #     #如果是模型scope，则需要下载到本地
+        #     model_path = ms_download_and_upload_model(model_repo=cust_repo_addr,s3_bucket=default_bucket,s3_prefix=f"original_model_file/{model_name}")
         
     else:
         return CommonResponse(response_id=job_id,response={"error": "no model_name is provided"})

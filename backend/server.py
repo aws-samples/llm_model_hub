@@ -179,8 +179,8 @@ async def handle_list_s3_path(request:ListS3ObjectsRequest):
 @app.post('/v1/deploy_endpoint',dependencies=[Depends(check_api_key)])
 async def handle_deploy_endpoint(request:DeployModelRequest):
     logger.info(request)
-    #如果是中国区，或者engine不是'auto','vllm'，则使用lmi
-    if not os.environ.get('region').startswith('cn') and request.engine in ['auto','vllm'] :
+    #engine不是'auto','vllm'，则使用lmi
+    if request.engine in ['auto','vllm'] :
         try:
             ret,msg =  await asyncio.wait_for(
                 asyncio.to_thread(deploy_endpoint_byoc,
@@ -261,15 +261,8 @@ def stream_generator(inference_request:InferenceRequest) -> AsyncIterable[bytes]
     logger.info('--stream_generator---')
     response_stream = inference(inference_request.endpoint_name, inference_request.model_name, 
                                       inference_request.messages, inference_request.params, True)
-
-    chunk= construct_chunk_message(id=id,model=inference_request.model_name,finish_reason=None,delta={ "role": "assistant","content": ""})
-    yield f"data: {json.dumps(chunk)}\n\n"
     for chunk in response_stream:
-        chunk= construct_chunk_message(id=id,model=inference_request.model_name,finish_reason=None,delta={"content": chunk})
-        yield f"data: {json.dumps(chunk)}\n\n"
-
-    chunk= construct_chunk_message(id=id,model=inference_request.model_name,finish_reason="stop",delta={})
-    yield f"data: {json.dumps(chunk)}\n\n"
+        yield f"data: {chunk}\n\n"
     yield f"data: [DONE]\n\n"
     
 def stream_generator_byoc(inference_request:InferenceRequest) -> AsyncIterable[bytes]:
@@ -285,8 +278,8 @@ async def handle_inference(request:InferenceRequest):
     logger.info(request)
     engine = get_endpoint_engine(request.endpoint_name)
     # logger.info(f"engine:{engine}")
-    #如果是中国区，或者engine不是'auto','vllm'，则使用lmi
-    if not os.environ.get('region').startswith('cn') and engine in ['auto','vllm'] :
+    #engine不是'auto','vllm'，则使用lmi
+    if  engine in ['auto','vllm'] :
         if not request.stream:
             response = inference_byoc(request.endpoint_name,request.model_name,request.messages,request.params,False)
             id = request.id if request.id else str(uuid.uuid4())
@@ -298,24 +291,7 @@ async def handle_inference(request:InferenceRequest):
         if not request.stream:
             response = inference(request.endpoint_name,request.model_name,request.messages,request.params,False)
             id = request.id if request.id else str(uuid.uuid4())
-            return CommonResponse(response_id=id,response={
-                                                                "model":request.model_name,
-                                                                "usage": None,
-                                                                "created":int(time.time()),
-                                                                "system_fingerprint": "fp",
-                                                                "choices":[
-                                                                    {
-                                                                        "index": 0,
-                                                                        "finish_reason": "stop",
-                                                                        "logprobs": None,
-                                                                        "message": {
-                                                                            "role": "assistant",
-                                                                            "content": response
-                                                                        }
-                                                                    }
-                                                                ],
-                                                                'id':id,
-                                                                })
+            return CommonResponse(response_id=id,response=response)
         else:
             return StreamingResponse(stream_generator(request), media_type="text/event-stream")
 

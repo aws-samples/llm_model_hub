@@ -130,13 +130,30 @@ def inference(endpoint_name:str,model_name:str, messages:List[Dict[str,Any]],par
                     tokenize=True,
                     add_generation_prompt=True
                 )
+
+    payload = {
+        "model":model_name,
+        "messages":messages,
+        "stream":stream,
+        "max_tokens":params.get('max_new_tokens', params.get('max_tokens', 256)),
+        "temperature":params.get('temperature', 0.1),
+        "top_p":params.get('top_p', 0.9),
+    }
     if not stream:
-        # response = await asyncio.to_thread(predictor.predict, {"inputs": inputs, "parameters": params})
-        response = predictor.predict({"inputs": inputs, "parameters": params})
-        return clean_output(response.decode('utf-8'))
+        response = predictor.predict(payload)
+        print(response.decode('utf-8'))
+        return json.loads(response)
     else:
-        # response_stream = await asyncio.to_thread(predictor.predict_stream, {"inputs": inputs, "parameters": params})
-        response_stream = predictor.predict_stream({"inputs": inputs, "parameters": params})
+        response_stream = predictor.predict_stream(payload)
         # return response_stream
-        return output_stream_generator(response_stream)
+        return output_stream_generator_byoc(response_stream)
+    # if not stream:
+    #     # response = await asyncio.to_thread(predictor.predict, {"inputs": inputs, "parameters": params})
+    #     response = predictor.predict({"inputs": inputs, "parameters": params})
+    #     return clean_output(response.decode('utf-8'))
+    # else:
+    #     # response_stream = await asyncio.to_thread(predictor.predict_stream, {"inputs": inputs, "parameters": params})
+    #     response_stream = predictor.predict_stream({"inputs": inputs, "parameters": params})
+    #     # return response_stream
+    #     return output_stream_generator(response_stream)
     

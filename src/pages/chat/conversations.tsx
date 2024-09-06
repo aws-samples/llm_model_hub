@@ -266,7 +266,7 @@ function extractJsonFromString(str:string) {
       const jsonObj = JSON.parse(match[0]);
       return jsonObj;
     } catch (error) {
-      console.error("Error parsing JSON:", error);
+      console.error("Error parsing JSON:", str);
       return `[DONE]`;
     }
   } else {
