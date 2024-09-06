@@ -189,6 +189,8 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
          "MAX_MODEL_LEN":extra_params.get('max_model_len', os.environ.get('MAX_MODEL_LEN',"12288")), 
          "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type)))
     }
+    if DEFAULT_REGION.startswith('cn'):
+        env['VLLM_USE_MODELSCOPE']='1'
 
     print(env)
     pure_model_name = model_name.split('/')[1]
@@ -236,7 +238,9 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
 
 # 如果job_id="",则使用model_name原始模型
 def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str) -> Dict[bool,str]:
-    
+     #统一处理成repo/modelname格式
+    repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
+    model_name=get_model_path_by_name(model_name,repo_type) if model_name and len(model_name.split('/')) < 2 else model_name
     #如果是部署微调后的模型
     if not job_id == 'N/A(Not finetuned)':
         jobinfo = sync_get_job_by_id(job_id)
@@ -247,7 +251,7 @@ def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_
             model_path = jobinfo.output_s3_path + 'finetuned_model_merged/'
         else:
             model_path = jobinfo.output_s3_path + 'finetuned_model/'
-        model_name = jobinfo.job_payload["model_name"]
+        # model_name = jobinfo.job_payload["model_name"]
     #如果是使用原始模型
     elif not model_name == '':
         #判断是否是中国区
@@ -310,8 +314,8 @@ def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_
     
     
     create_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
-    endpoint_name = sagemaker.utils.name_from_base(model_name.split('/')[1]).replace('.','-').replace('_','-')
+    pure_model_name = model_name.split('/')[1]
+    endpoint_name = sagemaker.utils.name_from_base(pure_model_name).replace('.','-').replace('_','-')
 
     # Create the SageMaker Model object. In this example we let LMI configure the deployment settings based on the model architecture  
     model = Model(

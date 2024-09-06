@@ -11,6 +11,11 @@ if [ ! -d "$base_dir" ]; then
     exit 1
 fi
 
+if [ -n "${VLLM_USE_MODELSCOPE}" ]; then
+    export VLLM_USE_MODELSCOPE=True
+fi
+
+
 # Find the first subdirectory in the base directory
 model_dir=$(find "$base_dir" -mindepth 1 -maxdepth 1 -type d -print -quit)
 
@@ -57,9 +62,9 @@ else
             echo "Using model: $file_dir"
             python3 -m vllm.entrypoints.openai.api_server \
             --port $SAGEMAKER_BIND_TO_PORT \
-            --download_dir $file_dir \
+            --download-dir $file_dir \
             --trust-remote-code \
-            --model $model_id \
+            --model $file_dir \
             --max-model-len $max_model_len \
             --tensor-parallel-size $tensor_parallel_size
         else

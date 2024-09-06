@@ -30,11 +30,11 @@ async def invocations(request: Union[ChatCompletionRequest, CompletionRequest],\
 sed -i 's/model: str/model: Optional[str] = None/' ${PYTHON_SITEPACKAGES}/vllm/entrypoints/openai/protocol.py ; \
 sed -i 's/extra="forbid"//1' ${PYTHON_SITEPACKAGES}/vllm/entrypoints/openai/protocol.py ; \
 sed -i '/async def _check_model/,/:$/!b;/:$/a\
-\        if request.model is None:\n\
+\        if 1 == 1:\n\
 \            return None\n\
 ' ${PYTHON_SITEPACKAGES}/vllm/entrypoints/openai/serving_engine.py; \
 sed -i '/def _maybe_get_adapters/,/:$/!b;/:$/a\
-\        if request.model is None:\n\
+\        if 1 == 1:\n\
 \            return None, None\n\
 ' ${PYTHON_SITEPACKAGES}/vllm/entrypoints/openai/serving_engine.py; \
 chmod +x /app/serve
