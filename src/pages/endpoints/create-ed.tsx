@@ -216,12 +216,13 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
     <SpaceBetween size='xs'>
       <FormField
         label="max-model-len"
-        description="模型上下文最大长度，不能超过kv cache的size,默认值12288"
+        description="模型上下文最大长度，不能超过kv cache的size,默认值4096"
         stretch={false}
       >
         <Input
           readOnly={readOnly}
           value={value1}
+          placeholder='4096'
           onChange={({ detail }) => {
             setValue1(detail.value);
             setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,max_model_len: detail.value }  }))
