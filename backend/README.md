@@ -74,9 +74,19 @@ HUGGING_FACE_HUB_TOKEN=
 bash 01.setup.sh
 ```
 
+- 2.1 打包vllm推理镜像
+```bash
+cd ~/llm_model_hub/backend/byoc
+bash build_and_push.sh
+source ../../miniconda3/bin/activate py311
+conda activate py311
+python3 startup.py 
+```
+
 ## 2.添加用户
 - 仍然在backend/目录下执行以下python脚本命令添加用户
 ```bash
+cd ~/llm_model_hub/backend/
 source ../miniconda3/bin/activate py311
 conda activate py311
 python3 users/add_user.py your_username your_password default
