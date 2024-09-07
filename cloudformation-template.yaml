@@ -63,7 +63,7 @@ Resources:
               # download file
               sudo su ubuntu
               cd /home/ubuntu/
-              git clone --recurse-submodule https://github.com/aws-samples/llm_model_hub.git
+              git clone --recurse-submodule https://github.com/aws-samples/llm_model_hub.git -b 1.0.2
               cd /home/ubuntu/llm_model_hub
               yarn install
               #install pm2
