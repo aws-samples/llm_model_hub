@@ -55,7 +55,7 @@ def get_all_log_streams(logs_client,log_group_name):
         
         return log_streams
     
-    except ClientError as e:
+    except Exception as e:
         print(f"An error occurred: {e}")
         return None
 
@@ -301,7 +301,9 @@ class TrainingJobExcutor(BaseModel):
         
         #model_id参数
         repo = DownloadSource.MODELSCOPE if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
-        model_id=get_model_path_by_name(job_payload['model_name'],repo)
+
+        # 判断是否使用repo/model格式
+        model_id=get_model_path_by_name(job_payload['model_name'],repo) if len(job_payload['model_name'].split('/')) < 2 else job_payload['model_name']
         logger.info(f"model_id:{model_id},repo type:{repo}")
         
         if job_payload['stage'] == 'sft':

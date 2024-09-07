@@ -118,6 +118,7 @@ class DeployModelRequest(BaseModel):
     enable_lora:Optional[bool] = False
     cust_repo_type:Optional[str] = ''
     cust_repo_addr:Optional[str] = ''
+    extra_params:Optional[Dict[str,Any]] = None
     
 class EndpointRequest(BaseModel):
     endpoint_name:str
@@ -155,6 +156,7 @@ class InferenceRequest(BaseModel):
     messages:List[Dict[str,Any]]
     params:Dict[str,Any]
     stream: Optional[bool]= False
+    mode: Optional[Literal["webui","api"]] = "webui"
     
 class LoginRequest(BaseModel):
     username:str

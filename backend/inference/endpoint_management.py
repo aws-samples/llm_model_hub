@@ -13,7 +13,7 @@ from model.data_model import *
 from db_management.database import DatabaseWrapper
 from datetime import datetime
 from training.jobs import sync_get_job_by_id
-from utils.config import boto_sess,role,sagemaker_session,DEFAULT_REGION,SUPPORTED_MODELS_FILE,DEFAULT_TEMPLATE_FILE,default_bucket
+from utils.config import boto_sess,role,sagemaker_session,DEFAULT_REGION,SUPPORTED_MODELS_FILE,DEFAULT_TEMPLATE_FILE,default_bucket,VLLM_IMAGE,MODEL_ARTIFACT,instance_gpus_map
 from utils.get_factory_config import get_model_path_by_name
 from utils.llamafactory.extras.constants import register_model_group,DownloadSource,DEFAULT_TEMPLATE,SUPPORTED_MODELS
 from collections import OrderedDict, defaultdict
@@ -22,7 +22,6 @@ import sagemaker
 import pickle
 from logger_config import setup_logger
 import threading
-import aioboto3
 database = DatabaseWrapper()
 logger = setup_logger('endpoint_management.py', log_file='deployment.log', level=logging.INFO)
 
@@ -137,9 +136,14 @@ def register_cust_model(cust_repo_type:DownloadSource,cust_repo_addr:str):
         pickle.dump(SUPPORTED_MODELS, f)
     with open(DEFAULT_TEMPLATE_FILE, 'wb') as f:
         pickle.dump(DEFAULT_TEMPLATE, f)
-    
-# 如果job_id="",则使用model_name原始模型
-def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str) -> Dict[bool,str]:
+
+def get_auto_tensor_parallel_size(instance_type:str) -> int:
+    return instance_gpus_map.get(instance_type, 1)
+def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str,extra_params:Dict[str,Any]) -> Dict[bool,str]:
+    repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
+    #统一处理成repo/modelname格式
+    model_name=get_model_path_by_name(model_name,repo_type) if model_name and len(model_name.split('/')) < 2 else model_name
+    model_path = ''
     #如果是部署微调后的模型
     if not job_id == 'N/A(Not finetuned)':
         jobinfo = sync_get_job_by_id(job_id)
@@ -150,20 +154,116 @@ def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_
             model_path = jobinfo.output_s3_path + 'finetuned_model_merged/'
         else:
             model_path = jobinfo.output_s3_path + 'finetuned_model/'
-        model_name = jobinfo.job_payload["model_name"]
+    #如果是使用原始模型
+    # elif not model_name == '':
+        #判断是否是中国区
+        # model_path = ''
+        # if not repo_type == DownloadSource.DEFAULT:
+        #     #如果是模型scope，则需要下载到本地
+        #     model_path = ms_download_and_upload_model(model_repo=model_name,s3_bucket=default_bucket,s3_prefix=f"original_model_file/{model_name}")
+    #如果是使用自定义模型
+    elif not cust_repo_addr == '' and model_name == '' :
+        # model_name = cust_repo_addr.split('/')[1]
+        model_name = cust_repo_addr
+        #判断是否是中国区
+        # repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
+        #注册到supported_model中
+        register_cust_model(cust_repo_type=repo_type,cust_repo_addr=cust_repo_addr)
+        #如果使用hf，则直接用hf repo
+        # if repo_type == DownloadSource.DEFAULT:
+        #     model_path = ''
+        # else:
+        #     #如果是模型scope，则需要下载到本地
+        #     model_path = ms_download_and_upload_model(model_repo=cust_repo_addr,s3_bucket=default_bucket,s3_prefix=f"original_model_file/{model_name}")
+        
+    else:
+        return CommonResponse(response_id=job_id,response={"error": "no model_name is provided"})
+    logger.info(f"deploy endpoint with model_name:{model_name},model_path:{model_path}")
+    
+    lmi_image_uri = VLLM_IMAGE
+
+    env={
+        "HF_MODEL_ID": model_name,
+        "S3_MODEL_PATH":model_path,
+         "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
+         "MAX_MODEL_LEN":extra_params.get('max_model_len', os.environ.get('MAX_MODEL_LEN',"12288")), 
+         "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type)))
+    }
+    if DEFAULT_REGION.startswith('cn'):
+        env['VLLM_USE_MODELSCOPE']='1'
+
+    print(env)
+    pure_model_name = model_name.split('/')[1]
+
+    create_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    endpoint_name = sagemaker.utils.name_from_base(pure_model_name).replace('.','-').replace('_','-')
+
+    # Create the SageMaker Model object. In this example we let LMI configure the deployment settings based on the model architecture  
+    model = Model(
+            image_uri=lmi_image_uri,
+            role=role,
+            name=endpoint_name,
+            sagemaker_session=sagemaker_session,
+            env=env,
+            model_data=MODEL_ARTIFACT,
+    )
+    try:
+        model.deploy(
+            instance_type= instance_type,
+            initial_instance_count=1,
+            endpoint_name=endpoint_name,
+            wait=False,
+            accept_eula=True,
+            container_startup_health_check_timeout=900
+        )
+        database.create_endpoint(job_id= job_id,
+                                 model_name= model_name,
+                                 model_s3_path= model_path,
+                                 instance_type= instance_type,
+                                 endpoint_name= endpoint_name,
+                                 endpoint_create_time= create_time,
+                                 endpoint_delete_time= None,
+                                 extra_config= None,
+                                 engine=engine,
+                                 enable_lora=enable_lora,
+                                 endpoint_status = EndpointStatus.CREATING
+                                 )
+    except Exception as e:
+        logger.error(f"create_endpoint:{e}")
+        print(e)
+        return False,str(e)
+    
+    return True,endpoint_name
+
+# 如果job_id="",则使用model_name原始模型
+def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str) -> Dict[bool,str]:
+     #统一处理成repo/modelname格式
+    repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
+    model_name=get_model_path_by_name(model_name,repo_type) if model_name and len(model_name.split('/')) < 2 else model_name
+    #如果是部署微调后的模型
+    if not job_id == 'N/A(Not finetuned)':
+        jobinfo = sync_get_job_by_id(job_id)
+        if not jobinfo.job_status == JobStatus.SUCCESS:
+            return CommonResponse(response_id=job_id,response={"error": "job is not ready to deploy"})
+        # 如果是lora模型，则使用merge之后的路径
+        if jobinfo.job_payload['finetuning_method'] == 'lora':
+            model_path = jobinfo.output_s3_path + 'finetuned_model_merged/'
+        else:
+            model_path = jobinfo.output_s3_path + 'finetuned_model/'
+        # model_name = jobinfo.job_payload["model_name"]
     #如果是使用原始模型
     elif not model_name == '':
         #判断是否是中国区
         repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
         if repo_type == DownloadSource.DEFAULT:
-            model_path = get_model_path_by_name(model_name,repo=repo_type)
+            model_path = model_name
         else:
             #如果是模型scope，则需要下载到本地
-            model_repo = get_model_path_by_name(model_name,repo=repo_type)
-            model_path = ms_download_and_upload_model(model_repo=model_repo,s3_bucket=default_bucket,s3_prefix=f"original_model_file/{model_name}")
+            model_path = ms_download_and_upload_model(model_repo=model_name,s3_bucket=default_bucket,s3_prefix=f"original_model_file/{model_name}")
     #如果是使用自定义模型
     elif not cust_repo_addr == '' and model_name == '' :
-        model_name = cust_repo_addr.split('/')[1]
+        model_name = cust_repo_addr
         #判断是否是中国区
         repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
         #注册到supported_model中
@@ -210,13 +310,12 @@ def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_
     #patches   
     ##Mistral-7B 在g5.2x下kv cache不能超过12k，否则会报错  
     if engine == 'vllm' and instance_type.endswith('2xlarge'):
-        if model_name.startswith('Mistral-7B'): 
-            env['OPTION_MAX_MODEL_LEN'] = '12288' 
-
+        env['OPTION_MAX_MODEL_LEN'] = '12288'
+    
     
     create_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
-    endpoint_name = sagemaker.utils.name_from_base(model_name).replace('.','-').replace('_','-')
+    pure_model_name = model_name.split('/')[1]
+    endpoint_name = sagemaker.utils.name_from_base(pure_model_name).replace('.','-').replace('_','-')
 
     # Create the SageMaker Model object. In this example we let LMI configure the deployment settings based on the model architecture  
     model = Model(
@@ -252,6 +351,11 @@ def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_
         return False,str(e)
     
     return True,endpoint_name
+
+def get_endpoint_engine(endpoint_name:str) -> str:
+    ret =  database.get_endpoint(endpoint_name)
+    return ret[0] if ret else ''
+    
 
 def list_endpoints(request:ListEndpointsRequest) -> Dict[EndpointInfo,int]:
     logger.info(f"thread pool:{thread_pool}")

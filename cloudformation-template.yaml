@@ -64,8 +64,7 @@ Resources:
               sudo su ubuntu
               cd /home/ubuntu/
               git clone --recurse-submodule https://github.com/aws-samples/llm_model_hub.git
-              mv /home/ubuntu/llm_model_hub/ /home/ubuntu/model_hub/
-              cd /home/ubuntu/model_hub
+              cd /home/ubuntu/llm_model_hub
               yarn install
               #install pm2
               sudo yarn global add pm2
@@ -85,27 +84,27 @@ Resources:
               # Generate a random string key
               RANDOM_KEY=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
               # Write the EC2_IP and SageMakerRoleArn to frontend .env file
-              echo "REACT_APP_API_ENDPOINT=http://$EC2_IP:8000/v1" > /home/ubuntu/model_hub/.env
-              echo "REACT_APP_API_KEY=$RANDOM_KEY" >> /home/ubuntu/model_hub/.env
+              echo "REACT_APP_API_ENDPOINT=http://$EC2_IP:8000/v1" > /home/ubuntu/llm_model_hub/.env
+              echo "REACT_APP_API_KEY=$RANDOM_KEY" >> /home/ubuntu/llm_model_hub/.env
               
               ## write sagemaker role
-              echo "AK=" >> /home/ubuntu/model_hub/backend/.env
-              echo "SK=" >> /home/ubuntu/model_hub/backend/.env
-              echo "role=${SageMakerRoleArn}" >> /home/ubuntu/model_hub/backend/.env
-              echo "region=$REGION" >> /home/ubuntu/model_hub/backend/.env
-              echo "db_host=127.0.0.1" >> /home/ubuntu/model_hub/backend/.env
-              echo "db_name=llm" >> /home/ubuntu/model_hub/backend/.env
-              echo "db_user=llmdata" >> /home/ubuntu/model_hub/backend/.env
-              echo "db_password=llmdata" >> /home/ubuntu/model_hub/backend/.env
-              echo "api_keys=$RANDOM_KEY" >> /home/ubuntu/model_hub/backend/.env
-              echo "HUGGING_FACE_HUB_TOKEN=${HuggingFaceHubToken}" >> /home/ubuntu/model_hub/backend/.env
-              echo "WANDB_API_KEY=${WandbApiKey}" >> /home/ubuntu/model_hub/backend/.env
-
+              echo "AK=" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "SK=" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "role=${SageMakerRoleArn}" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "region=$REGION" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "db_host=127.0.0.1" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "db_name=llm" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "db_user=llmdata" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "db_password=llmdata" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "api_keys=$RANDOM_KEY" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "HUGGING_FACE_HUB_TOKEN=${HuggingFaceHubToken}" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "WANDB_API_KEY=${WandbApiKey}" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "MAX_MODEL_LEN=4096" >> /home/ubuntu/llm_model_hub/backend/.env
               # Set proper permissions 
               sudo chown -R ubuntu:ubuntu /home/ubuntu/
               RANDOM_PASSWORD=$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1) 
               aws ssm put-parameter --name "/${AWS::StackName}/RandomPassword" --value "$RANDOM_PASSWORD" --type "SecureString" --overwrite --region ${AWS::Region}
-              cd /home/ubuntu/model_hub/backend
+              cd /home/ubuntu/llm_model_hub/backend
               sudo -u ubuntu bash 01.setup.sh
               sleep 30
               #add user in db
@@ -115,8 +114,16 @@ Resources:
               #start backend
               sudo -u ubuntu bash 02.start_backend.sh
               sleep 15
+
+              #build image
+              cd /home/ubuntu/llm_model_hub/backend/byoc
+              sudo -u ubuntu bash build_and_push.sh
+              sleep 5
+              #upload dummy tar.gz
+              sudo -u ubuntu ../../miniconda3/envs/py311/bin/python startup.py 
+
               #start frontend
-              cd /home/ubuntu/model_hub/
+              cd /home/ubuntu/llm_model_hub/
               sudo -u ubuntu pm2 start pm2run.config.js 
               # 安装 cfn-signal
               sudo pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz

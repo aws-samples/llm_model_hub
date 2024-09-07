@@ -1,0 +1,2 @@
+# Environment Variables: https://docs.vllm.ai/en/latest/serving/env_vars.html
+# export HF_TOKEN="hf_xxx"
