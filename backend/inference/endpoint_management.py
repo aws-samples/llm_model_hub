@@ -176,8 +176,8 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
         #     #如果是模型scope，则需要下载到本地
         #     model_path = ms_download_and_upload_model(model_repo=cust_repo_addr,s3_bucket=default_bucket,s3_prefix=f"original_model_file/{model_name}")
         
-    else:
-        return CommonResponse(response_id=job_id,response={"error": "no model_name is provided"})
+    # else:
+    #     return CommonResponse(response_id=job_id,response={"error": "no model_name is provided"})
     logger.info(f"deploy endpoint with model_name:{model_name},model_path:{model_path}")
     
     lmi_image_uri = VLLM_IMAGE
