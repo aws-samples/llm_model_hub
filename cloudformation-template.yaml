@@ -120,6 +120,7 @@ Resources:
               sudo -u ubuntu ../../miniconda3/envs/py311/bin/python startup.py 
 
               #start backend
+              cd /home/ubuntu/llm_model_hub/backend/
               sudo -u ubuntu bash 02.start_backend.sh
               sleep 15
 
