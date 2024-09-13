@@ -8,12 +8,64 @@ from inference.model_utils import *
 from utils.get_factory_config import get_model_path_by_name
 from utils.llamafactory.extras.constants import DownloadSource
 import os 
+import time
+import uuid
 from logger_config import setup_logger
 logger = setup_logger('serving.py', log_file='deployment.log', level=logging.INFO)
 
 #to do, need to remove item once endpoint is deleted
 predictor_pool = {}
 tokenizer_pool= {}
+
+def construct_response_messasge(text:str,model_name:str) -> Dict[str,Any]:
+    return {
+        "model":model_name,
+        "usage": None,
+        "created":int(time.time()),
+        "system_fingerprint": "fp",
+        "choices":[
+            {
+                "index": 0,
+                "finish_reason": "stop",
+                "logprobs": None,
+                "message": {
+                    "role": "assistant",
+                    "content": text
+                }
+            }
+        ],
+        'id':str(uuid.uuid4()),
+        }
+
+def construct_chunk_message(id,delta,finish_reason,model):
+    return {
+        "id": id,
+        "model": model,
+        "object": "chat.completion.chunk",
+        "usage": None,
+        "created":int(time.time()),
+        "system_fingerprint": "fp",
+        "choices":[{
+            "index": 0,
+            "finish_reason": finish_reason,
+            "logprobs": None,
+            "delta": delta
+        }
+        ]}
+
+
+# 生成一个openai格式的streaming response
+def construct_stream_response_messasge(text:str,model_name:str) :
+    id = str(uuid.uuid4())
+    chunk= construct_chunk_message(id=id,model=model_name,finish_reason=None,delta={ "role": "assistant","content": ""})
+    yield f"data: {json.dumps(chunk)}\n\n"
+
+    chunk= construct_chunk_message(id=id,model=model_name,finish_reason=None,delta={"content": text})
+    yield f"data: {json.dumps(chunk)}\n\n"
+
+    chunk= construct_chunk_message(id=id,model=model_name,finish_reason="stop",delta={})
+    yield f"data: {json.dumps(chunk)}\n\n"
+    yield f"data: [DONE]\n\n"
 
 def clean_output(response:str):
     start_sequence = '{"generated_text": "'
@@ -73,7 +125,31 @@ def inference_byoc(endpoint_name:str,model_name:str, messages:List[Dict[str,Any]
     如果stream为False，返回推理的结果列表。
     如果stream为True，返回处理流式推理输出的函数。
     """
-    predictor, _ = get_predictor(endpoint_name,params={},model_args={})
+    repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
+    #统一处理成repo/modelname格式
+    model_name=get_model_path_by_name(model_name,repo_type) if model_name and len(model_name.split('/')) < 2 else model_name
+    model_args = {'cache_dir':'./cache',
+                  "revision":None,
+                  "model_name_or_path":model_name,
+                  "trust_remote_code":True,
+                  "token":os.environ['HUGGING_FACE_HUB_TOKEN']}
+
+    predictor, tokenizer = get_predictor(endpoint_name,params={},model_args={})
+    
+    # try:
+    #     inputs = tokenizer.apply_chat_template(
+    #                 messages,
+    #                 tokenize=False,
+    #                 add_generation_prompt=True
+    #             )
+    # except ValueError as e:
+    #     logger.error(e)
+    #     inputs = apply_default_chat_template(
+    #                 messages,
+    #                 tokenize=True,
+    #                 add_generation_prompt=True
+    #             )
+
     payload = {
         "model":model_name,
         "messages":messages,
@@ -83,13 +159,23 @@ def inference_byoc(endpoint_name:str,model_name:str, messages:List[Dict[str,Any]
         "top_p":params.get('top_p', 0.9),
     }
     if not stream:
-        response = predictor.predict(payload)
-        return json.loads(response)
+        try:
+            response = predictor.predict(payload)
+            return json.loads(response)
+        except Exception as e:
+            logger.error(f"-----predict-error:\n{str(e)}")
+            print(f"-----predict-error:{str(e)}")
+            return construct_response_messasge(str(e),model_name)
+
     else:
-        response_stream = predictor.predict_stream(payload)
-        # return response_stream
-        return output_stream_generator_byoc(response_stream)
-    
+        try:
+            response_stream = predictor.predict_stream(payload)
+            # return response_stream
+            return output_stream_generator_byoc(response_stream)
+        except Exception as e:
+            logger.error(f"-----predict-error:\n{str(e)}")
+            print(f"-----predict-error:{str(e)}")
+            return construct_stream_response_messasge(str(e),model_name)
 def inference(endpoint_name:str,model_name:str, messages:List[Dict[str,Any]],params:Dict[str,Any],stream=False):
     """
     根据给定的模型名称和端点名称，对消息进行推理。
@@ -140,20 +226,21 @@ def inference(endpoint_name:str,model_name:str, messages:List[Dict[str,Any]],par
         "top_p":params.get('top_p', 0.9),
     }
     if not stream:
-        response = predictor.predict(payload)
-        print(response.decode('utf-8'))
-        return json.loads(response)
+        try:
+            response = predictor.predict(payload)
+            return json.loads(response)
+        except Exception as e:
+            logger.error('-----predict-error---')
+            logger.error(str(e))
+            return construct_response_messasge(str(e),model_name)
+            
     else:
-        response_stream = predictor.predict_stream(payload)
-        # return response_stream
-        return output_stream_generator_byoc(response_stream)
-    # if not stream:
-    #     # response = await asyncio.to_thread(predictor.predict, {"inputs": inputs, "parameters": params})
-    #     response = predictor.predict({"inputs": inputs, "parameters": params})
-    #     return clean_output(response.decode('utf-8'))
-    # else:
-    #     # response_stream = await asyncio.to_thread(predictor.predict_stream, {"inputs": inputs, "parameters": params})
-    #     response_stream = predictor.predict_stream({"inputs": inputs, "parameters": params})
-    #     # return response_stream
-    #     return output_stream_generator(response_stream)
+        try:
+            response_stream = predictor.predict_stream(payload)
+            # return response_stream
+            return output_stream_generator_byoc(response_stream)
+        except Exception as e:
+            logger.error(f"-----predict-error:\n{str(e)}")
+            print(f"-----predict-error:{str(e)}")
+            return construct_stream_response_messasge(str(e),model_name)
     
