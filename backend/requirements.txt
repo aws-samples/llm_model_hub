@@ -14,3 +14,4 @@ PyJWT
 sentencepiece
 modelscope
 aioboto3
+tiktoken

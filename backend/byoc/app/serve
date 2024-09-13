@@ -28,6 +28,7 @@ else
     model_path="$model_dir"
     max_model_len=$(expr $MAX_MODEL_LEN + 0)
     tensor_parallel_size=$(expr $TENSOR_PARALLEL_SIZE + 0)
+    dtype="$DTYPE"
     echo "Found model directory" $model_dir
     if [ -f "$model_dir/.env" ]; then
         source $model_dir/.env
@@ -66,7 +67,9 @@ else
             --trust-remote-code \
             --model $file_dir \
             --max-model-len $max_model_len \
-            --tensor-parallel-size $tensor_parallel_size
+            --tensor-parallel-size $tensor_parallel_size \
+            --dtype $dtype 
+
         else
             # If model_id file exists, use its content as model_id
             # model_id=$(cat "$model_dir/model_id")
@@ -76,7 +79,8 @@ else
             --trust-remote-code \
             --model $model_id \
             --max-model-len $max_model_len \
-            --tensor-parallel-size $tensor_parallel_size
+            --tensor-parallel-size $tensor_parallel_size \
+            --dtype $dtype 
         fi
 
 

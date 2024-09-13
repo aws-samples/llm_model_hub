@@ -139,6 +139,7 @@ def register_cust_model(cust_repo_type:DownloadSource,cust_repo_addr:str):
 
 def get_auto_tensor_parallel_size(instance_type:str) -> int:
     return instance_gpus_map.get(instance_type, 1)
+
 def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str,extra_params:Dict[str,Any]) -> Dict[bool,str]:
     repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
     #统一处理成repo/modelname格式
@@ -154,39 +155,24 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
             model_path = jobinfo.output_s3_path + 'finetuned_model_merged/'
         else:
             model_path = jobinfo.output_s3_path + 'finetuned_model/'
-    #如果是使用原始模型
-    # elif not model_name == '':
-        #判断是否是中国区
-        # model_path = ''
-        # if not repo_type == DownloadSource.DEFAULT:
-        #     #如果是模型scope，则需要下载到本地
-        #     model_path = ms_download_and_upload_model(model_repo=model_name,s3_bucket=default_bucket,s3_prefix=f"original_model_file/{model_name}")
-    #如果是使用自定义模型
     elif not cust_repo_addr == '' and model_name == '' :
         # model_name = cust_repo_addr.split('/')[1]
         model_name = cust_repo_addr
-        #判断是否是中国区
-        # repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
         #注册到supported_model中
         register_cust_model(cust_repo_type=repo_type,cust_repo_addr=cust_repo_addr)
-        #如果使用hf，则直接用hf repo
-        # if repo_type == DownloadSource.DEFAULT:
-        #     model_path = ''
-        # else:
-        #     #如果是模型scope，则需要下载到本地
-        #     model_path = ms_download_and_upload_model(model_repo=cust_repo_addr,s3_bucket=default_bucket,s3_prefix=f"original_model_file/{model_name}")
-        
-    else:
-        return CommonResponse(response_id=job_id,response={"error": "no model_name is provided"})
+
     logger.info(f"deploy endpoint with model_name:{model_name},model_path:{model_path}")
     
     lmi_image_uri = VLLM_IMAGE
 
+    # g4dn does not support bf16, need to use fp16
+    dtype = 'half' if instance_type.startswith('ml.g4dn') else 'auto'
     env={
         "HF_MODEL_ID": model_name,
+        "DTYPE": dtype,
         "S3_MODEL_PATH":model_path,
          "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
-         "MAX_MODEL_LEN":extra_params.get('max_model_len', os.environ.get('MAX_MODEL_LEN',"12288")), 
+         "MAX_MODEL_LEN":extra_params.get('max_model_len', os.environ.get('MAX_MODEL_LEN',"4096")), 
          "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type)))
     }
     if DEFAULT_REGION.startswith('cn'):
