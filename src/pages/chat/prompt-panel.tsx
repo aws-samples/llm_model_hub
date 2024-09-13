@@ -32,6 +32,7 @@ export interface ModelParamProps {
     model_name_opt: SelectProps.Options|null
     system_role_prompt: string
     use_stream:boolean
+    chat_template:string
 }
 export interface ModelOptionProps{
       label:string
@@ -44,7 +45,8 @@ export const defaultModelParams:ModelParamProps = {
   model_name: null,
   model_name_opt: null,
   system_role_prompt: "",
-  use_stream:true
+  use_stream:true,
+  chat_template: "{% if add_generation_prompt and messages[-1]['role'] != 'assistant' %}{{ '<|im_start|>assistant\n' }}{% endif %}"
 };
 
 const ExpandableSettingPanel = () => {
@@ -82,6 +84,10 @@ const ExpandableSettingPanel = () => {
     localStoredParams?.system_role_prompt === undefined
           ? defaultModelParams.system_role_prompt
           : localStoredParams?.system_role_prompt,
+  );
+
+  const [chatTemplate, setChatTemplate] = useState(
+    localStoredParams?.chat_template || defaultModelParams.chat_template
   );
 
   type StatusType = "finished" | "loading" | "error";
@@ -250,6 +256,24 @@ const ExpandableSettingPanel = () => {
             value={systemRolePromptValue}
           />
         </FormField>
+        <FormField label={t("cust_chat_template")}
+        description={t("cust_chat_template_desc")}>
+          <Textarea
+            rows={1}
+            onChange={({ detail }) => {
+              setChatTemplate(detail.value);
+              setModelParams((prev:ModelParamProps) => ({
+                ...prev,
+                chat_template: detail.value,
+              }));
+              setLocalStoredParams({
+                ...localStoredParams,
+                chat_template: detail.value,
+              });
+            }}
+            value={chatTemplate}
+          />
+        </FormField>
       </ColumnLayout>
     </ExpandableSection>
   );
@@ -301,7 +325,7 @@ const PromptPanel = ({ sendMessage }:{sendMessage:({id,messages,params}:MessageD
       temperature:
         localStoredParams?.temperature || defaultModelParams.temperature,
       top_p:localStoredParams?.top_p || defaultModelParams.top_p,
-
+      chat_template: localStoredParams?.chat_template || defaultModelParams.chat_template,
       use_stream:
           localStoredParams?.use_stream !== undefined
             ? localStoredParams?.use_stream
@@ -310,6 +334,7 @@ const PromptPanel = ({ sendMessage }:{sendMessage:({id,messages,params}:MessageD
       system_role_prompt:
         localStoredParams?.system_role_prompt ||
         defaultModelParams.system_role_prompt,
+
       feedback:null,
     });
   }, [endpointName]);
@@ -347,10 +372,8 @@ const PromptPanel = ({ sendMessage }:{sendMessage:({id,messages,params}:MessageD
 
   return (
     <Container footer={<ExpandableSettingPanel />}>
-     {/* <Container> */}
       <FormField
         stretch={true}
-        // label={t('prompt_label')}
       >
       <SpaceBetween size="s">
 

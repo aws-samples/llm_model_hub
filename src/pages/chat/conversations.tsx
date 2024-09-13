@@ -312,15 +312,17 @@ const ConversationsPanel = () => {
 
   function sendMessage({ id, messages, params }: MessageDataProp) {
     let newMessages :any[]= [];
-    if (messages.length > maxConversations){ //截断
-      newMessages = messages.slice(messages.length - maxConversations);
+    // console.log("message:",messages);
+    const MAX_TURNS = maxConversations * 2
+    if (messages.length > MAX_TURNS){ //截断
+      newMessages = messages.slice(-MAX_TURNS+1);
       setConversations(
         (prev:MsgItemProps[]) =>
-          prev.slice(conversations.length - MAX_CONVERSATIONS)) 
+          prev.slice(-MAX_TURNS+1)) 
     }else{
       newMessages = messages;
     }
-
+    // console.log("newMessages:",newMessages);
     const system_message = modelParams.system_role_prompt?{role: "system", content: modelParams.system_role_prompt}:undefined;
     //插入系统消息
     system_message&&newMessages.unshift(system_message);
@@ -333,7 +335,8 @@ const ConversationsPanel = () => {
         max_new_tokens: params.max_tokens,
         do_sample: true,
         top_p: params.top_p,
-        temperature: params.temperature
+        temperature: params.temperature,
+        chat_template:params.chat_template
       },
       stream:params.use_stream
 

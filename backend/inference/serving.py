@@ -134,8 +134,14 @@ def inference_byoc(endpoint_name:str,model_name:str, messages:List[Dict[str,Any]
                   "trust_remote_code":True,
                   "token":os.environ['HUGGING_FACE_HUB_TOKEN']}
 
-    predictor, tokenizer = get_predictor(endpoint_name,params={},model_args={})
-    
+    predictor, tokenizer = get_predictor(endpoint_name,params={},model_args=model_args)
+    if tokenizer:
+        has_chat_template = hasattr(tokenizer, 'chat_template') and tokenizer.chat_template is not None
+        print(f"has_chat_template:{has_chat_template}")
+        logger.info(f"has_chat_template:{has_chat_template}")
+    else:
+        has_chat_template = None
+        logger.info(f"tokenizer is None")
     # try:
     #     inputs = tokenizer.apply_chat_template(
     #                 messages,
@@ -150,6 +156,7 @@ def inference_byoc(endpoint_name:str,model_name:str, messages:List[Dict[str,Any]
     #                 add_generation_prompt=True
     #             )
 
+    print(f"params:{params}")
     payload = {
         "model":model_name,
         "messages":messages,
@@ -158,6 +165,11 @@ def inference_byoc(endpoint_name:str,model_name:str, messages:List[Dict[str,Any]
         "temperature":params.get('temperature', 0.1),
         "top_p":params.get('top_p', 0.9),
     }
+    # 如果没有模板，则使用自定义模板
+    if not has_chat_template and params.get('chat_template'):
+        payload['chat_template'] = params['chat_template']
+        logger.info(f"use chat_template:{params['chat_template']}")
+
     if not stream:
         try:
             response = predictor.predict(payload)
