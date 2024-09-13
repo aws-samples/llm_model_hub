@@ -333,7 +333,8 @@ const ConversationsPanel = () => {
         max_new_tokens: params.max_tokens,
         do_sample: true,
         top_p: params.top_p,
-        temperature: params.temperature
+        temperature: params.temperature,
+        chat_template:params.chat_template
       },
       stream:params.use_stream
 
