@@ -312,7 +312,7 @@ const ConversationsPanel = () => {
 
   function sendMessage({ id, messages, params }: MessageDataProp) {
     let newMessages :any[]= [];
-    console.log("message:",messages);
+    // console.log("message:",messages);
     const MAX_TURNS = maxConversations * 2
     if (messages.length > MAX_TURNS){ //截断
       newMessages = messages.slice(-MAX_TURNS+1);
@@ -322,7 +322,7 @@ const ConversationsPanel = () => {
     }else{
       newMessages = messages;
     }
-    console.log("newMessages:",newMessages);
+    // console.log("newMessages:",newMessages);
     const system_message = modelParams.system_role_prompt?{role: "system", content: modelParams.system_role_prompt}:undefined;
     //插入系统消息
     system_message&&newMessages.unshift(system_message);
