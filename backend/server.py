@@ -234,26 +234,6 @@ async def handle_list_endpoints(request:ListEndpointsRequest):
     logger.info(request)
     endpoints,count = list_endpoints(request)
     return ListEndpointsResponse(response_id=str(uuid.uuid4()),endpoints=endpoints,total_count=count)
-
-
-def construct_chunk_message(id,delta,finish_reason,model):
-    return {
-        "id": id,
-        "model": model,
-        "object": "chat.completion.chunk",
-        "usage": None,
-        "created":int(time.time()),
-        "system_fingerprint": "fp",
-        "choices":[{
-            "index": 0,
-            "finish_reason": finish_reason,
-            "logprobs": None,
-            "delta": delta
-        }
-        ]}
-
-def generator_callback(chunk):
-    yield f'data: {json.dumps({"content": chunk})}\n\n'
     
     
 def stream_generator(inference_request:InferenceRequest) -> AsyncIterable[bytes]:
