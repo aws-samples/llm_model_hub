@@ -183,7 +183,8 @@ i18n
             max_conversations:'Max Conversations',
             endpoint_name:'Endpoint Name',
             cust_chat_template:'Custom Chat Template',
-            cust_chat_template_desc:'Only used when no chat_template is provided in tokenizer_config.json' 
+            cust_chat_template_desc:'Only used when no chat_template is provided in tokenizer_config.json',
+            image:'Image'
         }
       },
       zh:{
@@ -353,7 +354,8 @@ i18n
             max_conversations:'最大聊天记录轮数',
             endpoint_name:'Endpoint名称',
             cust_chat_template:'自定义Chat Template',
-            cust_chat_template_desc:'当tokenizer_config.json中没有提供chat_template时,使用此配置'
+            cust_chat_template_desc:'当tokenizer_config.json中没有提供chat_template时,使用此配置',
+            image:'图片'
         }
       }
     }

@@ -194,26 +194,28 @@ class TrainingJobExcutor(BaseModel):
         #数据集
         doc['dataset'] = ','.join(data_keys)
         logger.info(f'training config:\n{doc}')
-        
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         uuid = shortuuid.uuid()
-        sg_config = f'sg_config_{uuid}.yaml'
+        sg_config = f'sg_config_{timestamp}_{uuid}.yaml'
         with open(f'./LLaMA-Factory/{sg_config}', 'w') as f:
             yaml.safe_dump(doc, f)
         logger.info(f'save {sg_config}')
-        # config lora merge
-        sg_lora_merge_config = f'sg_config_lora_merge_{uuid}.yaml'
+        
+        #如果使用lora微调 config lora merge
+        sg_lora_merge_config = f'sg_config_lora_merge_{timestamp}_{uuid}.yaml'
         doc_merge = {}
         doc_merge['model_name_or_path'] = model_id
         doc_merge['adapter_name_or_path'] ='/tmp/finetuned_model'
         doc_merge['export_dir'] ='/tmp/finetuned_model_merged'
         doc_merge['template'] =  DEFAULT_TEMPLATE[job_payload['prompt_template']]
-        doc_merge['export_size'] = 2
+        doc_merge['export_size'] = 5
         doc_merge['export_device'] = 'cpu'
         doc_merge['export_legacy_format'] = False
-        
+        print(DEFAULT_TEMPLATE)
         with open(f'./LLaMA-Factory/{sg_lora_merge_config}', 'w') as f:
             yaml.safe_dump(doc_merge, f)
-            
+        
+        logger.info(f'lora merge config:\n{doc_merge}')
         logger.info(f'save {sg_lora_merge_config}')
         
         return sg_config,sg_lora_merge_config
@@ -263,8 +265,8 @@ class TrainingJobExcutor(BaseModel):
                                     sagemaker_session=sagemaker_session,
                                     base_job_name=base_job_name,
                                     environment=environment,
-                                    framework_version='2.2.0',
-                                    py_version='py310',
+                                    framework_version='2.3.0',
+                                    py_version='py311',
                                     script_mode=True,
                                     instance_count=instance_num,
                                     instance_type=instance_type,

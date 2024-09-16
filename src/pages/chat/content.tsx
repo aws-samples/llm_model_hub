@@ -33,6 +33,7 @@ const Content = ({endpoint}:{endpoint:string|undefined}) => {
   const [msgItems, setMsgItems] = useState(localStoredMsgItems);
   const [endpointName, setEndpointName] = useState<string | undefined>(endpoint);
   const [modelName, setModelName] = useState<string>();
+  const [base64Images, setBase64Images] = useState<string[]>([]);
 
 
   useEffect(() => {
@@ -82,7 +83,9 @@ const Content = ({endpoint}:{endpoint:string|undefined}) => {
         modelName,
         setModelName,
         maxConversations,
-        setMaxConversations
+        setMaxConversations,
+        base64Images,
+        setBase64Images
       }}
     >
       <ContentLayout header={<Header variant="h1">{t("chat")}</Header>}>

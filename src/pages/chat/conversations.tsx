@@ -8,6 +8,7 @@ import {
   Header,
   SpaceBetween,
   Button,
+  Modal,
 } from "@cloudscape-design/components";
 import SyntaxHighlighter from "react-syntax-highlighter";
 import { a11yDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
@@ -17,7 +18,7 @@ import { useTranslation } from "react-i18next";
 import botlogo from "../../resources/Res_Amazon-SageMaker_Model_48_Light.svg";
 import userlogo from "../../resources/icons8-user-96.png"
 import { useLocalStorage } from '../commons/use-local-storage';
-import { remotePost,API_ENDPOINT,fetchPost} from "../../common/api-gateway";
+import { remotePost, API_ENDPOINT, fetchPost } from "../../common/api-gateway";
 // import useWebSocket from "react-use-websocket";
 import PromptPanel from "./prompt-panel";
 import { params_local_storage_key } from "./common-components";
@@ -29,6 +30,9 @@ import {
   Stack,
   Avatar,
   List,
+  ImageListItem,
+  ImageList,
+  ImageListItemBar,
   ListItem,
   Grid,
 } from "@mui/material";
@@ -86,11 +90,92 @@ export interface MsgItemProps {
 const username = 'default'
 const sessionId = `web_chat_${username}`
 
+const ImageUrlItems = ({ images,who,text }: { images: File[],who:string, text:string }) => {
+
+  return (
+    <ImageList
+      // key ={generateUniqueId()}
+      sx={{ width: 1024, height: "auto", objectFit: "contain" }}
+      cols={Math.max(4)}
+    // rowHeight={256}
+    >
+      {images.map((image, idx) => {
+        try {
+          const url = URL.createObjectURL(image);
+          return (<ImageListItem key={generateUniqueId()}>
+            <EnlargableImage key={generateUniqueId()} src={url} alt={image.name} who={who} text={text} />
+            <ImageListItemBar
+              // title={image.name}
+              key={generateUniqueId()}
+              subtitle={
+                <span>size: {(image.size / 1024).toFixed(1)}KB</span>
+              }
+            // position="below"
+            />
+          </ImageListItem>)
+        } catch (err) {
+          return <div key={idx} />;
+        }
+      }
+      )}
+    </ImageList>
+  )
+}
+
+const EnlargableImage = ({ ...props }) => {
+  const [visible, setVisible] = useState(false);
+  const [isEnlarged, setIsEnlarged] = useState(false);
+  const handleEnlarge = () => {
+    setIsEnlarged(!isEnlarged);
+    setVisible(!visible);
+  };
+  let newlines = [];
+  if (props.who === BOTNAME) {
+    newlines.push(props.text);
+  } else {
+    newlines = [props.text];
+  }
+
+  return (
+    <Box textAlign="left">
+       <MarkdownToHtml text={newlines.join(" ")} />
+      <div style={{ borderStyle: "solid", borderRadius: '5px', borderColor: '#0972d3' }}>
+        <img src={props.src} alt={props.alt}
+          style={{
+            maxWidth: '256px',
+            cursor: 'pointer',
+          }}
+          onClick={handleEnlarge}
+        />
+      </div>
+      {
+        isEnlarged &&
+        <Modal
+          size="large"
+          onDismiss={() => {
+            setVisible(false);
+            setIsEnlarged(false);
+          }}
+          visible={visible}
+        >
+          <img src={props.src} alt={props.alt}
+            style={{
+              maxWidth: '100%',
+            }}
+          />
+        </Modal>
+      }
+    </Box>
+  )
+
+}
+
+
 const MsgItem = ({ who, text, images_base64, images, id }: MsgItemProps) => {
 
-
+  // console.log('images:',images)
   //restore image file from localstorage
-  if (images_base64) {
+  if (images_base64?.length) {
 
     const imagesObj = images_base64.map((base64Data, key) => {
       const binaryString = window.atob(base64Data); // 将 base64 字符串解码为二进制字符串
@@ -113,14 +198,17 @@ const MsgItem = ({ who, text, images_base64, images, id }: MsgItemProps) => {
     );
 
   }
-  else if (images) {
+  else if (images?.length) {
 
     return (
-      <ListItem >
-        {who !== BOTNAME && <Stack direction="row" spacing={2} sx={{ alignItems: "top" }}>
-          <Avatar src={userlogo} alt={"User"} />
-        </Stack>}
-      </ListItem>
+      who !== BOTNAME && (
+        <ListItem >
+          <Stack direction="row" spacing={2} sx={{ alignItems: "top" }}>
+            <Avatar src={userlogo} alt={"User"} />
+            <ImageUrlItems key={generateUniqueId()} images={images} who={who} text={text}/>
+          </Stack>
+        </ListItem>
+      )
     );
   } else {
     let newlines = [];
@@ -255,11 +343,11 @@ export interface MessageDataProp {
   params: Record<string, any>
 }
 
-function extractJsonFromString(str:string) {
-  if (str ==='data  [DONE]') return `[DONE]`
+function extractJsonFromString(str: string) {
+  if (str === 'data  [DONE]') return `[DONE]`
   // 使用正则表达式匹配 JSON 部分
   const match = str.match(/\{.*\}/);
-  
+
   if (match) {
     try {
       // 尝试解析匹配到的 JSON 字符串
@@ -302,8 +390,8 @@ const ConversationsPanel = () => {
     };
   }, []);
 
-  const [localStoredMsgItems, setLocalStoredMsgItems] = useLocalStorage<Record<string, any>|null>(
-    params_local_storage_key + '-msgitems-'+endpointName,
+  const [localStoredMsgItems, setLocalStoredMsgItems] = useLocalStorage<Record<string, any> | null>(
+    params_local_storage_key + '-msgitems-' + endpointName,
     []
   );
 
@@ -311,21 +399,21 @@ const ConversationsPanel = () => {
 
 
   function sendMessage({ id, messages, params }: MessageDataProp) {
-    let newMessages :any[]= [];
+    let newMessages: any[] = [];
     // console.log("message:",messages);
     const MAX_TURNS = maxConversations * 2
-    if (messages.length > MAX_TURNS){ //截断
-      newMessages = messages.slice(-MAX_TURNS+1);
+    if (messages.length > MAX_TURNS) { //截断
+      newMessages = messages.slice(-MAX_TURNS + 1);
       setConversations(
-        (prev:MsgItemProps[]) =>
-          prev.slice(-MAX_TURNS+1)) 
-    }else{
+        (prev: MsgItemProps[]) =>
+          prev.slice(-MAX_TURNS + 1))
+    } else {
       newMessages = messages;
     }
     // console.log("newMessages:",newMessages);
-    const system_message = modelParams.system_role_prompt?{role: "system", content: modelParams.system_role_prompt}:undefined;
+    const system_message = modelParams.system_role_prompt ? { role: "system", content: modelParams.system_role_prompt } : undefined;
     //插入系统消息
-    system_message&&newMessages.unshift(system_message);
+    system_message && newMessages.unshift(system_message);
     const formData = {
       endpoint_name: endpointName,
       model_name: modelName,
@@ -336,78 +424,78 @@ const ConversationsPanel = () => {
         do_sample: true,
         top_p: params.top_p,
         temperature: params.temperature,
-        chat_template:params.chat_template
+        chat_template: params.chat_template
       },
-      stream:params.use_stream
+      stream: params.use_stream
 
     }
 
-    if (params.use_stream){
-      fetchPost(formData,"chat/completions")
-      .then(async (response) => {
-        const reader = response.body?.getReader();
-        if (!reader) {
+    if (params.use_stream) {
+      fetchPost(formData, "chat/completions")
+        .then(async (response) => {
+          const reader = response.body?.getReader();
+          if (!reader) {
             throw new Error('Response body is not readable');
-        }
-        const decoder = new TextDecoder();
-        let isNew = true;
-        let buffer = '';
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          // 处理完整的数据块
-          while (buffer.includes('\n\n')) {
-            const index = buffer.indexOf('\n\n');
-            const chunk = buffer.slice(0, index);
-            buffer = buffer.slice(index + 2);
-            // console.log('chunk',chunk);
-            // 处理完整的行
-            const chunk_obj = extractJsonFromString(chunk)
-            // console.log('chunk_obj',chunk_obj);
-            if ( chunk_obj !== '[DONE]' && chunk_obj?.choices[0].delta?.role ) continue  //ship first message chunk
-            onStreamMessageCallback( {resp: chunk_obj, isNew: isNew })
-            isNew = false
           }
-        }
+          const decoder = new TextDecoder();
+          let isNew = true;
+          let buffer = '';
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            // 处理完整的数据块
+            while (buffer.includes('\n\n')) {
+              const index = buffer.indexOf('\n\n');
+              const chunk = buffer.slice(0, index);
+              buffer = buffer.slice(index + 2);
+              // console.log('chunk',chunk);
+              // 处理完整的行
+              const chunk_obj = extractJsonFromString(chunk)
+              // console.log('chunk_obj',chunk_obj);
+              if (chunk_obj !== '[DONE]' && chunk_obj?.choices[0].delta?.role) continue  //ship first message chunk
+              onStreamMessageCallback({ resp: chunk_obj, isNew: isNew })
+              isNew = false
+            }
+          }
 
-      setLoading(false);
-      setNewChatLoading(false);
-      setStopFlag(false);
-        
-      }).catch((err) => {
-        console.log(err);
-        const response= {
-          id:id,
-          choices:[
-            {message:{content:`internal error ${err}`}}
-          ]
-        }
-        onMessageCallback({ resp: response })
-      })
-    }else{
+          setLoading(false);
+          setNewChatLoading(false);
+          setStopFlag(false);
+
+        }).catch((err) => {
+          console.log(err);
+          const response = {
+            id: id,
+            choices: [
+              { message: { content: `internal error ${err}` } }
+            ]
+          }
+          onMessageCallback({ resp: response })
+        })
+    } else {
       remotePost(formData, "chat/completions")
-      .then( (resp) => {
+        .then((resp) => {
           onMessageCallback({ resp: resp.response })
-      }).catch((err) => {
-        console.log(err);
-        const response= {
-          id:id,
-          choices:[
-            {message:{content:`internal error ${err}`}}
-          ]
-        }
-        onMessageCallback({ resp: response })
-      })
+        }).catch((err) => {
+          console.log(err);
+          const response = {
+            id: id,
+            choices: [
+              { message: { content: `internal error ${err}` } }
+            ]
+          }
+          onMessageCallback({ resp: response })
+        })
     }
   }
 
-  const onStreamMessageCallback = ({ resp, isNew}: { resp: any, isNew:boolean}) => {
+  const onStreamMessageCallback = ({ resp, isNew }: { resp: any, isNew: boolean }) => {
     setLoading(false);
     setNewChatLoading(false);
     if (resp === "[DONE]") {
       setStopFlag(false);
-      setConversations((prev:MsgItemProps[]) => [
+      setConversations((prev: MsgItemProps[]) => [
         ...prev,
         {
           role: BOTNAME,
@@ -419,9 +507,9 @@ const ConversationsPanel = () => {
         { id: resp.id, who: username, text: streamOutput.current },
       ]);
 
-    }else{
+    } else {
 
-      const chunk = resp.choices[0].delta.content??'';
+      const chunk = resp.choices[0].delta.content ?? '';
       // console.log(chunk)
       streamOutput.current = streamOutput.current + chunk;
       if (isNew) {
@@ -435,7 +523,7 @@ const ConversationsPanel = () => {
           },
         ]);
         streamOutput.current = streamOutput.current + chunk;
-      }else{
+      } else {
         setMsgItems((prev: MsgItemProps[]) => [
           ...prev.slice(0, -1),
           {
@@ -447,31 +535,31 @@ const ConversationsPanel = () => {
       }
     }
   };
-  const onMessageCallback = ({ resp, }: { resp: any}) => {
+  const onMessageCallback = ({ resp, }: { resp: any }) => {
     setLoading(false);
     setNewChatLoading(false);
-      setStopFlag(false);
-      //创建一个新的item
-      streamOutput.current = resp.choices[0].message.content;
-      setMsgItems((prev: MsgItemProps[]) => [
-        ...prev,
-        {
-          id: resp.id,
-          who: BOTNAME,
-          text: streamOutput.current,
-        },
-      ]);
-      setConversations((prev:MsgItemProps[]) => [
-        ...prev,
-        {
-          role: BOTNAME,
-          content: streamOutput.current,
-        },
-      ]);
-      setLocalStoredMsgItems([
-        ...msgItems,
-        { id: resp.id, who: username, text: streamOutput.current },
-      ]);
+    setStopFlag(false);
+    //创建一个新的item
+    streamOutput.current = resp.choices[0].message.content;
+    setMsgItems((prev: MsgItemProps[]) => [
+      ...prev,
+      {
+        id: resp.id,
+        who: BOTNAME,
+        text: streamOutput.current,
+      },
+    ]);
+    setConversations((prev: MsgItemProps[]) => [
+      ...prev,
+      {
+        role: BOTNAME,
+        content: streamOutput.current,
+      },
+    ]);
+    setLocalStoredMsgItems([
+      ...msgItems,
+      { id: resp.id, who: username, text: streamOutput.current },
+    ]);
   }
 
 
@@ -481,7 +569,7 @@ const ConversationsPanel = () => {
       <Container header={<Header variant="h2">{t("conversations")}</Header>}>
         <ChatBox msgItems={msgItems} loading={loading} />
       </Container>
-      <PromptPanel sendMessage={sendMessage}/>
+      <PromptPanel sendMessage={sendMessage} />
     </SpaceBetween>
   );
 };

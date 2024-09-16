@@ -7,7 +7,7 @@ import '../../styles/base.scss';
 import '../../styles/top-navigation.scss';
 import {useAuthUserInfo} from './use-auth';
 
-import logo from '../../resources/smlogo.svg';
+import logo from '../../resources/model-hub-high-resolution-logo-transparent.webp';
 import { useTranslation, Trans } from 'react-i18next';
 import i18n from '../../common/i18n';
 import ModelSettings from './chat-settings';
@@ -45,7 +45,7 @@ export const TopNav = () => {
       i18nStrings={i18nStrings}
       identity={{
         href: '#',
-        title: 'Model Hub',
+        // title: 'Model Hub',
         logo: { src: logo, alt: 'Service name logo' },
       }}
       utilities={[

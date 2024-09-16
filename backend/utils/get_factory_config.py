@@ -53,7 +53,9 @@ async def get_factory_config(request:GetFactoryConfigRequest,repo=DownloadSource
         model_names = [{"model_name":name,"model_path":SUPPORTED_MODELS[name].get(repo,'not exist')} for name in list(SUPPORTED_MODELS.keys()) if SUPPORTED_MODELS[name].get(repo) ]
         return CommonResponse(response_id=str(uuid.uuid4()),response={"body":model_names})
     elif request.config_name == 'prompt_template':
-        templates = list(DEFAULT_TEMPLATE.keys())
+        # templates = list(DEFAULT_TEMPLATE.keys())
+        templates = list(DEFAULT_TEMPLATE)
+        # print(DEFAULT_TEMPLATE)
         return CommonResponse(response_id=str(uuid.uuid4()),response={"body":templates})
     elif request.config_name == 'dataset':
         datasets = list_datasets()

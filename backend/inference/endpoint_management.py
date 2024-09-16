@@ -134,8 +134,10 @@ def register_cust_model(cust_repo_type:DownloadSource,cust_repo_addr:str):
     #register_model_group会改变以下2个对象，需要持久化保存，服务器重启之后仍然能加载
     with open(SUPPORTED_MODELS_FILE, 'wb') as f:
         pickle.dump(SUPPORTED_MODELS, f)
-    with open(DEFAULT_TEMPLATE_FILE, 'wb') as f:
-        pickle.dump(DEFAULT_TEMPLATE, f)
+    
+    # 只有输入了模板才有用，暂时不需要此代码
+    # with open(DEFAULT_TEMPLATE_FILE, 'wb') as f:
+    #     pickle.dump(DEFAULT_TEMPLATE, f)
 
 def get_auto_tensor_parallel_size(instance_type:str) -> int:
     return instance_gpus_map.get(instance_type, 1)
