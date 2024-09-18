@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
-import React, { useEffect, useState, useRef, memo } from "react";
+import React, { useEffect, useState, useRef, memo,useMemo } from "react";
 import {
   Container,
   Header,
@@ -102,11 +102,12 @@ const ImageUrlItems = ({ images,who,text }: { images: File[],who:string, text:st
       {images.map((image, idx) => {
         try {
           const url = URL.createObjectURL(image);
-          return (<ImageListItem key={generateUniqueId()}>
-            <EnlargableImage key={generateUniqueId()} src={url} alt={image.name} who={who} text={text} />
+          return (<ImageListItem key={`${image.name}-${idx}`}>
+            <EnlargableImage key={`${image.name}-${idx}-image`} src={url} alt={image.name} who={who} text={text} />
             <ImageListItemBar
               // title={image.name}
-              key={generateUniqueId()}
+              // key={generateUniqueId()}
+              key={`${image.name}-${idx}-bar`}
               subtitle={
                 <span>size: {(image.size / 1024).toFixed(1)}KB</span>
               }
@@ -114,7 +115,8 @@ const ImageUrlItems = ({ images,who,text }: { images: File[],who:string, text:st
             />
           </ImageListItem>)
         } catch (err) {
-          return <div key={idx} />;
+          // console.log(err)
+          return  <MarkdownToHtml text={text} key={`markdown-${idx}`} />
         }
       }
       )}
@@ -122,7 +124,16 @@ const ImageUrlItems = ({ images,who,text }: { images: File[],who:string, text:st
   )
 }
 
-const EnlargableImage = ({ ...props }) => {
+interface EnlargableImageProps {
+  key?: string;
+  src: string; // 添加 src 属性
+  alt: string;
+  who?: string;
+  text?: string;
+}
+
+
+const EnlargableImage = memo((props:EnlargableImageProps) => {
   const [visible, setVisible] = useState(false);
   const [isEnlarged, setIsEnlarged] = useState(false);
   const handleEnlarge = () => {
@@ -167,57 +178,46 @@ const EnlargableImage = ({ ...props }) => {
       }
     </Box>
   )
+});
 
-}
 
+const MemoizedMsgItem = memo(({ who, text, images_base64, images, id }: MsgItemProps) => {
+  const memoizedImages = useMemo(() => {
+    if (images_base64?.length) {
+      return images_base64.map((base64Data, key) => {
+        const binaryString = window.atob(base64Data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: 'image/png' });
+        return new File([blob], `image_${key}.png`, { type: 'image/png' });
+      });
+    }
+    return images || [];
+  }, [images_base64, images]);
 
-const MsgItem = ({ who, text, images_base64, images, id }: MsgItemProps) => {
-
-  // console.log('images:',images)
-  //restore image file from localstorage
-  if (images_base64?.length) {
-
-    const imagesObj = images_base64.map((base64Data, key) => {
-      const binaryString = window.atob(base64Data); // 将 base64 字符串解码为二进制字符串
-      const bytes = new Uint8Array(binaryString.length);
-
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      const blob = new Blob([bytes], { type: 'image/png' });
-      // Create a new File object from the Blob
-      return new File([blob], `image_${key}.png`, { type: 'image/png' });
-    });
+  if (memoizedImages.length) {
     return (
-      <ListItem >
-        {who !== BOTNAME &&
+      <ListItem>
+        {who !== BOTNAME && (
           <Stack direction="row" spacing={2} sx={{ alignItems: "top" }}>
             <Avatar src={userlogo} alt={"User"} />
-          </Stack>}
+            <TextItem sx={{ bgcolor: "#f2fcf3", borderColor: "#037f0c" }}>
+              <ImageUrlItems images={memoizedImages} who={who} text={text} />
+            </TextItem>
+          </Stack>
+        )}
       </ListItem>
     );
-
   }
-  else if (images?.length) {
-
-    return (
-      who !== BOTNAME && (
-        <ListItem >
-          <Stack direction="row" spacing={2} sx={{ alignItems: "top" }}>
-            <Avatar src={userlogo} alt={"User"} />
-            <ImageUrlItems key={generateUniqueId()} images={images} who={who} text={text}/>
-          </Stack>
-        </ListItem>
-      )
-    );
-  } else {
+  else {
     let newlines = [];
     if (who === BOTNAME) {
       newlines.push(text);
     } else {
       newlines = [text];
     }
-    // console.log(text);
 
     return who !== BOTNAME ? (
       <ListItem >
@@ -241,7 +241,7 @@ const MsgItem = ({ who, text, images_base64, images, id }: MsgItemProps) => {
       </ListItem>
     );
   }
-};
+});
 
 const TextItem = (props: any) => {
   const { sx, ...other } = props;
@@ -269,7 +269,7 @@ const TextItem = (props: any) => {
   );
 };
 
-const MemoizedMsgItem = memo(MsgItem);
+// const MemoizedMsgItem = memo(MsgItem);
 
 const ChatBox = ({ msgItems, loading }: { msgItems: MsgItemProps[], loading: boolean }) => {
   const [loadingtext, setLoaderTxt] = useState("Loading.");
@@ -308,9 +308,10 @@ const ChatBox = ({ msgItems, loading }: { msgItems: MsgItemProps[], loading: boo
       scrollRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [msgItems.length]);
-  const items = msgItems.map((msg: MsgItemProps) => (
+  const items = msgItems.map((msg: MsgItemProps,idx) => (
     <MemoizedMsgItem
-      key={generateUniqueId()}
+      // key={generateUniqueId()}
+      key={`msgitem-${idx}`}
       who={msg.who}
       text={msg.text}
       images={msg.images}
@@ -354,11 +355,11 @@ function extractJsonFromString(str: string) {
       const jsonObj = JSON.parse(match[0]);
       return jsonObj;
     } catch (error) {
-      console.error("Error parsing JSON:", str);
+      console.log("Error parsing JSON:", str);
       return `[DONE]`;
     }
   } else {
-    console.log("No JSON found in the string");
+    // console.log("No JSON found in the string");
     return `[DONE]`;
   }
 }
@@ -377,8 +378,6 @@ const ConversationsPanel = () => {
     setConversations,
     setStopFlag,
     endpointName,
-    setEndpointName,
-    setModelName,
     modelName,
     modelParams,
     setNewChatLoading,
@@ -397,7 +396,10 @@ const ConversationsPanel = () => {
 
   // const [msgItems, setMsgItems] = useState<any>(localStoredMsgItems);
 
-
+  useEffect(() => {
+    // console.log("Updated msgItems:", msgItems);
+    setLocalStoredMsgItems(msgItems);
+  }, [msgItems]);
   function sendMessage({ id, messages, params }: MessageDataProp) {
     let newMessages: any[] = [];
     // console.log("message:",messages);
@@ -493,6 +495,7 @@ const ConversationsPanel = () => {
   const onStreamMessageCallback = ({ resp, isNew }: { resp: any, isNew: boolean }) => {
     setLoading(false);
     setNewChatLoading(false);
+    // console.log("msgItems:",msgItems)
     if (resp === "[DONE]") {
       setStopFlag(false);
       setConversations((prev: MsgItemProps[]) => [
@@ -513,6 +516,7 @@ const ConversationsPanel = () => {
       // console.log(chunk)
       streamOutput.current = streamOutput.current + chunk;
       if (isNew) {
+        
         streamOutput.current = ''
         setMsgItems((prev: MsgItemProps[]) => [
           ...prev,
@@ -539,6 +543,7 @@ const ConversationsPanel = () => {
     setLoading(false);
     setNewChatLoading(false);
     setStopFlag(false);
+    console.log("onMessageCallback msgItems:",msgItems)
     //创建一个新的item
     streamOutput.current = resp.choices[0].message.content;
     setMsgItems((prev: MsgItemProps[]) => [

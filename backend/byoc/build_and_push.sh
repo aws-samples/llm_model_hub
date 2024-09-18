@@ -16,7 +16,7 @@ region=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/la
 # Get the account number associated with the current IAM credentials
 account=$(aws sts  get-caller-identity --query Account --output text)
 
-VLLM_VERSION=v0.6.1
+VLLM_VERSION=v0.6.1.post2
 inference_image=sagemaker_endpoint/vllm
 inference_fullname=${account}.dkr.ecr.${region}.amazonaws.com/${inference_image}:${VLLM_VERSION}
 

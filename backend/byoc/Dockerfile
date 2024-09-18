@@ -7,6 +7,10 @@ WORKDIR /app
 # 复制当前目录下的内容到容器内的/app
 COPY app/ /app
 
+# 安装新的依赖
+COPY requirements.txt /app
+RUN pip install -r requirements.txt  
+
 # 修改restapi
 RUN \
 export PYTHON_SITEPACKAGES=`python3 -c "import site; print(site.getsitepackages()[0])"`; \

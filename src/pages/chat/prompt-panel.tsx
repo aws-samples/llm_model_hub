@@ -13,6 +13,7 @@ import {
   FileUpload,
   ExpandableSection,
   Select,
+  Link,
   ColumnLayout,
   SelectProps
 } from "@cloudscape-design/components";
@@ -264,7 +265,13 @@ const ExpandableSettingPanel = () => {
           />
         </FormField>
         <FormField label={t("cust_chat_template")}
-        description={t("cust_chat_template_desc")}>
+        description={<>{t("cust_chat_template_desc")},{
+        <Link 
+           external
+           variant="primary"
+           fontSize="body-s"
+           href="https://github.com/vllm-project/vllm/blob/main/examples/template_llava.jinja"
+        >{t("examples")}</Link>}</>} >
           <Textarea
             rows={1}
             onChange={({ detail }) => {
@@ -458,12 +465,16 @@ const PromptPanel = ({ sendMessage }:{sendMessage:({id,messages,params}:MessageD
       { id: respid, who: username, text: prompt ,images:files},
     ]);
 
+    console.log('msgItems:',msgItems)
     //save the messages to localstorage
-    console.log('msgItems:',msgItems);
     setLocalStoredMsgItems([
       ...msgItems,
       { id: respid, who: username, text: prompt },
     ])
+    // console.log('msgItems:',[
+    //   ...msgItems,
+    //   { id: respid, who: username, text: prompt },
+    // ]);
 
     //add base64 data in message
     const imageMessage = base64Images.map((base64Data:string) => {
@@ -484,7 +495,7 @@ const PromptPanel = ({ sendMessage }:{sendMessage:({id,messages,params}:MessageD
     const params = {...modelParams}
     sendMessage({ id: respid, messages: messages, params: params });
     console.log("modelParams:", params);
-    console.log("messages:", messages);
+    // console.log("messages:", messages);
     setPromptValue("");
     setFiles([]);
     setBase64Images([]);
