@@ -1,0 +1,261 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template for EC2 instance for ModelHubStack'
+
+Metadata: 
+  AWS::CloudFormation::Interface: 
+    StackName: 
+      Default: "ModelHubStack"
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: m5.xlarge
+    Description: EC2 instance type
+
+  AMIId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id
+    Description: Ubuntu 22.04 AMI ID
+
+  HuggingFaceHubToken:
+    Type: String
+    Description: Optional Hugging Face Hub Token
+    Default: ""
+
+  WandbApiKey:
+    Type: String
+    Description: Optional WANDB API Key for view W&B in wandb.ai
+    Default: ""
+
+Resources:
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref AMIId
+      SecurityGroupIds: 
+        - !Ref EC2SecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 200
+            VolumeType: gp2
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      UserData:
+        Fn::Base64:
+          !Sub 
+            - |
+              #!/bin/bash
+              echo "Starting UserData script execution" >> /var/log/user-data.log
+
+              sudo apt update
+              sudo apt install -y git
+              
+              if ! command -v aws &> /dev/null; then
+                  #安装awscli
+                  curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                  unzip awscliv2.zip
+                  sudo ./aws/install
+              fi
+
+              #install nodejs 
+              curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+              sudo apt install -y nodejs
+              sudo npm install --global yarn
+              # download file
+              sudo su ubuntu
+              cd /home/ubuntu/
+              git clone --recurse-submodule https://github.com/aws-samples/llm_model_hub.git
+              cd /home/ubuntu/llm_model_hub
+              yarn install
+              #install pm2
+              sudo yarn global add pm2
+
+              # 等待一段时间以确保实例已完全启动
+              sleep 30
+
+
+              #如果是中国区则执行
+              if [[ "$AWS_REGION" == cn* ]]; then
+                  echo "AWS Region is in China: $AWS_REGION"
+                  cd /home/ubuntu/llm_model_hub/backend/
+                  sudo -u ubuntu bash 0.setup-cn.sh
+              fi 
+
+              # 尝试使用 IMDSv2 获取 token
+              TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+
+              # Get the EC2 instance's public IP
+              EC2_IP=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/public-ipv4)
+              # Get the current region and write it to the backend .env file
+              REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/region)
+
+              echo "Get IP:$EC2_IP and Region:REGION " >> /var/log/user-data.log
+              # Generate a random string key
+              RANDOM_KEY=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
+              # Write the EC2_IP and SageMakerRoleArn to frontend .env file
+              echo "REACT_APP_API_ENDPOINT=http://$EC2_IP:8000/v1" > /home/ubuntu/llm_model_hub/.env
+              echo "REACT_APP_API_KEY=$RANDOM_KEY" >> /home/ubuntu/llm_model_hub/.env
+              
+              ## write sagemaker role
+              echo "AK=" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "SK=" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "role=${SageMakerRoleArn}" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "region=$REGION" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "db_host=127.0.0.1" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "db_name=llm" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "db_user=llmdata" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "db_password=llmdata" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "api_keys=$RANDOM_KEY" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "HUGGING_FACE_HUB_TOKEN=${HuggingFaceHubToken}" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "WANDB_API_KEY=${WandbApiKey}" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "MAX_MODEL_LEN=4096" >> /home/ubuntu/llm_model_hub/backend/.env
+              # Set proper permissions 
+              sudo chown -R ubuntu:ubuntu /home/ubuntu/
+              RANDOM_PASSWORD=$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1) 
+              aws ssm put-parameter --name "/${AWS::StackName}/RandomPassword" --value "$RANDOM_PASSWORD" --type "SecureString" --overwrite --region ${AWS::Region}
+              cd /home/ubuntu/llm_model_hub/backend
+              sudo -u ubuntu bash 01.setup.sh
+              sleep 30
+              #add user in db
+              source ../miniconda3/bin/activate py311
+              conda activate py311
+              python3 users/add_user.py demo_user $RANDOM_PASSWORD default
+
+              #build image
+              cd /home/ubuntu/llm_model_hub/backend/byoc
+              sudo -u ubuntu bash build_and_push.sh
+              sleep 5
+              #upload dummy tar.gz
+              sudo -u ubuntu ../../miniconda3/envs/py311/bin/python startup.py 
+
+              #start backend
+              cd /home/ubuntu/llm_model_hub/backend/
+              sudo -u ubuntu bash 02.start_backend.sh
+              sleep 15
+
+              #start frontend
+              cd /home/ubuntu/llm_model_hub/
+              sudo -u ubuntu pm2 start pm2run.config.js 
+              # 安装 cfn-signal
+              sudo pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+              # 发送成功信号
+              /usr/local/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
+              echo "RandomPassword=$RANDOM_PASSWORD" >> /etc/environment
+              echo "Run User Data Script Done! " >> /var/log/user-data.log
+            - SageMakerRoleArn: !GetAtt SageMakerExecutionRole.Arn
+              HuggingFaceHubToken: !Ref HuggingFaceHubToken
+              WandbApiKey: !Ref WandbApiKey
+
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH, port 8000 and 3000
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0
+
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws-cn:iam::aws:policy/CloudWatchLogsFullAccess
+        - arn:aws-cn:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws-cn:iam::aws:policy/AmazonSageMakerFullAccess
+      Policies:
+      - PolicyName: SSMParameterAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - ssm:PutParameter
+              Resource: !Sub 'arn:aws-cn:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/*'
+
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+        - !Ref EC2Role
+
+  SageMakerExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sagemaker.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws-cn:iam::aws:policy/AmazonSageMakerFullAccess
+      Policies:
+        - PolicyName: S3AccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                  - s3:CreateBucket
+                Resource:
+                  - arn:aws-cn:s3:::*
+
+  SSMConsoleAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws-cn:iam::aws:policy/AmazonSSMFullAccess
+      Policies:
+        - PolicyName: SSMConsoleAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:StartSession
+                  - ssm:DescribeSessions
+                  - ssm:TerminateSession
+                  - ssm:ResumeSession
+                Resource: '*'
+
+                
+Outputs:
+  InstanceId:
+    Description: ID of the EC2 instance
+    Value: !Ref EC2Instance
+  PublicIP:
+    Description: Public IP of the EC2 instance
+    Value: !GetAtt EC2Instance.PublicIp
+  SageMakerRoleArn:
+    Description: ARN of the SageMaker Execution Role
+    Value: !GetAtt SageMakerExecutionRole.Arn
+  RandomPasswordParameter:
+    Description: AWS Systems Manager Parameter name for the random password
+    Value: !Sub '/${AWS::StackName}/RandomPassword'

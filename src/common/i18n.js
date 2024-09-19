@@ -16,7 +16,6 @@ i18n
     resources: {
       en: {
         translation: {
-            benchmarkportal:'Benchmark Portal',
             admin:'Admin',
             user:'User',
             group:'Group',
@@ -185,12 +184,13 @@ i18n
             cust_chat_template:'Custom Chat Template',
             cust_chat_template_desc:'Only used when no chat_template is provided in tokenizer_config.json',
             image:'Image',
-            examples:"示例"
+            examples:"Examples",
+            instance_qty:"Instance Quantity",
+            instance_qty_desc:"Number of SageMaker Endpoint Instances"
         }
       },
       zh:{
         translation:{
-            benchmarkportal:'Benchmark Portal',
             admin:'管理',
             user:'用户',
             group:'组',
@@ -357,7 +357,9 @@ i18n
             cust_chat_template:'自定义Chat Template',
             cust_chat_template_desc:'当tokenizer_config.json中没有提供chat_template时,使用此配置',
             image:'图片',
-            examples:"示例"
+            examples:"示例",
+            instance_qty:"实例数量",
+            instance_qty_desc:"推理节点的实例数量"
         }
       }
     }

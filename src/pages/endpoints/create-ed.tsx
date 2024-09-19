@@ -9,6 +9,7 @@ import {
 import { remotePost } from '../../common/api-gateway';
 import { useSimpleNotifications } from '../commons/use-notifications';
 import { useNavigate } from "react-router-dom";
+import { t } from 'i18next';
 
 interface PageHeaderProps {
   extraActions?: React.ReactNode;
@@ -44,7 +45,8 @@ const defaultErrors = {
   engine: null,
   enable_lora: null,
   model_name: null,
-  quantize: null
+  quantize: null,
+  instance_count:null,
 }
 
 const HF_QUANT_TYPES = [
@@ -185,6 +187,20 @@ const SetEngineType = ({ data, setData, readOnly }: SelectInstanceTypeProps) => 
     />
   )
 }
+
+const SetInstanceQty = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
+  const [value, setValue] = useState<string>('1');
+  return (
+        <Input
+          readOnly={readOnly}
+          value={value}
+          onChange={({ detail }) => {
+            setValue(detail.value);
+            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,instance_count: detail.value }  }))
+          }}
+        />
+  )
+};
 
 const InputCustRepo = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   const [value, setValue] = useState<string>('');
@@ -419,6 +435,16 @@ export const DeployModelModal = ({
           i18nStrings={{ errorIconAriaLabel: 'Error' }}
         >
           <SelectInstanceType data={data} setData={setData} readOnly={false} />
+        </FormField>
+
+        <FormField
+          label={t("instance_qty")}
+          description={t("instance_qty_desc")}
+          stretch={false}
+          errorText={errors.instance_count}
+          i18nStrings={{ errorIconAriaLabel: 'Error' }}
+        >
+          <SetInstanceQty data={data} setData={setData} readOnly={false} />
         </FormField>
 
         <FormField

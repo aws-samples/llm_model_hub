@@ -209,7 +209,9 @@ async def handle_deploy_endpoint(request:DeployModelRequest):
                                 enable_lora=request.enable_lora,
                                 cust_repo_type=request.cust_repo_type,
                                 cust_repo_addr=request.cust_repo_addr,
-                                model_name=request.model_name),
+                                model_name=request.model_name,
+                                extra_params=request.extra_params
+                                ),
                                 timeout=600)
             return CommonResponse(response_id=str(uuid.uuid4()),response={"result":ret, "endpoint_name": msg})
         except asyncio.TimeoutError:

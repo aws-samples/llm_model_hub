@@ -1,44 +1,9 @@
 # 后端环境安装
 ## 0. 中国区说明（海外区可以跳过）
-1. 如果在中国区部署，请手动修改python库安装源
-- backend/requirements.txt和
-- backend/LLaMA-Factory/requirements.txt文件
-- 分别在这2个requirements.txt中的第一行添加以下内容
-```
--i https://pypi.tuna.tsinghua.edu.cn/simple
-```
-
-2. 另外，在backend/LLaMA-Factory/requirements.txt文件中
-把原有的  
-```
-unsloth[cu121-torch220] @ git+https://github.com/unslothai/unsloth.git
-```
-替换成： 
-```
-unsloth[cu121-torch220] @ git+https://gitclone.com/github.com/unslothai/unsloth.git
-```
-
-3. 配置Docker中国区镜像
-- 使用vim添加 /etc/docker/daemon.json 文件并添加上下内容
+1. 如果在中国区部署，请先执行以下脚本，修改pip源，docker源。
 ```bash
-sudo vim /etc/docker/daemon.json 
+bash 0.setup-cn.sh
 ```
-```json
-{ 
-  "registry-mirrors" : 
-    [ 
-      "https://docker.m.daocloud.io", 
-      "https://noohub.ru", 
-      "https://huecker.io",
-      "https://dockerhub.timeweb.cloud" 
-    ] 
-}
-```
-修改保存之后，再重启docker服务
-```bash
-sudo systemctl restart docker
-```
-
 
 ## 1.安装后端环境
 1. 进入backend目录,复制env.sample 文件为.env
@@ -67,6 +32,8 @@ db_user=llmdata
 db_password=llmdata
 api_keys=
 HUGGING_FACE_HUB_TOKEN=
+WANDB_API_KEY=
+MAX_MODEL_LEN=4096
 ```
 
 2. 仍然在backend/目录下执行以下命令进行安装

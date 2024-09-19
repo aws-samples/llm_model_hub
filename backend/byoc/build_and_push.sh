@@ -12,13 +12,18 @@ TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
 # Get the current region and write it to the backend .env file
 region=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/region)
 # region=$(aws configure get region)
+suffix="com"
+
+if [[ "$region" == cn*  ]]; then
+    suffix="com.cn"
+fi
 
 # Get the account number associated with the current IAM credentials
 account=$(aws sts  get-caller-identity --query Account --output text)
 
 VLLM_VERSION=v0.6.1.post2
 inference_image=sagemaker_endpoint/vllm
-inference_fullname=${account}.dkr.ecr.${region}.amazonaws.com/${inference_image}:${VLLM_VERSION}
+inference_fullname=${account}.dkr.ecr.${region}.amazonaws.${suffix}/${inference_image}:${VLLM_VERSION}
 
 # If the repository doesn't exist in ECR, create it.
 aws  ecr describe-repositories --repository-names "${inference_image}" --region ${region} || aws ecr create-repository --repository-name "${inference_image}" --region ${region}
@@ -29,7 +34,7 @@ then
 fi
 
 # Get the login command from ECR and execute it directly
-aws  ecr get-login-password --region $region | docker login --username AWS --password-stdin $account.dkr.ecr.$region.amazonaws.com
+aws  ecr get-login-password --region $region | docker login --username AWS --password-stdin $account.dkr.ecr.$region.amazonaws.${suffix}
 
 aws ecr set-repository-policy \
     --repository-name "${inference_image}" \

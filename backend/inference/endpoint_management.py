@@ -186,6 +186,7 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
     create_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
     endpoint_name = sagemaker.utils.name_from_base(pure_model_name).replace('.','-').replace('_','-')
+    instance_count = int(extra_params.get("instance_count",1))
 
     # Create the SageMaker Model object. In this example we let LMI configure the deployment settings based on the model architecture  
     model = Model(
@@ -199,7 +200,7 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
     try:
         model.deploy(
             instance_type= instance_type,
-            initial_instance_count=1,
+            initial_instance_count= instance_count,
             endpoint_name=endpoint_name,
             wait=False,
             accept_eula=True,
@@ -209,6 +210,7 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
                                  model_name= model_name,
                                  model_s3_path= model_path,
                                  instance_type= instance_type,
+                                 instance_count = instance_count,
                                  endpoint_name= endpoint_name,
                                  endpoint_create_time= create_time,
                                  endpoint_delete_time= None,
@@ -225,7 +227,7 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
     return True,endpoint_name
 
 # 如果job_id="",则使用model_name原始模型
-def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str) -> Dict[bool,str]:
+def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str,extra_params:Dict[str,Any]) -> Dict[bool,str]:
      #统一处理成repo/modelname格式
     repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
     model_name=get_model_path_by_name(model_name,repo_type) if model_name and len(model_name.split('/')) < 2 else model_name
@@ -304,7 +306,7 @@ def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_
     create_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     pure_model_name = model_name.split('/')[1]
     endpoint_name = sagemaker.utils.name_from_base(pure_model_name).replace('.','-').replace('_','-')
-
+    instance_count = int(extra_params.get("instance_count",1))
     # Create the SageMaker Model object. In this example we let LMI configure the deployment settings based on the model architecture  
     model = Model(
             image_uri=lmi_image_uri,
@@ -316,7 +318,7 @@ def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_
     try:
         model.deploy(
             instance_type= instance_type,
-            initial_instance_count=1,
+            initial_instance_count=instance_count,
             endpoint_name=endpoint_name,
             wait=False,
             accept_eula=True,
@@ -326,6 +328,7 @@ def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_
                                  model_name= model_name,
                                  model_s3_path= model_path,
                                  instance_type= instance_type,
+                                 instance_count = instance_count,
                                  endpoint_name= endpoint_name,
                                  endpoint_create_time= create_time,
                                  endpoint_delete_time= None,

@@ -54,7 +54,7 @@ const rawColumns = [
     sortingField: 'instance_type',
     cell: item => item.instance_type,
     header: 'Instance',
-    minWidth: 40,
+    minWidth: 120,
     isRowHeader: true,
   },
   {
@@ -147,18 +147,6 @@ export const COLUMN_DEFINITIONS = rawColumns.map(column => ({ ...column, ariaLab
 
 export const serverSideErrorsStore = new Map();
 
-
-// export const EDITABLE_COLUMN_DEFINITIONS = COLUMN_DEFINITIONS.map(column => {
-//   if (editableColumns[column.id]) {
-//     return {
-//       ...column,
-//       minWidth: Math.max(column.minWidth || 0, 176),
-//       ...editableColumns[column.id],
-//     };
-//   }
-//   return column;
-// });
-
 const CONTENT_DISPLAY_OPTIONS = [
   { id: 'id', label: 'ID', alwaysVisible: true },
   { id: 'status', label: 'Status' },
@@ -166,9 +154,10 @@ const CONTENT_DISPLAY_OPTIONS = [
   { id: 'engine', label: 'Engine' },
   { id: 'model_name', label: 'Model' },
   { id: 'instance_type', label: 'Instance type' },
+  { id: 'instance_count', label: 'Instance count' },
   { id: 'create_time', label: 'Create Time' },
   { id: 'end_time', label: 'End Time' },
-  { id: 'enable_lora', label: 'Enable Lora' },
+  // { id: 'enable_lora', label: 'Enable Lora' },
   { id: 'model_s3_path', label: 'Model S3 Path' },
   // { id: 'actions', label: 'Actions' },
 
@@ -189,9 +178,9 @@ export const DEFAULT_PREFERENCES = {
     { id: 'model_name', visible: true },
     { id: 'engine', visible: true },
     { id: 'instance_type', visible: true },
+    { id: 'instance_count', visible: true },
     { id: 'create_time', visible: true },
     { id: 'end_time', visible: false },
-    { id: 'enable_lora', visible: false },
     { id: 'model_s3_path', visible: true }
   ],
   wrapLines: false,
