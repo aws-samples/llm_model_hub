@@ -10,8 +10,10 @@ import {
   Toggle,
   Input,
   Button,
+  FileUpload,
   ExpandableSection,
   Select,
+  Link,
   ColumnLayout,
   SelectProps
 } from "@cloudscape-design/components";
@@ -48,6 +50,12 @@ export const defaultModelParams:ModelParamProps = {
   use_stream:true,
   chat_template: "{% if add_generation_prompt and messages[-1]['role'] != 'assistant' %}{{ '<|im_start|>assistant\n' }}{% endif %}"
 };
+
+function generateId() {
+  const timestamp = new Date().getTime(); // Get the current timestamp in milliseconds
+  const randomNumber = Math.random().toString(16).slice(2, 8);
+  return `${timestamp}-${randomNumber}`;
+}
 
 const ExpandableSettingPanel = () => {
   const { t } = useTranslation();
@@ -257,7 +265,13 @@ const ExpandableSettingPanel = () => {
           />
         </FormField>
         <FormField label={t("cust_chat_template")}
-        description={t("cust_chat_template_desc")}>
+        description={<>{t("cust_chat_template_desc")},{
+        <Link 
+           external
+           variant="primary"
+           fontSize="body-s"
+           href="https://github.com/vllm-project/vllm/blob/main/examples/template_llava.jinja"
+        >{t("examples")}</Link>}</>} >
           <Textarea
             rows={1}
             onChange={({ detail }) => {
@@ -279,6 +293,101 @@ const ExpandableSettingPanel = () => {
   );
 };
 
+const ImageUploadComp = ({ setLocalStoredMsgItems,files,setFiles }:
+          {setLocalStoredMsgItems:any,files:File[],setFiles:any}) => {
+  const { t } = useTranslation();
+  const { setMsgItems, msgItems, setStopFlag, setBase64Images} = useChatData();
+  const [uploadErrtxt, setUploadErr] = useState();
+  const [uploadComplete, setUploadComplete] = useState(false);
+  const [helperMsg, setHelperMsg] = useState('');
+  const handleImageUpload = (imageFiles: File[]) => {
+ 
+        setStopFlag(false);
+        const msgid = `image-${generateId()}`;
+
+
+        const images_base64 = imageFiles.map(async (file) => {
+          const reader = new FileReader();
+          const base64Data = await new Promise((resolve, reject) => {
+            reader.onload = () => {
+              if (typeof reader.result === 'string') {
+                  resolve((reader.result as string).split(',')[1]);
+              } else {
+                  console.error('Expected a string, but got ArrayBuffer');
+              }
+          };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          return base64Data;
+        });
+        //取出images_base64里的数据
+        Promise.all(images_base64).then((base64Data) => {
+          // console.log('base64Data:',base64Data);
+          setBase64Images(base64Data);
+        });
+
+        // setMsgItems(
+        //   (prev:any) => [
+        //     ...prev,
+        //     {
+        //       id: msgid,
+        //       who: username,
+        //       text: 'images',
+        //       images: imageFiles,
+        //     },
+        //   ] //创建一个新的item
+        // );
+        // // console.log('msgItems:',msgItems);
+        // setLocalStoredMsgItems([
+        //   ...msgItems,
+        //   {
+        //     id: msgid,
+        //     who: username,
+        //     text: 'images',
+        //   },
+        // ]);
+        setUploadComplete(true);
+
+  }
+
+  return (
+    <SpaceBetween size="s">
+      <FileUpload
+        onChange={({ detail }:{detail:any}) => {
+          setHelperMsg("");
+          setFiles(detail.value);
+          setUploadErr(undefined);
+          setUploadComplete(false);
+          // setImg2txtUrl([]);
+          setStopFlag(true);
+          handleImageUpload(detail.value);
+        }}
+        multiple
+        value={files}
+        accept=".png,.jpg,.jpeg"
+        constraintText={helperMsg}
+        showFileLastModified
+        showFileSize
+        showFileThumbnail
+        tokenLimit={3}
+        errorText={uploadErrtxt}
+        i18nStrings={{
+          uploadButtonText: (e) =>
+            e ? t('image') : t('image'),
+          dropzoneText: (e) =>
+            e ? "Drop files to upload" : "Drop file to upload",
+          removeFileAriaLabel: (e) => `Remove file ${e + 1}`,
+          limitShowFewer: "Show fewer files",
+          limitShowMore: "Show more files",
+          errorIconAriaLabel: "Error",
+        }}
+      />
+    </SpaceBetween>
+  )
+}
+
+
 const PromptPanel = ({ sendMessage }:{sendMessage:({id,messages,params}:MessageDataProp)=>void}) => {
   const { t } = useTranslation();
   const [promptValue, setPromptValue] = useState("");
@@ -296,8 +405,8 @@ const PromptPanel = ({ sendMessage }:{sendMessage:({id,messages,params}:MessageD
     setNewChatLoading,
     modelName,
     endpointName,
-    setEndpointName,
-    setModelName,
+    base64Images,
+    setBase64Images
   } = useChatData();
 
   const [localStoredParams, setLocalStoredParams] = useLocalStorage<Record<string, any>|null>(
@@ -310,12 +419,14 @@ const PromptPanel = ({ sendMessage }:{sendMessage:({id,messages,params}:MessageD
     []
   );
 
-  
+  const [files, setFiles] = useState([]);
+
   const [useStreamChecked, setUseStreamChecked] = useState(
     localStoredParams?.use_stream !== undefined
       ? localStoredParams?.use_stream
       : defaultModelParams.use_stream
   );
+
 
   useEffect(() => {
     setModelParams({
@@ -351,23 +462,43 @@ const PromptPanel = ({ sendMessage }:{sendMessage:({id,messages,params}:MessageD
     const respid = generateUniqueId();
     setMsgItems((prev:MsgItemProps[]) => [
       ...prev,
-      { id: respid, who: username, text: prompt },
+      { id: respid, who: username, text: prompt ,images:files},
     ]);
 
+    console.log('msgItems:',msgItems)
     //save the messages to localstorage
-
     setLocalStoredMsgItems([
       ...msgItems,
       { id: respid, who: username, text: prompt },
     ])
-    console.log(msgItems);
-    setConversations((prev:MsgItemProps[]) => [...prev, { role: "user", content: prompt }]);
-    const messages = [...conversations, { role: "user", content: prompt }];
+    // console.log('msgItems:',[
+    //   ...msgItems,
+    //   { id: respid, who: username, text: prompt },
+    // ]);
+
+    //add base64 data in message
+    const imageMessage = base64Images.map((base64Data:string) => {
+      return {
+        type: "image_url",
+        image_url: {url:`data:image/jpeg;base64,${base64Data}`},
+      };
+    });
+
+    const inputMessage = base64Images.length ? 
+      { role: "user", content: [{"type": "text",text:prompt}, ...imageMessage] } :
+      { role: "user", content: prompt };
+
+    setConversations((prev:MsgItemProps[]) => [...prev, inputMessage]);
+
+    const messages = [...conversations, inputMessage];
     setLoading(true);
     const params = {...modelParams}
     sendMessage({ id: respid, messages: messages, params: params });
     console.log("modelParams:", params);
+    // console.log("messages:", messages);
     setPromptValue("");
+    setFiles([]);
+    setBase64Images([]);
   };
 
   return (
@@ -378,7 +509,6 @@ const PromptPanel = ({ sendMessage }:{sendMessage:({id,messages,params}:MessageD
       <SpaceBetween size="s">
 
       <Grid gridDefinition={[{ colspan: 9 }, { colspan: 3 }]}>
-          
           
           <Textarea
             value={promptValue}
@@ -396,6 +526,11 @@ const PromptPanel = ({ sendMessage }:{sendMessage:({id,messages,params}:MessageD
           
           
           <SpaceBetween size="xs" direction="horizontal">
+            <ImageUploadComp 
+              setLocalStoredMsgItems={setLocalStoredMsgItems} 
+              files = {files}
+              setFiles = {setFiles}
+             />
             <Button
               variant="primary"
               loading={stopFlag&&!newChatLoading}
@@ -409,7 +544,7 @@ const PromptPanel = ({ sendMessage }:{sendMessage:({id,messages,params}:MessageD
               iconName="remove" variant="icon"
               onClick={() => {
                 setNewChatLoading(false);
-                // onSubmit("/rs");
+                setFiles([]);
                 setConversations([]);
                 setMsgItems([]);
                 setLocalStoredMsgItems([]);

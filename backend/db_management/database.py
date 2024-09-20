@@ -145,6 +145,7 @@ class DatabaseWrapper(BaseModel):
                                model_s3_path:str,
                                endpoint_name:str,
                                instance_type:str,
+                               instance_count:int,
                                endpoint_create_time:str,
                                endpoint_delete_time:str,
                                extra_config:str,
@@ -152,7 +153,6 @@ class DatabaseWrapper(BaseModel):
                                enable_lora:bool,
                                endpoint_status:EndpointStatus):
         ret = True
-        instance_count = 1
         try:
             with self.connection_pool.get_connection() as connection:
                 with connection.cursor() as cursor:

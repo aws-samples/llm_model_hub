@@ -19,6 +19,16 @@ sagemaker_client = boto_sess.client('sagemaker')
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+sm_status_mapping = {
+    'Pending': JobStatus.PENDING,
+    'InProgress': JobStatus.RUNNING,
+    'Completed': JobStatus.SUCCESS,
+    'Failed': JobStatus.ERROR,
+    'Stopping': JobStatus.TERMINATING,
+    'Stopped': JobStatus.STOPPED
+}
+
+
 class APIException(Exception):
     def __init__(self, message, code: str = None):
         if code:
@@ -133,32 +143,18 @@ def get_sagemaker_training_job_status(job_name):
         logger.info(f"Error getting training job status: {str(e)}")
         return None
     
-
-def map_sagemaker_status_to_job_status(sagemaker_status):
-    status_mapping = {
-        'Pending': JobStatus.PENDING,
-        'InProgress': JobStatus.RUNNING,
-        'Completed': JobStatus.SUCCESS,
-        'Failed': JobStatus.ERROR,
-        'Stopping': JobStatus.TERMINATING,
-        'Stopped': JobStatus.STOPPED
-    }
-    
-    return status_mapping.get(sagemaker_status)
-
 def get_job_status(job_id:str):
     results = database.get_jobs_status_by_id(job_id)
     job_status = None
     if results:
-        job_status = results[0][0]
-        print('job_status:',job_status)
+        job_status = JobStatus[results[0][0]]
+        logger.info(f"job_status:{job_status}")
         job_name = results[0][1]
         sm_resp = get_sagemaker_training_job_status(job_name)
-        # print('sm_resp',sm_resp)
-        sm_status = map_sagemaker_status_to_job_status(sm_resp)
-        print('sm_job_status',sm_status)
-        if sm_status and not sm_status.value == job_status :
-            print('set_job_status',sm_status)
+        sm_status = sm_status_mapping.get(sm_resp)
+        logger.info(f"sm_job_status:{sm_status}")
+        if sm_status and not sm_status == job_status :
+            logger.info(f"set_job_status:{sm_status}")
             database.set_job_status(job_id,sm_status)
             job_status = sm_status
     else:

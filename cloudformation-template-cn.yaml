@@ -52,137 +52,103 @@ Resources:
           !Sub 
             - |
               #!/bin/bash
-              # 设置日志文件
-              LOG_FILE="/var/log/user-data.log"
+              echo "Starting UserData script execution" >> /var/log/user-data.log
 
-              # 函数：记录日志
-              log() {
-                echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
-              }
-
-              log "Starting UserData script execution"
-
-              # 更新和安装基本软件
-              log "Updating apt and installing git"
-              sudo apt update && sudo apt install -y git || { log "Failed to update apt or install git"; exit 1; }
-
-              # 检查并安装 AWS CLI
+              sudo apt update
+              sudo apt install -y git
+              
               if ! command -v aws &> /dev/null; then
-                log "Installing AWS CLI"
-                sudo apt update && sudo apt install -y awscli || { log "Failed to install AWS CLI"; exit 1; }
-              else
-                log "AWS CLI already installed"
+                  #安装awscli
+                  curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                  unzip awscliv2.zip
+                  sudo ./aws/install
               fi
 
-              # 安装 Node.js
-              log "Installing Node.js"
-              curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash - && \
-              sudo apt install -y nodejs || { log "Failed to install Node.js"; exit 1; }
-
-              log "Installing yarn"
-              sudo npm install --global yarn || { log "Failed to install yarn"; exit 1; }
-
-              # 克隆仓库
-              log "Cloning repository"
+              #install nodejs 
+              curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+              sudo apt install -y nodejs
+              sudo npm install --global yarn
+              # download file
               sudo su ubuntu
               cd /home/ubuntu/
-              git clone --recurse-submodule https://github.com/aws-samples/llm_model_hub.git || { log "Failed to clone repository"; exit 1; }
+              git clone --recurse-submodule https://github.com/aws-samples/llm_model_hub.git
               cd /home/ubuntu/llm_model_hub
-              yarn install || { log "Failed to run yarn install"; exit 1; }
+              yarn install
+              #install pm2
+              sudo yarn global add pm2
 
-              # 安装 pm2
-              log "Installing pm2"
-              sudo yarn global add pm2 || { log "Failed to install pm2"; exit 1; }
-
-              # 等待实例完全启动
-              log "Waiting for instance to fully start"
+              # 等待一段时间以确保实例已完全启动
               sleep 30
 
-              # 获取实例元数据
-              log "Retrieving instance metadata"
+
+              #如果是中国区则执行
+              if [[ "$AWS_REGION" == cn* ]]; then
+                  echo "AWS Region is in China: $AWS_REGION"
+                  cd /home/ubuntu/llm_model_hub/backend/
+                  sudo -u ubuntu bash 0.setup-cn.sh
+              fi 
+
+              # 尝试使用 IMDSv2 获取 token
               TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+
+              # Get the EC2 instance's public IP
               EC2_IP=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/public-ipv4)
+              # Get the current region and write it to the backend .env file
               REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/region)
 
-              log "Got IP: $EC2_IP and Region: $REGION"
-
-              # 生成随机密钥
+              echo "Get IP:$EC2_IP and Region:REGION " >> /var/log/user-data.log
+              # Generate a random string key
               RANDOM_KEY=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
-              
-              # 写入环境变量文件
-              log "Writing environment variables"
+              # Write the EC2_IP and SageMakerRoleArn to frontend .env file
               echo "REACT_APP_API_ENDPOINT=http://$EC2_IP:8000/v1" > /home/ubuntu/llm_model_hub/.env
               echo "REACT_APP_API_KEY=$RANDOM_KEY" >> /home/ubuntu/llm_model_hub/.env
-
-              # 写入后端环境变量
-              log "Writing backend environment variables"
-              cat << EOF > /home/ubuntu/llm_model_hub/backend/.env
-              AK=
-              SK=
-              role=${SageMakerRoleArn}
-              region=$REGION
-              db_host=127.0.0.1
-              db_name=llm
-              db_user=llmdata
-              db_password=llmdata
-              api_keys=$RANDOM_KEY
-              HUGGING_FACE_HUB_TOKEN=${HuggingFaceHubToken}
-              WANDB_API_KEY=${WandbApiKey}
-              MAX_MODEL_LEN=4096
-              EOF
-
-              # 设置权限
-              log "Setting proper permissions"
+              
+              ## write sagemaker role
+              echo "AK=" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "SK=" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "role=${SageMakerRoleArn}" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "region=$REGION" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "db_host=127.0.0.1" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "db_name=llm" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "db_user=llmdata" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "db_password=llmdata" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "api_keys=$RANDOM_KEY" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "HUGGING_FACE_HUB_TOKEN=${HuggingFaceHubToken}" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "WANDB_API_KEY=${WandbApiKey}" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "MAX_MODEL_LEN=4096" >> /home/ubuntu/llm_model_hub/backend/.env
+              # Set proper permissions 
               sudo chown -R ubuntu:ubuntu /home/ubuntu/
-
-              # 生成随机密码并存储
               RANDOM_PASSWORD=$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1) 
-              aws ssm put-parameter --name "/${AWS::StackName}/RandomPassword" --value "$RANDOM_PASSWORD" --type "SecureString" --overwrite --region ${AWS::Region} || { log "Failed to store random password in SSM"; exit 1; }
-
-              # 运行设置脚本
-              log "Running setup script"
+              aws ssm put-parameter --name "/${AWS::StackName}/RandomPassword" --value "$RANDOM_PASSWORD" --type "SecureString" --overwrite --region ${AWS::Region}
               cd /home/ubuntu/llm_model_hub/backend
-              sudo -u ubuntu bash 01.setup.sh || { log "Failed to run setup script"; exit 1; }
+              sudo -u ubuntu bash 01.setup.sh
               sleep 30
-
-              # 添加用户到数据库
-              log "Adding user to database"
+              #add user in db
               source ../miniconda3/bin/activate py311
               conda activate py311
-              python3 users/add_user.py demo_user $RANDOM_PASSWORD default || { log "Failed to add user to database"; exit 1; }
+              python3 users/add_user.py demo_user $RANDOM_PASSWORD default
 
-              # 构建镜像
-              log "Building and pushing image"
+              #build image
               cd /home/ubuntu/llm_model_hub/backend/byoc
-              sudo -u ubuntu bash build_and_push.sh || { log "Failed to build and push image"; exit 1; }
+              sudo -u ubuntu bash build_and_push.sh
               sleep 5
+              #upload dummy tar.gz
+              sudo -u ubuntu ../../miniconda3/envs/py311/bin/python startup.py 
 
-              # 上传 dummy tar.gz
-              log "Uploading dummy tar.gz"
-              sudo -u ubuntu ../../miniconda3/envs/py311/bin/python startup.py || { log "Failed to upload dummy tar.gz"; exit 1; }
-
-              # 启动后端
-              log "Starting backend"
+              #start backend
               cd /home/ubuntu/llm_model_hub/backend/
-              sudo -u ubuntu bash 02.start_backend.sh || { log "Failed to start backend"; exit 1; }
+              sudo -u ubuntu bash 02.start_backend.sh
               sleep 15
 
-              # 启动前端
-              log "Starting frontend"
+              #start frontend
               cd /home/ubuntu/llm_model_hub/
-              sudo -u ubuntu pm2 start pm2run.config.js || { log "Failed to start frontend"; exit 1; }
-
+              sudo -u ubuntu pm2 start pm2run.config.js 
               # 安装 cfn-signal
-              log "Installing cfn-signal"
-              sudo pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz || { log "Failed to install cfn-signal"; exit 1; }
-
+              sudo pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
               # 发送成功信号
-              log "Sending success signal to CloudFormation"
-              /usr/local/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region} || { log "Failed to send signal to CloudFormation"; exit 1; }
-
+              /usr/local/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
               echo "RandomPassword=$RANDOM_PASSWORD" >> /etc/environment
-
-              log "UserData script execution completed successfully"
+              echo "Run User Data Script Done! " >> /var/log/user-data.log
             - SageMakerRoleArn: !GetAtt SageMakerExecutionRole.Arn
               HuggingFaceHubToken: !Ref HuggingFaceHubToken
               WandbApiKey: !Ref WandbApiKey
@@ -200,10 +166,6 @@ Resources:
           FromPort: 3000
           ToPort: 3000
           CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 18.237.140.160/29
 
   EC2Role:
     Type: AWS::IAM::Role
@@ -216,9 +178,9 @@ Resources:
               Service: ec2.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
-        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+        - arn:aws-cn:iam::aws:policy/CloudWatchLogsFullAccess
+        - arn:aws-cn:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws-cn:iam::aws:policy/AmazonSageMakerFullAccess
       Policies:
         - PolicyName: CloudFormationSignalPolicy
           PolicyDocument:
@@ -226,7 +188,7 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: cloudformation:SignalResource
-                Resource: !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*'
+                Resource: !Sub 'arn:aws-cn:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*'
         - PolicyName: SSMParameterAccess
           PolicyDocument:
             Version: '2012-10-17'
@@ -234,7 +196,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - ssm:PutParameter
-                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/*'
+                Resource: !Sub 'arn:aws-cn:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/*'
 
 
   EC2InstanceProfile:
@@ -255,7 +217,7 @@ Resources:
               Service: sagemaker.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+        - arn:aws-cn:iam::aws:policy/AmazonSageMakerFullAccess
       Policies:
         - PolicyName: S3AccessPolicy
           PolicyDocument:
@@ -269,7 +231,7 @@ Resources:
                   - s3:ListBucket
                   - s3:CreateBucket
                 Resource:
-                  - arn:aws:s3:::*
+                  - arn:aws-cn:s3:::*
 
   SSMConsoleAccessRole:
     Type: AWS::IAM::Role
@@ -282,7 +244,7 @@ Resources:
               Service: ec2.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonSSMFullAccess
+        - arn:aws-cn:iam::aws:policy/AmazonSSMFullAccess
       Policies:
         - PolicyName: SSMConsoleAccess
           PolicyDocument:

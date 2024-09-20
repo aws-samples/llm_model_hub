@@ -51,13 +51,17 @@ USER_TABLE= 'USER_TABLE'
 DEEPSPEED_BASE_CONFIG_MAP = { "stage_2":'examples/deepspeed/ds_z2_config.json',
                              "stage_3":'examples/deepspeed/ds_z3_config.json'}
 WANDB_API_KEY  = os.environ.get('WANDB_API_KEY','')
-# 加载持久化之后的模型列表
+
+# 加载持久化之后的模型列表，在endpoingt_management.py中支持修改
 try:
     with open(SUPPORTED_MODELS_FILE, 'rb') as f:
-        extras.SUPPORTED_MODELS = pickle.load(f)
-        
-    with open(DEFAULT_TEMPLATE_FILE, 'rb') as f:
-        extras.DEFAULT_TEMPLATE = pickle.load(f)
+        supported_models = pickle.load(f)
+    
+    # merge dict supported_models to extras.SUPPORTED_MODELS
+    extras.SUPPORTED_MODELS = {**extras.SUPPORTED_MODELS, **supported_models} 
+    # 
+    # with open(DEFAULT_TEMPLATE_FILE, 'rb') as f:
+    #     extras.DEFAULT_TEMPLATE = pickle.load(f)
 
 except Exception as e:
     print(e) 
