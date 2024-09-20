@@ -78,7 +78,7 @@ sudo apt install -y nodejs
 sudo npm install --global yarn
 ```
 2. 配置环境变量
-- 修改llm_model_hub/env.sample 文件中,ip改成对应的ec2的ip，随机给一个api key，这个key需要与下一部分后端配置backend/.env中的apikey保持一致
+- copy llm_model_hub/env.sample 到 .env 文件,修改ip改成对应的ec2的ip，随机给一个api key，这个key需要与下一部分后端配置backend/.env中的apikey保持一致
 ```
 REACT_APP_API_ENDPOINT=http://{ip}:8000/v1
 REACT_APP_API_KEY=随机给一个key
