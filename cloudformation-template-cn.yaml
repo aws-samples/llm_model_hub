@@ -30,7 +30,13 @@ Parameters:
 Resources:
   EC2Instance:
     Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT30M
     Properties:
+      Tags:
+        - Key: Name
+          Value: ModelHubServer
       InstanceType: !Ref InstanceType
       ImageId: !Ref AMIId
       SecurityGroupIds: 
@@ -39,7 +45,7 @@ Resources:
         - DeviceName: /dev/sda1
           Ebs:
             VolumeSize: 200
-            VolumeType: gp2
+            VolumeType: gp3
       IamInstanceProfile: !Ref EC2InstanceProfile
       UserData:
         Fn::Base64:
@@ -176,14 +182,21 @@ Resources:
         - arn:aws-cn:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws-cn:iam::aws:policy/AmazonSageMakerFullAccess
       Policies:
-      - PolicyName: SSMParameterAccess
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Action:
-                - ssm:PutParameter
-              Resource: !Sub 'arn:aws-cn:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/*'
+        - PolicyName: CloudFormationSignalPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: cloudformation:SignalResource
+                Resource: !Sub 'arn:aws-cn:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*'
+        - PolicyName: SSMParameterAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:PutParameter
+                Resource: !Sub 'arn:aws-cn:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/*'
 
 
   EC2InstanceProfile:
