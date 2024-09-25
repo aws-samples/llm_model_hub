@@ -186,7 +186,9 @@ i18n
             image:'Image',
             examples:"Examples",
             instance_qty:"Instance Quantity",
-            instance_qty_desc:"Number of SageMaker Endpoint Instances"
+            instance_qty_desc:"Number of SageMaker Endpoint Instances",
+            enable:'Enable',
+            refresh:"Refresh"
         }
       },
       zh:{
@@ -359,7 +361,10 @@ i18n
             image:'图片',
             examples:"示例",
             instance_qty:"实例数量",
-            instance_qty_desc:"推理节点的实例数量"
+            instance_qty_desc:"推理节点的实例数量",
+            enable:'启用',
+            refresh:'刷新',
+
         }
       }
     }

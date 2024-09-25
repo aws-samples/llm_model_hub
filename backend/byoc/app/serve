@@ -15,6 +15,10 @@ if [ -n "${VLLM_USE_MODELSCOPE}" ]; then
     export VLLM_USE_MODELSCOPE=True
 fi
 
+if [ -n "${VLLM_ALLOW_LONG_MAX_MODEL_LEN}" ]; then
+    vllm_allow_long_max_model_len=$(expr $VLLM_ALLOW_LONG_MAX_MODEL_LEN + 0)
+    export VLLM_ALLOW_LONG_MAX_MODEL_LEN=$vllm_allow_long_max_model_len
+fi
 
 # Find the first subdirectory in the base directory
 model_dir=$(find "$base_dir" -mindepth 1 -maxdepth 1 -type d -print -quit)
@@ -61,26 +65,27 @@ else
             s5cmd sync $s3_model_path $file_dir
             # Set model_id to base_dir for local loading
             echo "Using model: $file_dir"
-            python3 -m vllm.entrypoints.openai.api_server \
-            --port $SAGEMAKER_BIND_TO_PORT \
-            --download-dir $file_dir \
-            --trust-remote-code \
-            --model $file_dir \
-            --max-model-len $max_model_len \
-            --tensor-parallel-size $tensor_parallel_size \
-            --dtype $dtype 
+
+            command="python3 -m vllm.entrypoints.openai.api_server --port $SAGEMAKER_BIND_TO_PORT --download-dir $file_dir --trust-remote-code --model $file_dir --max-model-len $max_model_len --tensor-parallel-size $tensor_parallel_size --dtype $dtype"
+            
+            if [ "${ENABLE_PREFIX_CACHING}" = "1" ]; then
+                command="$command --enable-prefix-caching"
+            fi
+            
+            eval $command
+ 
 
         else
             # If model_id file exists, use its content as model_id
             # model_id=$(cat "$model_dir/model_id")
             echo "using: $model_id"
-            python3 -m vllm.entrypoints.openai.api_server \
-            --port $SAGEMAKER_BIND_TO_PORT \
-            --trust-remote-code \
-            --model $model_id \
-            --max-model-len $max_model_len \
-            --tensor-parallel-size $tensor_parallel_size \
-            --dtype $dtype 
+            command="python3 -m vllm.entrypoints.openai.api_server --port $SAGEMAKER_BIND_TO_PORT --trust-remote-code --model $model_id --max-model-len $max_model_len --tensor-parallel-size $tensor_parallel_size --dtype $dtype"
+            
+            if [ "${ENABLE_PREFIX_CACHING}" = "1" ]; then
+                command="$command --enable-prefix-caching"
+            fi
+            
+            eval $command
         fi
 
 

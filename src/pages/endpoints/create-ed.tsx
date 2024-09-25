@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Button, Modal, Box, RadioGroup, RadioGroupProps, FormField,
-  Link, Input, ColumnLayout,
+  Link, Input,
   Toggle, SpaceBetween, Select, SelectProps
 } from '@cloudscape-design/components';
 import { remotePost } from '../../common/api-gateway';
@@ -228,6 +228,7 @@ const InputCustRepo = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
 const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   const [value1, setValue1] = useState<string>('');
   const [value2, setValue2] = useState<string>('');
+  const [value3, setValue3] = useState<boolean>(false);
   return (
     <SpaceBetween size='xs'>
       <FormField
@@ -258,6 +259,22 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
             setData((pre: any) => ({ ...pre,  extra_params:{...pre.extra_params,tensor_paralle_size: detail.value } }))
           }}
         />
+      </FormField>
+      <FormField
+        label="enable-prefix-caching"
+        description="是否启用prefix caching"
+        stretch={false}
+      >
+        <Toggle
+          readOnly={readOnly}
+          checked={value3}
+          onChange={({ detail }) => {
+            setValue3(detail.checked);
+            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,enable_prefix_caching: detail.checked }  }))
+          }}
+        >
+          {t("enable")}
+        </Toggle>
       </FormField>
     </SpaceBetween>
   )

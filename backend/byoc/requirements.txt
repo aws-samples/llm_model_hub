@@ -1,1 +1,2 @@
 transformers @ git+https://github.com/huggingface/transformers.git@21fac7abba2a37fae86106f87fcf9974fd1e3830
+mistral_common >= 1.4.1
