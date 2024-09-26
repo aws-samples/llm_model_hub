@@ -226,6 +226,9 @@ class TrainingJobExcutor(BaseModel):
     def create_training(self,
                         model_id:str,
                         sg_config:str,
+                        use_spot:bool,
+                        max_spot_wait:int,
+                        max_job_run_hour:int,
                         sg_lora_merge_config:str,
                         instance_type:str ,
                         instance_num:int,
@@ -234,7 +237,6 @@ class TrainingJobExcutor(BaseModel):
                         merge_lora:str = '1',
                         training_input_path:str=None):
 
-        max_time = 3600*24
         base_model_name = model_id.split('/')[-1]
         base_job_name = base_model_name.replace('.','-')
         
@@ -262,6 +264,7 @@ class TrainingJobExcutor(BaseModel):
         self.estimator = PyTorch(entry_point=entry_point,
                                     source_dir='./LLaMA-Factory/',
                                     role=role,
+                                    use_spot_instances=use_spot,
                                     sagemaker_session=sagemaker_session,
                                     base_job_name=base_job_name,
                                     environment=environment,
@@ -270,9 +273,10 @@ class TrainingJobExcutor(BaseModel):
                                     script_mode=True,
                                     instance_count=instance_num,
                                     instance_type=instance_type,
-                                    # enable_remote_debug=True,
+                                    max_wait= 3600*max_spot_wait if use_spot else None,
+                                    enable_remote_debug=True,
                                     # keep_alive_period_in_seconds=600,
-                                    max_run=max_time)
+                                    max_run=3600*max_job_run_hour)
         
         
     def create(self):
@@ -282,7 +286,7 @@ class TrainingJobExcutor(BaseModel):
         job_payload = jobinfo.job_payload
         
         
-        # logger.info(job_payload)
+        logger.info(f"job_payload:{job_payload}")
         
         s3_data_path=job_payload.get('s3_data_path','')
 
@@ -322,17 +326,21 @@ class TrainingJobExcutor(BaseModel):
             s3_checkpoint = job_payload['s3_checkpoint']
             if s3_checkpoint:
                 if not is_valid_s3_uri(s3_checkpoint):
-                    logger.warn(f"s3_checkpoint path is invalid:{s3_checkpoint}")
+                    logger.error(f"s3_checkpoint path is invalid:{s3_checkpoint}")
                     s3_checkpoint = ''
             #validate s3_model_path
             s3_model_path = job_payload['s3_model_path']
             if s3_model_path:
                 if not is_valid_s3_uri(s3_model_path):
-                    logger.warn(f"s3_model_path is invalid:{s3_model_path}")
+                    logger.error(f"s3_model_path is invalid:{s3_model_path}")
                     s3_model_path = ''
                     
+            print('use_spot:',job_payload.get("use_spot",False))
             self.create_training(sg_config=sg_config,
-                                      instance_num = int(job_payload['instance_num']),
+                                    use_spot = job_payload.get("use_spot",False),
+                                    max_spot_wait = int(job_payload.get("max_spot_wait",72)),
+                                    max_job_run_hour = int(job_payload.get("max_job_run_hour",48)),
+                                    instance_num = int(job_payload['instance_num']),
                                     model_id=model_id,
                                     sg_lora_merge_config=sg_lora_merge_config,
                                     training_input_path= s3_data_path,
@@ -343,7 +351,7 @@ class TrainingJobExcutor(BaseModel):
 
             return True,'create job success'
         else:
-            logger.warn('not supported yet')
+            logger.info('not supported yet')
             return False, 'type of job not supported yet'
         
     def run(self) -> bool:

@@ -2,7 +2,7 @@
 Model Hub V2是提供一站式的模型微调，部署，调试的无代码可视化平台，可以帮助用户快速验证微调各类开源模型的效果，方便用户快速实验和决策，降低用户微调大模型的门槛。详情请见[飞书使用说明](https://amzn-chn.feishu.cn/docx/QniUdr7FroxShfxeoPacLJKtnXf)
 
 # 请选用以下方式部署：
-# 自动化部署(暂不支持中国区)
+# 1.自动化部署(暂不支持中国区)
 - 进入CloudFormation创建一个stack,选择上传部署文件[cloudformation-template.yaml](./cloudformation-template.yaml)
 ![alt text](./assets/image-cf1.png)
 - 填入一个stack名，例如modelhub, 和HuggingFaceHubToken(可选)
@@ -16,7 +16,7 @@ Model Hub V2是提供一站式的模型微调，部署，调试的无代码可�
 - ⚠️注意，stack显示部署完成之后，启动的EC2还需要8-10分钟自动运行一些脚本，如果不行，请等待8-10分钟，然后刷新页面
 ![alt text](./assets/image-cf4.png)
 
-# 手动部署
+# 2.手动部署
 ## 1.环境安装
 - 硬件需求：一台ec2 Instance, m5.xlarge, 200GB EBS storage
 - os需求：ubuntu 22.04
@@ -111,3 +111,23 @@ pm2 delete modelhub
 ## 4.启动前端
 - 以上都部署完成后，前端启动之后，可以通过浏览器访问http://{ip}:3000访问前端
 - 如果需要做端口转发，则参考后端配置中的nginx配置部分
+
+
+# 如何升级？
+- **方法 1**. 下载新的cloudformation 模板进行重新部署，大约12分钟部署完成一个全新的modelhub (此方法以前的job 任务数据会丢失)
+- **方法 2**. 手动更新：
+1. 先打开backend/.env，把原有的vllm_image=这个行删了
+2. 更新代码, 重新打包byoc镜像
+```bash
+git pull
+git submodule update --remote
+cd /home/ubuntu/llm_model_hub/backend/byoc
+bash build_and_push.sh 
+```
+3. 重启服务
+```bash
+pm2 restart modelhub
+pm2 restart modelhub-server
+pm2 restart modelhub-engine
+```
+4. 更新完成

@@ -14,13 +14,14 @@ import {
   Grid,
   Box,
   Multiselect,
-  Textarea,
+  Toggle,
 } from '@cloudscape-design/components';
 import { FT_OPTIONS, QUANT_OPTIONS, TRAINING_STAGES, TRAINING_PRECISION,OPTMIZERS,INSTANCE_TYPES,BOOSTER_OPTIONS, DEEPSPEED } from '../form-config';
 import validateField from '../form-validation-config';
 import { remotePost } from '../../../../common/api-gateway';
 import {S3Selector} from './output-path';
 import { JsonEditor } from './code-editor';
+import { t } from 'i18next';
 
 
 function AdvancedConfigs({ onChange, readOnly, data,setData }) {
@@ -514,6 +515,16 @@ export default function DistributionPanel({
               ref={refs.booster_option}
             />
           </FormField>
+          <FormField
+            label={t("max_job_run_hour")}
+            description={t("max_job_run_hour_desc")}
+            stretch={false}
+          >
+            <Input readOnly={readOnly}
+            value={data.job_payload ? data.job_payload.max_job_run_hour : data.max_job_run_hour}
+            onChange={({ detail: { value } }) => onChange('max_job_run_hour', value)}
+          />
+          </FormField>
         </SpaceBetween>
       </Container>
       <Container
@@ -618,7 +629,29 @@ export default function DistributionPanel({
             onChange={({ detail: { value } }) => onChange('instance_num', value)}
           />
           </FormField>
-
+          <FormField
+            label={t("use_spot")}
+            description={t("use_spot_desc")}
+            stretch={false}
+          >
+            <Toggle
+              readOnly={readOnly}
+              checked={data.job_payload ? data.job_payload.use_spot : data.use_spot}
+              onChange={({ detail: { checked } }) => onChange('use_spot', checked)}
+            >
+              {t("enable")}
+            </Toggle>
+          </FormField>
+          <FormField
+            label={t("max_spot_wait")}
+            description={t("max_spot_wait_desc")}
+            stretch={false}
+          >
+            <Input readOnly={readOnly}
+            value={data.job_payload ? data.job_payload.max_spot_wait : data.max_spot_wait}
+            onChange={({ detail: { value } }) => onChange('max_spot_wait', value)}
+          />
+          </FormField>
         </SpaceBetween>
       </Container>
       <Container header={<Header variant="h2">Hyper params settings</Header>}

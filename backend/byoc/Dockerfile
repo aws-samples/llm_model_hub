@@ -16,8 +16,8 @@ RUN \
 export PYTHON_SITEPACKAGES=`python3 -c "import site; print(site.getsitepackages()[0])"`; \
 sed -i '/if __name__ == "__main__":/i\
 \@router.get("/ping")\n\
-async def ping() -> Response:\n\
-\    return await health()\n\
+async def ping(raw_request: Request) -> Response:\n\
+\    return await health(raw_request)\n\
 \n\
 from typing import Union\n\
 @router.post("/invocations")\n\
@@ -41,6 +41,13 @@ sed -i '/def _maybe_get_adapters/,/:$/!b;/:$/a\
 \        if 1 == 1:\n\
 \            return None, None\n\
 ' ${PYTHON_SITEPACKAGES}/vllm/entrypoints/openai/serving_engine.py; \
+sed -i '/elif config_format == ConfigFormat.MISTRAL:/i\
+\        hf_rope_scaling = getattr(config, "rope_scaling", None)\n\
+\        if hf_rope_scaling is not None:\n\
+\            for type_key in ("type", "rope_type"):\n\
+\                if hf_rope_scaling.get(type_key) == "default":\n\
+\                    hf_rope_scaling[type_key] = "mrope"\n\
+' ${PYTHON_SITEPACKAGES}/vllm/transformers_utils/config.py; \
 chmod +x /app/serve
 
 # 让端口8080在容器外可用

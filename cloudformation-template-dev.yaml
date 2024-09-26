@@ -86,7 +86,7 @@ Resources:
               log "Cloning repository"
               sudo su ubuntu
               cd /home/ubuntu/
-              git clone --recurse-submodule https://github.com/aws-samples/llm_model_hub.git || { log "Failed to clone repository"; exit 1; }
+              git clone --recurse-submodule https://github.com/aws-samples/llm_model_hub.git -b dev|| { log "Failed to clone repository"; exit 1; }
               cd /home/ubuntu/llm_model_hub
               yarn install || { log "Failed to run yarn install"; exit 1; }
 

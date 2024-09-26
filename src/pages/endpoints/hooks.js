@@ -32,20 +32,17 @@ export function useDistributions(params = {}) {
         : {}),
     };
     const controller = new AbortController();
-    const callback = ({ items, totalCount, currentPageIndex }) => {
-      setLoading(false);
-      setItems(items);
-      setPagesCount(Math.ceil(totalCount/pageSize));
-      setCurrentPageIndex(currentPageIndex);
-      setTotalCount(totalCount);
-    };
     const params = {
       "page_size":pageSize,
       "page_index":currentPageIndex
     }
     remotePost(params,'list_endpoints').then((res) => {
       // console.log(res);  
-      callback({items:res.endpoints,totalCount:res.total_count});
+      setLoading(false);
+      setItems(res.endpoints);
+      setPagesCount(Math.ceil(res.total_count/pageSize));
+      setCurrentPageIndex(currentPageIndex);
+      setTotalCount(res.total_count);
     }).catch((error) => {
       console.log(error);
       setLoading(false);

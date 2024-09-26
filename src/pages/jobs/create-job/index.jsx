@@ -53,6 +53,9 @@ const defaultData = {
   deepspeed: 'none',
   s3_checkpoint:'',
   s3_model_path:'',
+  use_spot: false,
+  max_spot_wait:72,
+  max_job_run_hour:48
 };
 
 

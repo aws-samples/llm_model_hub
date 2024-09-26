@@ -7,6 +7,7 @@ export const API_KEY = process.env.REACT_APP_API_KEY;
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 export const remotePost = async(formdata,path,stream=false) =>{
+   console.log(formdata);
     const headers = {'Content-Type': 'application/json', 
         'Authorization': `Bearer ${API_KEY}`
         };
