@@ -22,7 +22,7 @@ export const TRAINING_PRECISION = [
   { label: 'bf16', value: 'bf16' },
   { label: 'fp16', value: 'fp16' },
   { label: 'fp32', value: 'fp32' },
-  { label: 'pure_fp16', value: 'pure_fp16' },
+  { label: 'pure_bf16', value: 'pure_bf16' },
 ]
 
 export const BOOSTER_OPTIONS = [
