@@ -67,12 +67,12 @@ export const TopNav = () => {
           },
           items: [
             {
-              id: "en",
-              text: "English"
-            },
-            {
               id: "zh",
               text: "简体中文"
+            },
+            {
+              id: "en",
+              text: "English"
             }
           ]
         },
