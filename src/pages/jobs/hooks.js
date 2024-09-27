@@ -11,7 +11,6 @@ export function useDistributions(params = {}) {
   const [totalCount, setTotalCount] = useState(0);
   const [currentPageIndex, setCurrentPageIndex] = useState(clientPageIndex);
   const [pagesCount, setPagesCount] = useState(0);
-
   useEffect(() => {
     setCurrentPageIndex(clientPageIndex);
   }, [clientPageIndex]);
@@ -32,19 +31,17 @@ export function useDistributions(params = {}) {
         : {}),
     };
     const controller = new AbortController();
-    const callback = ({ items, totalCount, currentPageIndex }) => {
-      setLoading(false);
-      setItems(items);
-      setPagesCount(Math.ceil(totalCount/pageSize));
-      setCurrentPageIndex(currentPageIndex);
-      setTotalCount(totalCount);
-    };
+
     const params = {
       "page_size":pageSize,
       "page_index":currentPageIndex
-    }
+    };
     remotePost(params,'list_jobs').then((res) => {
-      callback({items:res.jobs,totalCount:res.total_count});
+      setLoading(false);
+      setItems(res.jobs);
+      setPagesCount(Math.ceil(res.total_count/pageSize));
+      setCurrentPageIndex(currentPageIndex);
+      setTotalCount(res.total_count);
     }).catch((error) => {
       console.log(error);
       setLoading(false);

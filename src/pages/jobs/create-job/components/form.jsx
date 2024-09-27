@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
 import React, { useState, useEffect, useRef } from 'react';
-import { Button, Form, Header, SpaceBetween, Badge } from '@cloudscape-design/components';
+import { Button, Form, Header, SpaceBetween, Toggle } from '@cloudscape-design/components';
 import validateField from '../form-validation-config';
 import DistributionsPanel from './jobinfo-panel';
 import { remotePost } from '../../../../common/api-gateway';
@@ -190,7 +190,10 @@ export const FormWithValidation = ({
           booster_option:data.booster_option,
           deepspeed:data.deepspeed,
           s3_checkpoint:data.s3_checkpoint,
-          s3_model_path:data.s3_model_path
+          s3_model_path:data.s3_model_path,
+          use_spot:data.use_spot,
+          max_spot_wait:data.max_spot_wait,
+          max_job_run_hour:data.max_job_run_hour
           // lora_r:data.lora_r,
           // lora_dropout:data.lora_dropout,
           // lora_bias:data.lora_bias,

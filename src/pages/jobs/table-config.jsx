@@ -160,9 +160,9 @@ const CONTENT_DISPLAY_OPTIONS = [
 ];
 
 export const PAGE_SIZE_OPTIONS = [
-  { value: 10, label: '10 Records' },
-  { value: 30, label: '30 Records' },
   { value: 50, label: '50 Records' },
+  { value: 30, label: '30 Records' },
+  { value: 10, label: '10 Records' },
 ];
 
 export const DEFAULT_PREFERENCES = {

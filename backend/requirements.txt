@@ -3,7 +3,7 @@ fastapi
 uvicorn
 pydantic==1.10.13
 pytz
-transformers
+transformers==4.45.0
 peft
 datasets
 trl>=0.8.6

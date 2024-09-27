@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 import React from 'react';
 import { Button, Header, HeaderProps, SpaceBetween } from '@cloudscape-design/components';
+import { t } from 'i18next';
 
 interface FullPageHeaderProps extends HeaderProps {
   title?: string;
@@ -40,13 +41,13 @@ export function FullPageHeader({
         <SpaceBetween size="xs" direction="horizontal">
           {extraActions}
           <Button data-testid="header-btn-refresh" iconName="refresh"  onClick={onRefresh}>
-            Refresh
+            {t('refresh')}
           </Button>
           <Button data-testid="header-btn-delete" disabled={selectedItemsCount === 0 } onClick={onDelete}>  
-            Delete
+            {t('delete')}
           </Button>
           <Button data-testid="header-btn-create" onClick={onDeploy}>  
-            Create New
+           {t('create')}
           </Button>
           <Button data-testid="header-btn-chat" variant="primary" disabled={selectedItemsCount === 0 || selectedItems&&selectedItems[0]?.endpoint_status !== 'INSERVICE' } href={`/chat/${selectedItems&&selectedItems[0]?.endpoint_name}`}>
             {createButtonText}

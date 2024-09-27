@@ -173,8 +173,10 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
         "HF_MODEL_ID": model_name,
         "DTYPE": dtype,
         "S3_MODEL_PATH":model_path,
+        "VLLM_ALLOW_LONG_MAX_MODEL_LEN":"1",
          "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
          "MAX_MODEL_LEN":extra_params.get('max_model_len', os.environ.get('MAX_MODEL_LEN',"4096")), 
+         "ENABLE_PREFIX_CACHING": "1" if extra_params.get('enable_prefix_caching') else "0",
          "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type)))
     }
     if DEFAULT_REGION.startswith('cn'):

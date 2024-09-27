@@ -59,6 +59,32 @@ function ServerSideTable({
   };
   const { items, loading, totalCount, pagesCount, currentPageIndex: serverPageIndex } = useDistributions(params);
 
+  // const { items, actions, filteredItemsCount, collectionProps, filterProps, paginationProps } = useCollection(
+  //   distributions,
+  //   {
+  //     filtering: {
+  //       empty: <TableEmptyState resourceName={resourceName} />,
+  //       noMatch: <TableNoMatchState onClearFilter={clearFilter} />,
+  //       filteringFunction: (item, filteringText) => {
+  //         if (!matchesCategory(item, cat)) {
+  //           return false;
+  //         }
+  //         if (!matchesIndustry(item, industry)) {
+  //           return false;
+  //         }
+  //         const filteringTextLowerCase = filteringText.toLowerCase();
+  
+  //         return SEARCHABLE_COLUMNS.map(key => item[key]).some(
+  //           value => typeof value === 'string' && value.toLowerCase().indexOf(filteringTextLowerCase) > -1
+  //         );
+  //       }
+  //     },
+  //     pagination: { pageSize: preferences.pageSize },
+  //     sorting: {defaultState: {sortingDescending:true, sortingColumn: columnDefinitions[6], isDescending:true }},
+  //     selection: {},
+  //   }
+  // );
+
   useEffect(() => {
     setSelectedItems(oldSelected => intersection(items, oldSelected));
   }, [items]);
@@ -251,7 +277,7 @@ function JobTable() {
 
         breadcrumbs={<Breadcrumbs items={jobsBreadcrumbs} />}
         content={
-          <div>
+
           <ServerSideTable
             setNotificationData={setNotificationData}
             setDisplayNotify={setDisplayNotify}
@@ -262,7 +288,7 @@ function JobTable() {
               appLayout.current?.focusToolsClose();
             }}
           />
-          </div>
+    
         }
         contentType="table"
         toolsOpen={toolsOpen}
