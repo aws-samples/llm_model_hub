@@ -228,7 +228,11 @@ const InputCustRepo = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
 const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   const [value1, setValue1] = useState<string>('');
   const [value2, setValue2] = useState<string>('');
+  const [valueMaxNumSeqs, setMaxNumSeqs] = useState<string>('');
+
   const [value3, setValue3] = useState<boolean>(false);
+  const [value4, setValue4] = useState<boolean>(false);
+
   return (
     <SpaceBetween size='xs'>
       <FormField
@@ -275,6 +279,37 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
         >
           {t("enable")}
         </Toggle>
+      </FormField>
+      <FormField
+        label="enfore-eager"
+        description="是否启用PyTorch eager-mode，默认False"
+        stretch={false}
+      >
+        <Toggle
+          readOnly={readOnly}
+          checked={value4}
+          onChange={({ detail }) => {
+            setValue4(detail.checked);
+            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,enforce_eager: detail.checked }  }))
+          }}
+        >
+          {t("enable")}
+        </Toggle>
+      </FormField>
+      <FormField
+        label="max-num-seqs"
+        description="Maximum number of sequences per iteration.,默认值256"
+        stretch={false}
+      >
+        <Input
+          readOnly={readOnly}
+          value={valueMaxNumSeqs}
+          placeholder='256'
+          onChange={({ detail }) => {
+            setMaxNumSeqs(detail.value);
+            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,max_num_seqs: detail.value }  }))
+          }}
+        />
       </FormField>
     </SpaceBetween>
   )

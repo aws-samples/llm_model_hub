@@ -8,6 +8,9 @@ import {Breadcrumbs,createjobBreadcrumbs} from '../commons/breadcrumbs'
 import { FormHeader,FormWithValidation} from './create-job/components/form';
 import { useNavigate,useParams } from "react-router-dom";
 import { remotePost } from '../../common/api-gateway';
+import {
+  Spinner
+} from "@cloudscape-design/components";
 import '../../styles/form.scss';
 
 
@@ -20,6 +23,8 @@ const JobDetailApp =() => {
   const [displayNotify, setDisplayNotify] = useState(false);
   const navigate = useNavigate();
   const [data, _setData] = useState();
+  const [readOnly, setReadOnly] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const loadHelpPanelContent = index => {
     setToolsIndex(index);
@@ -46,15 +51,20 @@ const JobDetailApp =() => {
       ref={appLayout}
       contentType="form"
       content={
-        data&&<FormWithValidation
+        data?<FormWithValidation
           loadHelpPanelContent={loadHelpPanelContent}
           setNotificationData={setNotificationData}
           setDisplayNotify={setDisplayNotify}
-          readOnly={true}
+          readOnly={readOnly}
           data={data}
+          loading={loading}
+          setLoading={setLoading}
           _setData={_setData}
-          header={<FormHeader readOnly={true} loadHelpPanelContent={loadHelpPanelContent} />}
-        />
+          setReadOnly={setReadOnly}
+          header={<FormHeader readOnly={readOnly} loadHelpPanelContent={loadHelpPanelContent} />}
+        />:(
+          <Spinner size="large"/>
+        )
       }
       breadcrumbs={<Breadcrumbs items={createjobBreadcrumbs}/>}
       navigation={<Navigation activeHref="#/jobs" />}

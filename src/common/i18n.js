@@ -182,7 +182,9 @@ i18n
             max_spot_wait_desc:"Maximum time to wait for spot instances (in Hours), must greater than Max Job Runtime",
             max_job_run_hour:"Max Job Runtime (Hour)",
             max_job_run_hour_desc:"After this amount of time Amazon SageMaker terminates the job regardless of its current status",
-            deploy:'Deploy'
+            deploy:'Deploy',
+            job_detail:'Job Detail',
+            copy_to_new:'Copy as New'
         }
       },
       zh:{
@@ -352,8 +354,9 @@ i18n
             max_spot_wait_desc:"允许等待Spot实例的最大时长 (单位: 小时)，必须大于等于任务时长",
             max_job_run_hour:"Job最长运行时间(小时)",
             max_job_run_hour_desc:"Job最长运行的时间（单位:小时）,超过这个时间Job将被终止",
-            deploy:'部署'
-
+            deploy:'部署',
+            job_detail:'任务详情',
+            copy_to_new:'复制到新任务'
         }
       }
     }

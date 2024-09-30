@@ -54,7 +54,7 @@ export function FullPageHeader({
           {t("delete")}
           </Button>
           <Button data-testid="header-btn-create" variant="primary" href='/jobs/createjob'>
-            {createButtonText}
+            {t("create_job")}
           </Button>
         </SpaceBetween>
       }

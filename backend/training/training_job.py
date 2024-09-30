@@ -18,7 +18,10 @@ from utils.llamafactory.extras.constants import DEFAULT_TEMPLATE,DownloadSource
 import time
 import dotenv
 import os
-from utils.config import boto_sess,role,default_bucket,sagemaker_session,LORA_BASE_CONFIG,DEEPSPEED_BASE_CONFIG_MAP,FULL_BASE_CONFIG,DEFAULT_REGION,WANDB_API_KEY
+from utils.config import boto_sess,role,default_bucket,sagemaker_session, \
+LORA_BASE_CONFIG,DEEPSPEED_BASE_CONFIG_MAP,FULL_BASE_CONFIG,DEFAULT_REGION,WANDB_API_KEY, \
+instance_gpus_map
+
 dotenv.load_dotenv()
 
 logger = setup_logger('training_job.py', log_file='processing_engine.log', level=logging.INFO)
@@ -130,9 +133,12 @@ class TrainingJobExcutor(BaseModel):
         #如果使用lora微调
         if job_payload['finetuning_method'] == 'lora':
             doc['finetuning_type'] = 'lora'
-            doc['lora_target'] = 'all'
+            doc['lora_target'] = job_payload.get('lora_target_modules','all')
             doc['lora_rank'] = int(job_payload['lora_rank'])
             doc['lora_alpha'] = int(job_payload['lora_alpha'])
+            
+            ## temp test `ddp_find_unused_parameters` needs to be set as False for LoRA in DDP training.
+            doc['ddp_find_unused_parameters'] = False
         else:
             doc['finetuning_type'] = 'full'
             
@@ -145,6 +151,7 @@ class TrainingJobExcutor(BaseModel):
         
         if val_size:=float(job_payload['val_size']):
             doc['val_size'] = val_size
+            
         doc['template'] =  DEFAULT_TEMPLATE[job_payload['prompt_template']]
         
         if job_payload['booster_option'] == 'fa2':
