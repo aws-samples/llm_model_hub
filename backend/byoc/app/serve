@@ -31,6 +31,7 @@ else
     # Set the model_path
     model_path="$model_dir"
     max_model_len=$(expr $MAX_MODEL_LEN + 0)
+    max_num_seqs=$(expr $MAX_NUM_SEQS + 0)
     tensor_parallel_size=$(expr $TENSOR_PARALLEL_SIZE + 0)
     dtype="$DTYPE"
     echo "Found model directory" $model_dir
@@ -66,10 +67,14 @@ else
             # Set model_id to base_dir for local loading
             echo "Using model: $file_dir"
 
-            command="python3 -m vllm.entrypoints.openai.api_server --port $SAGEMAKER_BIND_TO_PORT --download-dir $file_dir --trust-remote-code --model $file_dir --max-model-len $max_model_len --tensor-parallel-size $tensor_parallel_size --dtype $dtype"
+            command="python3 -m vllm.entrypoints.openai.api_server --port $SAGEMAKER_BIND_TO_PORT --download-dir $file_dir --trust-remote-code --model $file_dir --max-model-len $max_model_len --tensor-parallel-size $tensor_parallel_size --dtype $dtype --max-num-seqs $max_num_seqs"
             
             if [ "${ENABLE_PREFIX_CACHING}" = "1" ]; then
                 command="$command --enable-prefix-caching"
+            fi
+
+            if [ "${ENFORCE_EAGER}" = "1" ]; then
+                command="$command --enforce-eager"
             fi
             
             eval $command
@@ -79,10 +84,14 @@ else
             # If model_id file exists, use its content as model_id
             # model_id=$(cat "$model_dir/model_id")
             echo "using: $model_id"
-            command="python3 -m vllm.entrypoints.openai.api_server --port $SAGEMAKER_BIND_TO_PORT --trust-remote-code --model $model_id --max-model-len $max_model_len --tensor-parallel-size $tensor_parallel_size --dtype $dtype"
+            command="python3 -m vllm.entrypoints.openai.api_server --port $SAGEMAKER_BIND_TO_PORT --trust-remote-code --model $model_id --max-model-len $max_model_len --tensor-parallel-size $tensor_parallel_size --dtype $dtype --max-num-seqs $max_num_seqs"
             
             if [ "${ENABLE_PREFIX_CACHING}" = "1" ]; then
                 command="$command --enable-prefix-caching"
+            fi
+
+            if [ "${ENFORCE_EAGER}" = "1" ]; then
+                command="$command --enforce-eager"
             fi
             
             eval $command

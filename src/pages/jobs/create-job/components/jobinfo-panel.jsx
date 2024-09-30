@@ -99,6 +99,16 @@ function AdvancedConfigs({ onChange, readOnly, data,setData }) {
             onChange={({ detail: { value } }) => onChange('lora_alpha', value)}
           />
         </FormField>
+        <FormField
+          label="LoRA Target Modules"
+          description="Lora target modules such as v_proj,k_proj, default is all, which apply to all linear layers"
+          stretch={false}
+        >
+          <Input readOnly={readOnly}
+            value={data.job_payload ? data.job_payload.lora_target_modules : data.lora_target_modules}
+            onChange={({ detail: { value } }) => onChange('lora_target_modules', value)}
+          />
+        </FormField>
       </Grid>
       </ExpandableSection>
  </SpaceBetween> 
@@ -119,7 +129,7 @@ function DeepSpeedConfigs({ onChange, readOnly, data,setData }) {
         >
           <RadioGroup
               items={DEEPSPEED}
-              value={data.job_payload ? data.job_payload.deepspeed : data.deepspeed}
+              value={readOnly ? data.job_payload?.deepspeed : data.deepspeed}
               onChange={({ detail: { value } }) => onChange('deepspeed', value)}
               readOnly={readOnly}
             />
@@ -381,6 +391,7 @@ export default function DistributionPanel({
   setErrors,
   setNotificationData,
   setDisplayNotify,
+  setReadOnly,
   refs = {},
 }) {
 
@@ -405,6 +416,29 @@ export default function DistributionPanel({
 
     setErrors({ [attribute]: errorText });
   };
+
+  useEffect(() => {
+    //遍历data.job_payload中的所有元素，并setData({ [attribute]: value })
+    if (data.job_payload ){
+      Object.entries(data.job_payload).forEach(([attribute, value]) => {
+        setData({ [attribute]: value });
+      });
+      setData({
+        job_name:data.job_name
+      });
+      setData({
+        stage: data.job_type
+      });
+      setData({
+        s3DataPath:data.job_payload.s3_data_path
+      });
+      setData({
+        datasetInfo:data.job_payload.dataset_info
+      });
+    }
+    console.log('init data:',data);
+
+  }, [])
 
   return (
     <SpaceBetween size="xl" direction="vertical">
@@ -454,9 +488,10 @@ export default function DistributionPanel({
             i18nStrings={{ errorIconAriaLabel: 'Error' }}
           >
               <S3Selector 
+              readOnly={readOnly}
                       objectsIsItemDisabled={(item) => !item.IsFolder}
                       setOutputPath={(value)=> setData({ s3_model_path:value})} 
-                    outputPath={data.job_payload?.s3_model_path|| data.s3_model_path}/>
+                    outputPath={readOnly?data.job_payload?.s3_model_path: data.s3_model_path}/>
           </FormField>
           <FormField
             label="Use Existing Checkpoint (Optional)"
@@ -466,9 +501,10 @@ export default function DistributionPanel({
             i18nStrings={{ errorIconAriaLabel: 'Error' }}
           >
             <S3Selector 
+             readOnly={readOnly}
                     objectsIsItemDisabled={(item) => !item.IsFolder}
                     setOutputPath={(value)=> setData({ s3_checkpoint:value})} 
-                  outputPath={data.job_payload?.s3_checkpoint|| data.s3_checkpoint}/>
+                  outputPath={readOnly?data.job_payload?.s3_checkpoint:data.s3_checkpoint}/>
           </FormField>
           
           <FormField
@@ -487,7 +523,8 @@ export default function DistributionPanel({
           >
             <RadioGroup
               items={FT_OPTIONS}
-              value={data.job_payload ? data.job_payload.finetuning_method : data.finetuning_method}
+              readOnly={readOnly}
+              value={readOnly ? data.job_payload?.finetuning_method : data.finetuning_method}
               onChange={({ detail: { value } }) => onChange('finetuning_method', value)}
               ref={refs.finetuning_method}
             />
@@ -499,7 +536,8 @@ export default function DistributionPanel({
           >
             <RadioGroup
               items={QUANT_OPTIONS}
-              value={data.job_payload ? data.job_payload.quantization_bit : data.quantization_bit}
+              readOnly={readOnly}
+              value={readOnly ? data.job_payload?.quantization_bit : data.quantization_bit}
               onChange={({ detail: { value } }) => onChange('quantization_bit', value)}
               ref={refs.quantization_bit}
             />
@@ -510,7 +548,8 @@ export default function DistributionPanel({
           >
             <RadioGroup
               items={BOOSTER_OPTIONS}
-              value={data.job_payload ? data.job_payload.booster_option : data.booster_option}
+              readOnly={readOnly}
+              value={readOnly ? data.job_payload?.booster_option : data.booster_option}
               onChange={({ detail: { value } }) => onChange('booster_option', value)}
               ref={refs.booster_option}
             />
@@ -521,7 +560,7 @@ export default function DistributionPanel({
             stretch={false}
           >
             <Input readOnly={readOnly}
-            value={data.job_payload ? data.job_payload.max_job_run_hour : data.max_job_run_hour}
+            value={readOnly ? data.job_payload?.max_job_run_hour : data.max_job_run_hour}
             onChange={({ detail: { value } }) => onChange('max_job_run_hour', value)}
           />
           </FormField>
@@ -539,9 +578,10 @@ export default function DistributionPanel({
             i18nStrings={{ errorIconAriaLabel: 'Error' }}
           >
             <S3Selector label={"S3 Data Path"} 
+            readOnly={readOnly}
                     objectsIsItemDisabled={(item) => !item.IsFolder}
                     setOutputPath={(value)=> setData({ s3DataPath:value})} 
-                  outputPath={data.job_payload?.s3_data_path|| data.s3DataPath}/>
+                  outputPath={readOnly?data.job_payload?.s3_data_path: data.s3DataPath}/>
           </FormField>
           {(data.job_payload?.s3_data_path|| data.s3DataPath) &&
           <FormField
@@ -551,7 +591,7 @@ export default function DistributionPanel({
             >
                 <JsonEditor 
                 readOnly={readOnly}
-                value={data.job_payload?.dataset_info || data.datasetInfo}
+                value={readOnly?data.job_payload?.dataset_info : data.datasetInfo}
                 onDelayedChange={(event) => onChange('datasetInfo', event.detail.value)}
                 />
           </FormField>}
@@ -573,7 +613,7 @@ export default function DistributionPanel({
               stretch={false}
             >
               <Input readOnly={readOnly}
-                value={data.job_payload ? data.job_payload.max_samples : data.max_samples}
+                value={readOnly ? data.job_payload?.max_samples : data.max_samples}
                 onChange={({ detail: { value } }) => onChange('max_samples', value)}
               />
             </FormField>
@@ -583,7 +623,7 @@ export default function DistributionPanel({
               stretch={false}
             >
               <Input readOnly={readOnly}
-                value={data.job_payload ? data.job_payload.cutoff_len : data.cutoff_len}
+                value={readOnly ? data.job_payload?.cutoff_len : data.cutoff_len}
                 onChange={({ detail: { value } }) => onChange('cutoff_len', value)}
               />
             </FormField>
@@ -595,7 +635,7 @@ export default function DistributionPanel({
               stretch={false}
             >
               <Input readOnly={readOnly}
-                value={data.job_payload ? data.job_payload.val_size : data.val_size}
+                value={readOnly ? data.job_payload?.val_size : data.val_size}
                 onChange={({ detail: { value } }) => onChange('val_size', value)}
               />
             </FormField>
@@ -636,7 +676,7 @@ export default function DistributionPanel({
           >
             <Toggle
               readOnly={readOnly}
-              checked={data.job_payload ? data.job_payload.use_spot : data.use_spot}
+              checked={readOnly ? data.job_payload?.use_spot : data.use_spot}
               onChange={({ detail: { checked } }) => onChange('use_spot', checked)}
             >
               {t("enable")}
@@ -648,7 +688,7 @@ export default function DistributionPanel({
             stretch={false}
           >
             <Input readOnly={readOnly}
-            value={data.job_payload ? data.job_payload.max_spot_wait : data.max_spot_wait}
+            value={readOnly ? data.job_payload?.max_spot_wait : data.max_spot_wait}
             onChange={({ detail: { value } }) => onChange('max_spot_wait', value)}
           />
           </FormField>
@@ -665,7 +705,7 @@ export default function DistributionPanel({
             stretch={false}
           >
             <Input readOnly={readOnly}
-              value={data.job_payload ? data.job_payload.learning_rate : data.learning_rate}
+              value={readOnly ? data.job_payload?.learning_rate : data.learning_rate}
               onChange={({ detail: { value } }) => onChange('learning_rate', value)}
             />
           </FormField>
@@ -675,7 +715,7 @@ export default function DistributionPanel({
             stretch={false}
           >
             <Input readOnly={readOnly}
-              value={data.job_payload ? data.job_payload.num_train_epochs : data.num_train_epochs}
+              value={readOnly ? data.job_payload?.num_train_epochs : data.num_train_epochs}
               onChange={({ detail: { value } }) => onChange('num_train_epochs', value)}
             />
           </FormField>
@@ -687,7 +727,7 @@ export default function DistributionPanel({
             stretch={false}
           >
             <Input readOnly={readOnly}
-              value={data.job_payload ? data.job_payload.per_device_train_batch_size : data.per_device_train_batch_size}
+              value={readOnly ? data.job_payload?.per_device_train_batch_size : data.per_device_train_batch_size}
               onChange={({ detail: { value } }) => onChange('per_device_train_batch_size', value)}
             />
           </FormField>
@@ -697,7 +737,7 @@ export default function DistributionPanel({
             stretch={false}
           >
             <Input readOnly={readOnly}
-              value={data.job_payload ? data.job_payload.gradient_accumulation_steps : data.gradient_accumulation_steps}
+              value={readOnly ? data.job_payload?.gradient_accumulation_steps : data.gradient_accumulation_steps}
               onChange={({ detail: { value } }) => onChange('gradient_accumulation_steps', value)}
             />
           </FormField>

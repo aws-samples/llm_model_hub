@@ -5,7 +5,7 @@ import React, { useRef, useState } from 'react';
 import { CustomAppLayout, Navigation, Notifications } from '../../commons/common-components';
 import { Breadcrumbs, createjobBreadcrumbs } from '../../commons/breadcrumbs'
 
-import { FormHeader, FormWithValidation } from './components/form';
+import { FormWithValidation } from './components/form';
 // import ToolsContent from './components/tools-content';
 import '../../../styles/form.scss';
 
@@ -55,7 +55,8 @@ const defaultData = {
   s3_model_path:'',
   use_spot: false,
   max_spot_wait:72,
-  max_job_run_hour:48
+  max_job_run_hour:48,
+  lora_target_modules:'all'
 };
 
 
@@ -87,7 +88,6 @@ const CreateJobApp = () => {
           _setData={_setData}
           setNotificationData={setNotificationData}
           setDisplayNotify={setDisplayNotify}
-          header={<FormHeader loadHelpPanelContent={loadHelpPanelContent} />}
         />
       }
       breadcrumbs={<Breadcrumbs items={createjobBreadcrumbs} />}

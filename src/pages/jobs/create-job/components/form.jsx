@@ -9,46 +9,44 @@ import { useNavigate } from "react-router-dom";
 import {LogsPanel} from './log-display';
 import {S3Path} from './output-path';
 import {useSimpleNotifications} from '../../../commons/use-notifications';
+import { t } from 'i18next';
 
 // export const FormContext = React.createContext({});
 // export const useFormContext = () => React.useContext(FormContext);
 
-export function FormHeader({ readOnly,loadHelpPanelContent }) {
-  return (
-    <Header
-      variant="h1"
-    >
-      Job Detail
-    </Header>
-  );
-}
-
-function FormActions({ onCancelClick ,loading,readOnly}) {
-  return (
-    <SpaceBetween direction="horizontal" size="xs">
-      <Button variant="link" onClick={onCancelClick}>
-        Cancel
-      </Button>
-      {!readOnly&&<Button loading={loading} data-testid="create" variant="primary">
-        Create
-      </Button>}
-    </SpaceBetween>
-  );
-}
-
-function BaseForm({ content, readOnly,onCancelClick,loading, errorText = null, onSubmitClick, header }) {
+function BaseForm({ content, readOnly,loading, errorText = null, onSubmitClick, header,setReadOnly }) {
+  const navigate = useNavigate();
   return (
     <form
-      onSubmit={event => {
+      onSubmit={ (event) => {
         event.preventDefault();
-        if (onSubmitClick) {
-          onSubmitClick();
-        }
+        onSubmitClick();
       }}
     >
       <Form
         header={header}
-        actions={<FormActions onCancelClick={onCancelClick} readOnly={readOnly} loading={loading}/>}
+        actions={
+          <SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={(event)=>{
+            event.preventDefault();
+            navigate('/jobs');
+          }}>
+          {t('cancel')}
+          </Button>
+          {readOnly&&<Button variant="normal" onClick={(event)=>{
+            event.preventDefault();
+            setReadOnly(false);
+          }}>
+          {t('copy_to_new')}
+          </Button>}
+          {!readOnly&&<Button loading={loading} variant="primary">
+            {t('create')}
+          </Button>}
+        </SpaceBetween>
+        
+        // <FormActions onCancelClick={onCancelClick} readOnly={readOnly} loading={loading} setReadOnly={setReadOnly}/>
+      
+      }
         errorText={errorText}
         errorIconAriaLabel="Error"
       >
@@ -98,7 +96,8 @@ export const FormWithValidation = ({
   data,
   _setData,
   setDisplayNotify,
-  readOnly
+  readOnly,
+  setReadOnly,
 }) => {
   const [formErrorText, setFormErrorText] = useState(null);
   const [errors, _setErrors] = useState(defaultErrors);
@@ -135,12 +134,8 @@ export const FormWithValidation = ({
     s3_checkpoint:useRef(null),
     s3_model_path:useRef(null)
   };
-  const onCancelClick =()=>
-  {
-    navigate('/jobs')
-  }
   const onSubmit = () => {
-    console.log(data);
+    console.log('data:',data);
 
     const newErrors = { ...errors };
     let validatePass = true;
@@ -193,7 +188,8 @@ export const FormWithValidation = ({
           s3_model_path:data.s3_model_path,
           use_spot:data.use_spot,
           max_spot_wait:data.max_spot_wait,
-          max_job_run_hour:data.max_job_run_hour
+          max_job_run_hour:data.max_job_run_hour,
+          lora_target_modules:data.lora_target_modules,
           // lora_r:data.lora_r,
           // lora_dropout:data.lora_dropout,
           // lora_bias:data.lora_bias,
@@ -273,7 +269,18 @@ export const FormWithValidation = ({
 
   return (
     <BaseForm
-      header={header}
+      header={<Header
+        variant="h1"
+        actions={readOnly&&<Button variant="normal" onClick={(event)=>{
+            event.preventDefault();
+            setReadOnly(false);
+          }}>
+          {t('copy_to_new')}
+          </Button>}
+        
+      >
+        {t('job_detail')}
+      </Header>}
       content={
         <SpaceBetween size="l">
           <DistributionsPanel
@@ -292,8 +299,8 @@ export const FormWithValidation = ({
       }
       loading={loading}
       onSubmitClick={onSubmit}
+      setReadOnly={setReadOnly}
       readOnly={readOnly}
-      onCancelClick={onCancelClick}
       errorText={formErrorText}
     />
   );

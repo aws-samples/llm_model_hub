@@ -177,7 +177,10 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
          "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
          "MAX_MODEL_LEN":extra_params.get('max_model_len', os.environ.get('MAX_MODEL_LEN',"4096")), 
          "ENABLE_PREFIX_CACHING": "1" if extra_params.get('enable_prefix_caching') else "0",
-         "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type)))
+         "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type))),
+         "MAX_NUM_SEQS": extra_params.get('max_num_seqs','256'),
+         "ENFORCE_EAGER": "1" if extra_params.get('enforce_eager') else "0",
+
     }
     if DEFAULT_REGION.startswith('cn'):
         env['VLLM_USE_MODELSCOPE']='1'
