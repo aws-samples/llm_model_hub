@@ -664,7 +664,7 @@ export default function DistributionPanel({
             i18nStrings={{ errorIconAriaLabel: 'Error' }}
           >
             <Input readOnly={readOnly}
-            value={data.job_payload ? data.job_payload.instance_num : data.instance_num}
+            value={readOnly ? data.job_payload.instance_num : data.instance_num}
             ref={refs.instance_num}
             onChange={({ detail: { value } }) => onChange('instance_num', value)}
           />
