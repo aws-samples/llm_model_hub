@@ -148,6 +148,8 @@ class TrainingJobExcutor(BaseModel):
         doc['cutoff_len'] = int(job_payload['cutoff_len'])
         doc['num_train_epochs'] = float(job_payload['num_train_epochs'])
         doc['warmup_steps'] = int(job_payload['warmup_steps'])
+        doc['logging_steps'] = int(job_payload['logging_steps'])
+        doc['save_steps'] = int(job_payload['save_steps'])
         
         if val_size:=float(job_payload['val_size']):
             doc['val_size'] = val_size

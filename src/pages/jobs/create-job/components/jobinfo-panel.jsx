@@ -37,7 +37,7 @@ function AdvancedConfigs({ onChange, readOnly, data,setData }) {
           stretch={false}
         >
           <Input readOnly={readOnly}
-            value={data.job_payload ? data.job_payload.warmup_steps : data.warmup_steps}
+            value={readOnly ? data.job_payload?.warmup_steps : data.warmup_steps}
             onChange={({ detail: { value } }) => onChange('warmup_steps', value)}
           />
         </FormField>
@@ -47,7 +47,7 @@ function AdvancedConfigs({ onChange, readOnly, data,setData }) {
           stretch={false}
         >
           <Input readOnly={readOnly}
-            value={data.job_payload ? data.job_payload.logging_steps : data.logging_steps}
+            value={readOnly ? data.job_payload?.logging_steps : data.logging_steps}
             onChange={({ detail: { value } }) => onChange('logging_steps', value)}
           />
         </FormField>
@@ -61,7 +61,7 @@ function AdvancedConfigs({ onChange, readOnly, data,setData }) {
           stretch={false}
         >
           <Input readOnly={readOnly}
-            value={data.job_payload ? data.job_payload.save_steps : data.save_steps}
+            value={readOnly ? data.job_payload?.save_steps : data.save_steps}
             onChange={({ detail: { value } }) => onChange('save_steps', value)}
           />
         </FormField>
@@ -85,7 +85,7 @@ function AdvancedConfigs({ onChange, readOnly, data,setData }) {
           stretch={false}
         >
           <Input readOnly={readOnly}
-            value={data.job_payload ? data.job_payload.lora_rank : data.lora_rank}
+            value={readOnly ? data.job_payload?.lora_rank : data.lora_rank}
             onChange={({ detail: { value } }) => onChange('lora_rank', value)}
           />
         </FormField>
@@ -95,17 +95,21 @@ function AdvancedConfigs({ onChange, readOnly, data,setData }) {
           stretch={false}
         >
           <Input readOnly={readOnly}
-            value={data.job_payload ? data.job_payload.lora_alpha : data.lora_alpha}
+            value={readOnly ? data.job_payload?.lora_alpha : data.lora_alpha}
             onChange={({ detail: { value } }) => onChange('lora_alpha', value)}
           />
         </FormField>
+        </Grid>
+        <Grid
+        gridDefinition={[ { colspan: { default: 6, xxs: 4 } },{ colspan: { default: 6, xxs: 4 } }]}
+      >
         <FormField
           label="LoRA Target Modules"
           description="Lora target modules such as v_proj,k_proj, default is all, which apply to all linear layers"
           stretch={false}
         >
           <Input readOnly={readOnly}
-            value={data.job_payload ? data.job_payload.lora_target_modules : data.lora_target_modules}
+            value={readOnly ? data.job_payload?.lora_target_modules : data.lora_target_modules}
             onChange={({ detail: { value } }) => onChange('lora_target_modules', value)}
           />
         </FormField>
