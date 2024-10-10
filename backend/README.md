@@ -33,6 +33,7 @@ db_password=llmdata
 api_keys=
 HUGGING_FACE_HUB_TOKEN=
 WANDB_API_KEY=
+WANDB_BASE_URL=
 MAX_MODEL_LEN=4096
 ```
 

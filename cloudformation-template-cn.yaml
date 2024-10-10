@@ -27,6 +27,11 @@ Parameters:
     Description: Optional WANDB API Key for view W&B in wandb.ai
     Default: ""
 
+  WandbBaseUrl:
+    Type: String
+    Description: Optional WANDB Base URL for view W&B own Wandb portal
+    Default: ""
+
 Resources:
   EC2Instance:
     Type: AWS::EC2::Instance
@@ -115,6 +120,7 @@ Resources:
               echo "api_keys=$RANDOM_KEY" >> /home/ubuntu/llm_model_hub/backend/.env
               echo "HUGGING_FACE_HUB_TOKEN=${HuggingFaceHubToken}" >> /home/ubuntu/llm_model_hub/backend/.env
               echo "WANDB_API_KEY=${WandbApiKey}" >> /home/ubuntu/llm_model_hub/backend/.env
+              echo "WANDB_BASE_URL=${WandbBaseUrl}" >> /home/ubuntu/llm_model_hub/backend/.env
               echo "MAX_MODEL_LEN=4096" >> /home/ubuntu/llm_model_hub/backend/.env
               # Set proper permissions 
               sudo chown -R ubuntu:ubuntu /home/ubuntu/
@@ -152,6 +158,7 @@ Resources:
             - SageMakerRoleArn: !GetAtt SageMakerExecutionRole.Arn
               HuggingFaceHubToken: !Ref HuggingFaceHubToken
               WandbApiKey: !Ref WandbApiKey
+              WandbBaseUrl: !Ref WandbBaseUrl
 
   EC2SecurityGroup:
     Type: AWS::EC2::SecurityGroup
