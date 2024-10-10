@@ -19,8 +19,7 @@ import time
 import dotenv
 import os
 from utils.config import boto_sess,role,default_bucket,sagemaker_session, \
-LORA_BASE_CONFIG,DEEPSPEED_BASE_CONFIG_MAP,FULL_BASE_CONFIG,DEFAULT_REGION,WANDB_API_KEY, \
-instance_gpus_map
+LORA_BASE_CONFIG,DEEPSPEED_BASE_CONFIG_MAP,FULL_BASE_CONFIG,DEFAULT_REGION,WANDB_API_KEY, WANDB_BASE_URL
 
 dotenv.load_dotenv()
 
@@ -264,6 +263,8 @@ class TrainingJobExcutor(BaseModel):
             "USE_MODELSCOPE_HUB": "1" if DEFAULT_REGION.startswith('cn') else '0'
             
         }
+        if WANDB_BASE_URL:
+            environment["WANDB_BASE_URL"] = WANDB_BASE_URL
         if WANDB_API_KEY:
             environment["WANDB_API_KEY"] = WANDB_API_KEY
         else:

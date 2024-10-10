@@ -51,6 +51,7 @@ USER_TABLE= 'USER_TABLE'
 DEEPSPEED_BASE_CONFIG_MAP = { "stage_2":'examples/deepspeed/ds_z2_config.json',
                              "stage_3":'examples/deepspeed/ds_z3_config.json'}
 WANDB_API_KEY  = os.environ.get('WANDB_API_KEY','')
+WANDB_BASE_URL = os.environ.get('WANDB_BASE_URL','')
 
 # 加载持久化之后的模型列表，在endpoingt_management.py中支持修改
 try:
