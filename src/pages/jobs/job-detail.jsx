@@ -5,7 +5,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { CustomAppLayout, Navigation, Notifications } from '../commons/common-components';
 import {Breadcrumbs,createjobBreadcrumbs} from '../commons/breadcrumbs'
 
-import { FormHeader,FormWithValidation} from './create-job/components/form';
+import { FormWithValidation} from './create-job/components/form';
 import { useNavigate,useParams } from "react-router-dom";
 import { remotePost } from '../../common/api-gateway';
 import {
@@ -61,7 +61,7 @@ const JobDetailApp =() => {
           setLoading={setLoading}
           _setData={_setData}
           setReadOnly={setReadOnly}
-          header={<FormHeader readOnly={readOnly} loadHelpPanelContent={loadHelpPanelContent} />}
+          // header={<FormHeader readOnly={readOnly} loadHelpPanelContent={loadHelpPanelContent} />}
         />:(
           <Spinner size="large"/>
         )
