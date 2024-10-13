@@ -50,10 +50,13 @@ else
         # Get model_id from environment variable
         model_id=$HF_MODEL_ID
         s3_model_path=$S3_MODEL_PATH
+        #检查是否是s3 url
         if [[ $s3_model_path == s3://* ]]; then
             #检查是否以/结尾，如果是则去掉
             if [[ $s3_model_path == */ ]]; then
                 s3_model_path=${s3_model_path%/}
+                s3_model_path="${s3_model_path}/*"
+            else
                 s3_model_path="${s3_model_path}/*"
             fi
             #mv s5cmd to app foler

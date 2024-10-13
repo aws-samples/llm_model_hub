@@ -33,6 +33,16 @@ else
     echo "File $LLAMA_REQ not found"
 fi
 
+# 处理 .gitmodules
+# gitmoddules_REQ="/home/ubuntu/llm_model_hub/.gitmodules"
+# if [ -f "$gitmoddules_REQ" ]; then
+#     sed -i "1i$MIRROR_LINE" "$gitmoddules_REQ"
+#     sed -i 's|https://github.com/|https://gitclone.com/github.com/|' "$gitmoddules_REQ"
+#     echo "Modified $gitmoddules_REQ"
+# else
+#     echo "File $gitmoddules_REQ not found"
+# fi
+
 # 添加 Docker 配置
 DOCKER_CONFIG="/etc/docker/daemon.json"
 sudo mkdir -p /etc/docker
@@ -40,10 +50,10 @@ sudo tee "$DOCKER_CONFIG" > /dev/null <<EOT
 { 
   "registry-mirrors" : 
     [ 
-      "https://docker.m.daocloud.io", 
-      "https://noohub.ru", 
-      "https://huecker.io",
-      "https://dockerhub.timeweb.cloud" 
+        "https://docker.m.daocloud.io",
+        "https://dockerproxy.com",
+        "https://docker.nju.edu.cn",
+        "https://docker.mirrors.ustc.edu.cn"
     ] 
 }
 EOT

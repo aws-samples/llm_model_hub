@@ -49,5 +49,6 @@ docker build  --build-arg VLLM_VERSION=${VLLM_VERSION} -t ${inference_image}:${V
 docker tag ${inference_image}:${VLLM_VERSION} ${inference_fullname}
 
 docker push ${inference_fullname}
-
+# 删除 .env 文件中的 vllm_image= 这一行
+sed -i '/^vllm_image=/d' /home/ubuntu/llm_model_hub/backend/.env
 echo "vllm_image=${inference_fullname}" >> /home/ubuntu/llm_model_hub/backend/.env

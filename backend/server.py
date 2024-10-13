@@ -194,10 +194,10 @@ async def handle_deploy_endpoint(request:DeployModelRequest):
                                 model_name=request.model_name,
                                 extra_params=request.extra_params
                                 ),
-                                timeout=600)
+                                timeout=10)
             return CommonResponse(response_id=str(uuid.uuid4()),response={"result":ret, "endpoint_name": msg})
         except asyncio.TimeoutError:
-            return CommonResponse(response_id=str(uuid.uuid4()),response={"result":False, "endpoint_name": "Operation timed out"}) 
+            return CommonResponse(response_id=str(uuid.uuid4()),response={"result":True, "endpoint_name": "Too long,swithing to background process"}) 
     else:
         try:
             ret,msg =  await asyncio.wait_for(

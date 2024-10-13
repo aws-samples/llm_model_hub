@@ -22,6 +22,7 @@ import sagemaker
 import pickle
 from logger_config import setup_logger
 import threading
+import concurrent.futures
 database = DatabaseWrapper()
 logger = setup_logger('endpoint_management.py', log_file='deployment.log', level=logging.INFO)
 
@@ -62,12 +63,14 @@ def ms_download_and_upload_model(model_repo, s3_bucket, s3_prefix):
             
             # 构建并返回 S3 URL
             s3_url = f"s3://{s3_bucket}/{s3_prefix}"
+            logger.info(f"successfully downloaded:{model_repo}, and uploaded to {s3_url}")
             return s3_url
         
         finally:
             # 清理临时目录（这步可以省略，因为使用了 with tempfile.TemporaryDirectory()）
             if os.path.exists(cache_dir):
                 shutil.rmtree(cache_dir)
+    
                 
 
 def get_endpoint_status(endpoint_name:str) ->EndpointStatus:
@@ -157,11 +160,26 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
             model_path = jobinfo.output_s3_path + 'finetuned_model_merged/'
         else:
             model_path = jobinfo.output_s3_path + 'finetuned_model/'
+    #如果是使用自定义模型
     elif not cust_repo_addr == '' and model_name == '' :
-        # model_name = cust_repo_addr.split('/')[1]
         model_name = cust_repo_addr
         #注册到supported_model中
         register_cust_model(cust_repo_type=repo_type,cust_repo_addr=cust_repo_addr)
+        # 仅仅针对中国区需要从模型中心下载上传到s3，在deploy endpint，所以改成后台执行。
+        if repo_type == DownloadSource.MODELSCOPE:
+            deploy_endpoint_background(job_id=job_id,engine=engine,instance_type=instance_type,quantize=quantize,
+                                        enable_lora=enable_lora,model_name=model_name,cust_repo_type=cust_repo_type, 
+                                        cust_repo_addr=cust_repo_addr,extra_params=extra_params)
+            return True,"Creating endpoint in background"
+    #如果是使用原始模型
+    elif model_name and job_id == 'N/A(Not finetuned)':
+        # 仅仅针对中国区需要从模型中心下载上传到s3，在deploy endpint，所以改成后台执行。
+        if repo_type == DownloadSource.MODELSCOPE:
+            deploy_endpoint_background(job_id=job_id,engine=engine,instance_type=instance_type,quantize=quantize,
+                                        enable_lora=enable_lora,model_name=model_name,cust_repo_type=cust_repo_type, 
+                                        cust_repo_addr=cust_repo_addr,extra_params=extra_params)
+            return True,"Creating endpoint in background"
+
 
     logger.info(f"deploy endpoint with model_name:{model_name},model_path:{model_path}")
     
@@ -231,7 +249,99 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
     
     return True,endpoint_name
 
-# 如果job_id="",则使用model_name原始模型
+
+def deploy_endpoint_background(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str,extra_params:Dict[str,Any]):
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future = executor.submit(deploy_endpoint_ms,
+                                 job_id=job_id,
+                                 engine=engine,
+                                 instance_type=instance_type,
+                                 quantize=quantize,
+                                 enable_lora=enable_lora,
+                                 model_name=model_name,
+                                 cust_repo_type=cust_repo_type,
+                                 cust_repo_addr=cust_repo_addr,
+                                 extra_params=extra_params
+                                 )
+
+def deploy_endpoint_ms(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str,extra_params:Dict[str,Any]) -> Dict[bool,str]:
+    pure_model_name = model_name.split('/')[1]
+    create_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    endpoint_name = sagemaker.utils.name_from_base(pure_model_name).replace('.','-').replace('_','-')
+    instance_count = int(extra_params.get("instance_count",1))
+    lmi_image_uri = VLLM_IMAGE
+    model_path = f"s3://{default_bucket}/original_model_file/{model_name}"
+    # g4dn does not support bf16, need to use fp16
+    dtype = 'half' if instance_type.startswith('ml.g4dn') else 'auto'
+    env={
+        "HF_MODEL_ID": model_name,
+        "DTYPE": dtype,
+        "S3_MODEL_PATH":model_path,
+        "VLLM_ALLOW_LONG_MAX_MODEL_LEN":"1",
+         "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
+         "MAX_MODEL_LEN":extra_params.get('max_model_len', os.environ.get('MAX_MODEL_LEN',"4096")), 
+         "ENABLE_PREFIX_CACHING": "1" if extra_params.get('enable_prefix_caching') else "0",
+         "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type))),
+         "MAX_NUM_SEQS": extra_params.get('max_num_seqs','256'),
+         "ENFORCE_EAGER": "1" if extra_params.get('enforce_eager') else "0",
+
+    }
+    # 这个VLLM_USE_MODELSCOPE启用之后还是会访问hf的一些api，所以不起作用了
+    # if DEFAULT_REGION.startswith('cn'):
+    #     env['VLLM_USE_MODELSCOPE']='1'
+    print(env)
+    # Create the SageMaker Model object. In this example we let LMI configure the deployment settings based on the model architecture  
+    model = Model(
+            image_uri=lmi_image_uri,
+            role=role,
+            name=endpoint_name,
+            sagemaker_session=sagemaker_session,
+            env=env,
+            model_data=MODEL_ARTIFACT,
+    )
+    # 先创建数据库记录，初始端点状态为precreating
+    database.create_endpoint(job_id= job_id,
+                                model_name= model_name,
+                                model_s3_path= '',
+                                instance_type= instance_type,
+                                instance_count = instance_count,
+                                endpoint_name= endpoint_name,
+                                endpoint_create_time= create_time,
+                                endpoint_delete_time= None,
+                                extra_config= None,
+                                engine=engine,
+                                enable_lora=enable_lora,
+                                endpoint_status = EndpointStatus.PRECREATING
+                                )
+    logger.info(f"pre creating endpoint with model_name:{model_name}")
+
+    #如果是modelscope，则需要下载到本地再上传到S3
+                # 构建并返回 S3 URL
+    
+    ms_download_and_upload_model(model_repo=model_name,s3_bucket=default_bucket,s3_prefix=f"original_model_file/{model_name}")
+    logger.info(f"deploy endpoint with model_name:{model_name},model_path:{model_path}")
+    
+    try:
+        model.deploy(
+            instance_type= instance_type,
+            initial_instance_count= instance_count,
+            endpoint_name=endpoint_name,
+            wait=False,
+            accept_eula=True,
+            container_startup_health_check_timeout=900
+        )
+        #更新端点状态为creating
+        database.update_endpoint_status(
+                endpoint_name=endpoint_name,
+                endpoint_status=EndpointStatus.CREATING
+            )
+    except Exception as e:
+        logger.error(f"create_endpoint:{e}")
+        print(e)
+        return False,str(e)
+    return True,endpoint_name
+
+# 如果使用lmi-dist，trtllm engine则使用这个函数
 def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str,extra_params:Dict[str,Any]) -> Dict[bool,str]:
      #统一处理成repo/modelname格式
     repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
