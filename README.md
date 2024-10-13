@@ -116,8 +116,7 @@ pm2 delete modelhub
 # 如何升级？
 - **方法 1**. 下载新的cloudformation 模板进行重新部署，大约12分钟部署完成一个全新的modelhub (此方法以前的job 任务数据会丢失)
 - **方法 2**. 手动更新：
-1. 先打开backend/.env，把原有的vllm_image=这个行删了
-2. 更新代码, 重新打包byoc镜像
+1. 更新代码, 重新打包byoc镜像
 ```bash
 git pull
 git submodule update --remote
@@ -126,8 +125,6 @@ bash build_and_push.sh
 ```
 3. 重启服务
 ```bash
-pm2 restart modelhub
-pm2 restart modelhub-server
-pm2 restart modelhub-engine
+pm2 restart all
 ```
 4. 更新完成
