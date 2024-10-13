@@ -18,6 +18,7 @@ class JobType(Enum):
     rm = 'rm'
 
 class EndpointStatus(Enum):
+    PRECREATING = "PRECREATING"
     CREATING = "CREATING"
     INSERVICE = "INSERVICE"
     FAILED = "FAILED"

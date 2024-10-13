@@ -49,7 +49,7 @@ Resources:
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
-            VolumeSize: 200
+            VolumeSize: 500
             VolumeType: gp3
       IamInstanceProfile: !Ref EC2InstanceProfile
       UserData:

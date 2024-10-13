@@ -14,8 +14,8 @@ Parameters:
 
   AMIId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id
-    Description: Ubuntu 22.04 AMI ID
+    Default: /aws/service/canonical/ubuntu/server-minimal/24.04/stable/20241002/amd64/hvm/ebs-gp3/ami-id
+    Description: Ubuntu 24.04 AMI ID
 
   HuggingFaceHubToken:
     Type: String
@@ -49,7 +49,7 @@ Resources:
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
-            VolumeSize: 200
+            VolumeSize: 500
             VolumeType: gp3
       IamInstanceProfile: !Ref EC2InstanceProfile
       UserData:
