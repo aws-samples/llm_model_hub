@@ -51,8 +51,8 @@ export const TRAINING_STAGES = [
   // { label: 'Pre-Training', value: 'pt' },
   // { label: 'Reward Modeling', value: 'rm' },
   // { label: 'PPO', value: 'ppo' },
-  // { label: 'DPO', value: 'dpo' },
-  // { label: 'KTO', value: 'kto' }
+  { label: 'DPO', value: 'dpo' },
+  { label: 'KTO', value: 'kto' }
 ]
 export const OPTMIZERS =[
   { label: 'adamw_torch', value: 'adamw_torch' },

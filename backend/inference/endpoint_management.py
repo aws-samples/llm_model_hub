@@ -179,6 +179,10 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
                                         enable_lora=enable_lora,model_name=model_name,cust_repo_type=cust_repo_type, 
                                         cust_repo_addr=cust_repo_addr,extra_params=extra_params)
             return True,"Creating endpoint in background"
+    #如果是直接从s3 path加载模型
+    elif extra_params.get("s3_model_path"):
+        model_path = extra_params.get("s3_model_path")
+        model_name = 'custom/custom_model_in_s3' if not model_name else model_name
 
 
     logger.info(f"deploy endpoint with model_name:{model_name},model_path:{model_path}")
