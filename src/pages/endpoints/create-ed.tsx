@@ -10,6 +10,8 @@ import { remotePost } from '../../common/api-gateway';
 import { useSimpleNotifications } from '../commons/use-notifications';
 import { useNavigate } from "react-router-dom";
 import { t } from 'i18next';
+import {S3Selector} from '../jobs/create-job/components/output-path';
+
 
 interface PageHeaderProps {
   extraActions?: React.ReactNode;
@@ -224,6 +226,26 @@ const InputCustRepo = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
     </SpaceBetween>
   )
 }
+
+const InputS3Path = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
+  const [value, setValue] = useState<string>('');
+  return (
+    <SpaceBetween size='xs'>
+      <FormField
+        description="输入S3存储路径，例如：s3://bucket/model/"
+        stretch={true}
+      >
+        <S3Selector 
+                readOnly={readOnly}
+                objectsIsItemDisabled={(item:any) => !item.IsFolder}
+                setOutputPath={(value:any)=>
+                   setData((pre: any) => ({ ...pre,  extra_params:{...pre.extra_params,s3_model_path: value } }))
+                  } 
+              outputPath={value}/>
+      </FormField>
+    </SpaceBetween>
+  )
+};
 
 const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   const [value1, setValue1] = useState<string>('');
@@ -477,6 +499,12 @@ export const DeployModelModal = ({
           stretch={false}
         >
           <InputCustRepo data={data} setData={setData} readOnly={modelNameReadOnly} />
+        </FormField>
+        <FormField
+          label="自定义模型S3Path"
+          stretch={false}
+        >
+          <InputS3Path data={data} setData={setData} readOnly={modelNameReadOnly} />
         </FormField>
 
         <FormField
