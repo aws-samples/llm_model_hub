@@ -27,7 +27,7 @@ import { t } from 'i18next';
 function AdvancedConfigs({ onChange, readOnly, data,setData }) {
   return (
   <SpaceBetween size="l"> 
-    <ExpandableSection headerText="Extra configurations" variant="footer">
+    <ExpandableSection headerText={`Extra ${t('configurations')}`} variant="footer">
       <Grid
         gridDefinition={[ { colspan: { default: 6, xxs: 4 } },{ colspan: { default: 6, xxs: 4 } }]}
       >
@@ -75,7 +75,7 @@ function AdvancedConfigs({ onChange, readOnly, data,setData }) {
       </Grid>
 
     </ExpandableSection>
-    <ExpandableSection headerText="Lora configurations" variant="footer">
+    <ExpandableSection headerText={`Lora ${t('configurations')}`} variant="footer">
     <Grid
         gridDefinition={[ { colspan: { default: 6, xxs: 4 } },{ colspan: { default: 6, xxs: 4 } }]}
       >
@@ -112,6 +112,42 @@ function AdvancedConfigs({ onChange, readOnly, data,setData }) {
             value={readOnly ? data.job_payload?.lora_target_modules : data.lora_target_modules}
             onChange={({ detail: { value } }) => onChange('lora_target_modules', value)}
           />
+        </FormField>
+      </Grid>
+      </ExpandableSection>
+      <ExpandableSection headerText={`RLHF ${t('configurations')}`} variant="footer">
+    <Grid
+        gridDefinition={[ { colspan: { default: 6, xxs: 4 } },{ colspan: { default: 6, xxs: 4 } }]}
+      >
+        <FormField
+          label={t("rlhf_beta")}
+          description={t("rlhf_beta_desc")}
+          stretch={false}
+        >
+          <Input readOnly={readOnly}
+            value={readOnly ? data.job_payload?.pref_beta : data.pref_beta}
+            onChange={({ detail: { value } }) => onChange('pref_beta', value)}
+          />
+        </FormField>
+        <FormField
+          label={t("rlhf_ftx_gamma")}
+          description={t("rlhf_ftx_gamma_desc")}
+          stretch={false}
+        >
+          <Input readOnly={readOnly}
+            value={readOnly ? data.job_payload?.pref_ftx : data.pref_ftx}
+            onChange={({ detail: { value } }) => onChange('pref_ftx', value)}
+          />
+        </FormField>
+        </Grid>
+        <Grid
+        gridDefinition={[ { colspan: { default: 6, xxs: 4 } },{ colspan: { default: 6, xxs: 4 } }]}
+      >
+        <FormField
+          label={t("rlhf_loss_type")}
+          stretch={false}
+        >
+           <SelectLossType  data={data} setData={setData} readOnly={readOnly}/>
         </FormField>
       </Grid>
       </ExpandableSection>
@@ -257,8 +293,8 @@ const SelectDatasets = ({ data, setData, readOnly, refs }) => {
   }) => {
     setLoadStatus("loading");
     try {
-      const data = await remotePost({ config_name: 'dataset' }, 'get_factory_config');
-      const items = data.response.body.map((it) => ({
+      const resp = await remotePost({ config_name: 'dataset',stage:data.stage }, 'get_factory_config');
+      const items = resp.response.body.map((it) => ({
         dataset: it,
       }));
       setItems(items);
@@ -268,6 +304,12 @@ const SelectDatasets = ({ data, setData, readOnly, refs }) => {
       setLoadStatus("error");
     }
   };
+  useEffect(() => {
+    setSelectOptions(initState);
+    setLoadStatus("pending");
+    setItems([]);
+  }, [data.stage])
+
   return (
     <Multiselect
       statusType={loadStatus}
@@ -345,6 +387,31 @@ const SelectInstanceType = ({ data, setData, readOnly, refs }) => {
       options={INSTANCE_TYPES}
       selectedAriaLabel="Selected"
       ref={refs.instance_type}
+    />
+  )
+}
+
+const SelectLossType = ({ data, setData, readOnly }) => {
+  // const initState = INSTANCE_TYPES.filter(item => data.job_payload?.instance_type === item.value)
+  const [selectOption, setSelectOption] = useState({ label: 'sigmoid', value: 'sigmoid' });
+  useEffect(() => {
+    if (data.job_payload) {
+      setSelectOption({ label: data.job_payload.pref_loss, value: data.job_payload.pref_loss })
+      setData({ pref_loss: data.job_payload.pref_loss })
+    }
+  }, [data.job_payload])
+  return (
+    <Select
+      selectedOption={selectOption}
+      disabled={readOnly}
+      onChange={({ detail }) => {
+        setSelectOption(detail.selectedOption);
+        setData({ pref_loss: detail.selectedOption.value })
+      }}
+      options={[
+        { label: 'sigmoid', value: 'sigmoid' },
+      ]}
+      selectedAriaLabel="Selected"
     />
   )
 }
@@ -647,7 +714,7 @@ export default function DistributionPanel({
         </SpaceBetween>
       </Container>
       <Container
-        header={<Header variant="h2">Training Instances settings</Header>}
+        header={<Header variant="h2">{t("training_instance_settings")}</Header>}
         footer={<DeepSpeedConfigs data={data} onChange={onChange} readOnly={readOnly} setData={setData}/>}
       >
         <SpaceBetween size="l">
@@ -698,7 +765,7 @@ export default function DistributionPanel({
           </FormField>
         </SpaceBetween>
       </Container>
-      <Container header={<Header variant="h2">Hyper params settings</Header>}
+      <Container header={<Header variant="h2">{t("hyper_params_settings")}</Header>}
         footer={<AdvancedConfigs data={data} onChange={onChange} readOnly={readOnly} setData={setData}/>}
       >
         <SpaceBetween size="l">

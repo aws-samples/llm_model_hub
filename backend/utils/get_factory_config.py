@@ -41,7 +41,7 @@ def list_datasets(dataset_dir: str = None, training_stage: str = list(TRAINING_S
     Lists all available datasets in the dataset dir for the training stage.
     """
     dataset_info = load_dataset_info(dataset_dir if dataset_dir is not None else DEFAULT_DATA_DIR)
-    ranking = TRAINING_STAGES[training_stage] in STAGES_USE_PAIR_DATA
+    ranking = training_stage in STAGES_USE_PAIR_DATA
     datasets = [k for k, v in dataset_info.items() if v.get("ranking", False) == ranking]
     return datasets  
 
@@ -58,7 +58,7 @@ async def get_factory_config(request:GetFactoryConfigRequest,repo=DownloadSource
         # print(DEFAULT_TEMPLATE)
         return CommonResponse(response_id=str(uuid.uuid4()),response={"body":templates})
     elif request.config_name == 'dataset':
-        datasets = list_datasets()
+        datasets = list_datasets(training_stage=request.stage)
         return CommonResponse(response_id=str(uuid.uuid4()),response={"body":datasets})
     else:
         raise APIException(f"Invalid config_name: {request.config_name}")

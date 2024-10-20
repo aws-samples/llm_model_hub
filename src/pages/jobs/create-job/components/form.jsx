@@ -190,6 +190,9 @@ export const FormWithValidation = ({
           max_spot_wait:data.max_spot_wait,
           max_job_run_hour:data.max_job_run_hour,
           lora_target_modules:data.lora_target_modules,
+          pref_beta:data.pref_beta,
+          pref_loss:data.pref_loss,
+          pref_ftx:data.pref_ftx
           // lora_r:data.lora_r,
           // lora_dropout:data.lora_dropout,
           // lora_bias:data.lora_bias,

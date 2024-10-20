@@ -98,6 +98,7 @@ class CommonResponse(BaseModel):
     
 class GetFactoryConfigRequest(BaseModel):
     config_name:Literal["model_name","prompt_template","dataset"] 
+    stage:Optional[str] = Literal["sft","ppo","dpo","kto"] 
     
 class ListModelNamesResponse(BaseModel):
     response_id:str
