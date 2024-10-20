@@ -118,6 +118,7 @@ class TrainingJobExcutor(BaseModel):
 
         
     def create_training_yaml(self,
+                             stage:str,
                              job_payload:Dict[str,Any],
                              data_keys:List[str],
                              model_id:str,
@@ -140,7 +141,18 @@ class TrainingJobExcutor(BaseModel):
             doc['ddp_find_unused_parameters'] = False
         else:
             doc['finetuning_type'] = 'full'
-            
+        
+        #如果是dpo或者kto, 暂时固定值
+        if stage == 'dpo':
+            doc['pref_beta'] = job_payload.get("pref_beta",0.1)
+            doc['pref_loss'] = job_payload.get("pref_loss",'sigmoid')
+            doc['pref_ftx'] = job_payload.get("pref_ftx",0)
+            doc['stage'] = 'dpo'
+        elif stage == 'kto':
+            doc['pref_beta'] = job_payload.get("pref_beta",0.1)
+            doc['pref_loss'] = job_payload.get("pref_loss",'sigmoid')
+            doc['pref_ftx'] = job_payload.get("pref_ftx",0)
+            doc['stage'] = 'kto'
 
         doc['model_name_or_path'] = model_id    
         doc['learning_rate']=  float(job_payload['learning_rate'])
@@ -322,12 +334,21 @@ class TrainingJobExcutor(BaseModel):
         model_id=get_model_path_by_name(job_payload['model_name'],repo) if len(job_payload['model_name'].split('/')) < 2 else job_payload['model_name']
         logger.info(f"model_id:{model_id},repo type:{repo}")
         
-        if job_payload['stage'] == 'sft':
-            sg_config,sg_lora_merge_config= self.create_training_yaml(
-                                data_keys=data_keys,
-                                job_payload=job_payload,
-                                 model_id = model_id,
-                                 base_config =LORA_BASE_CONFIG if job_payload['finetuning_method'] == 'lora' else FULL_BASE_CONFIG)
+        if job_payload['stage'] in ['sft','dpo','kto']:
+            if  job_payload['stage']  == 'sft':
+                sg_config,sg_lora_merge_config= self.create_training_yaml(
+                                    stage=job_payload['stage'],
+                                    data_keys=data_keys,
+                                    job_payload=job_payload,
+                                    model_id = model_id,
+                                    base_config =LORA_BASE_CONFIG if job_payload['finetuning_method'] == 'lora' else FULL_BASE_CONFIG)
+            elif job_payload['stage']  == 'dpo':
+                sg_config,sg_lora_merge_config= self.create_training_yaml(
+                    stage=job_payload['stage'],
+                    data_keys=data_keys,
+                    job_payload=job_payload,
+                    model_id = model_id,
+                    base_config =LORA_BASE_CONFIG if job_payload['finetuning_method'] == 'lora' else FULL_BASE_CONFIG)
             
             # Lora和没有设置量化时，merge lora
             merge_lora = '1' if job_payload['finetuning_method'] == 'lora' and job_payload['quantization_bit'] == 'none' else '0'
@@ -386,23 +407,6 @@ class TrainingJobExcutor(BaseModel):
         self.estimator.stop()
         return True
             
-        
-    
-if __name__ == "__main__":
-    datasetinfo = {'ruozhiba':{
-                        'file_name':'ruozhiba.json',
-                        "columns": {
-                        "prompt": "instruction",
-                        "query": "input",
-                        "response": "output",
-                }   
-                }}
-    
-    # excutor = TrainingJobExcutor(job_id='04315aa5-316e-4694-8c46-4725dde9c5a5')
-
-    # excutor.create()
-    # excutor.run()
-    fetch_log(log_stream_name='Meta-Llama-3-8B-Instruct-2024-07-07-15-47-39-934')
     
     
 

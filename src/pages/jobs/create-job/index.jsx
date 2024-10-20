@@ -31,7 +31,7 @@ const defaultData = {
   job_name: '',
   quantization_bit: 'none',
   finetuning_method: 'lora',
-  stage: 'sft',
+  stage: 'Supervised Fine-Tuning',
   learning_rate: '5e-5',
   per_device_train_batch_size: 2,
   gradient_accumulation_steps: 4,
@@ -56,7 +56,10 @@ const defaultData = {
   use_spot: false,
   max_spot_wait:72,
   max_job_run_hour:48,
-  lora_target_modules:'all'
+  lora_target_modules:'all',
+  pref_loss:'sigmoid',
+  pref_beta:0.1,
+  pref_ftx:0
 };
 
 
