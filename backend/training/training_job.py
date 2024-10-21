@@ -335,15 +335,7 @@ class TrainingJobExcutor(BaseModel):
         logger.info(f"model_id:{model_id},repo type:{repo}")
         
         if job_payload['stage'] in ['sft','dpo','kto']:
-            if  job_payload['stage']  == 'sft':
-                sg_config,sg_lora_merge_config= self.create_training_yaml(
-                                    stage=job_payload['stage'],
-                                    data_keys=data_keys,
-                                    job_payload=job_payload,
-                                    model_id = model_id,
-                                    base_config =LORA_BASE_CONFIG if job_payload['finetuning_method'] == 'lora' else FULL_BASE_CONFIG)
-            elif job_payload['stage']  == 'dpo':
-                sg_config,sg_lora_merge_config= self.create_training_yaml(
+            sg_config,sg_lora_merge_config= self.create_training_yaml(
                     stage=job_payload['stage'],
                     data_keys=data_keys,
                     job_payload=job_payload,

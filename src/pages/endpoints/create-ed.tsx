@@ -236,7 +236,6 @@ const InputS3Path = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
         stretch={true}
       >
         <S3Selector 
-                readOnly={readOnly}
                 objectsIsItemDisabled={(item:any) => !item.IsFolder}
                 setOutputPath={(value:any)=>
                    setData((pre: any) => ({ ...pre,  extra_params:{...pre.extra_params,s3_model_path: value } }))
