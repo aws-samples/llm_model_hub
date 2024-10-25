@@ -144,14 +144,14 @@ class TrainingJobExcutor(BaseModel):
         
         #如果是dpo或者kto, 暂时固定值
         if stage == 'dpo':
-            doc['pref_beta'] = job_payload.get("pref_beta",0.1)
+            doc['pref_beta'] = float(job_payload.get("pref_beta",0.1))
             doc['pref_loss'] = job_payload.get("pref_loss",'sigmoid')
-            doc['pref_ftx'] = job_payload.get("pref_ftx",0)
+            doc['pref_ftx'] = float(job_payload.get("pref_ftx",0))
             doc['stage'] = 'dpo'
         elif stage == 'kto':
-            doc['pref_beta'] = job_payload.get("pref_beta",0.1)
-            doc['pref_loss'] = job_payload.get("pref_loss",'sigmoid')
-            doc['pref_ftx'] = job_payload.get("pref_ftx",0)
+            doc['pref_beta'] = float(job_payload.get("pref_beta",0.1))
+            doc['pref_loss'] = float(job_payload.get("pref_loss",'sigmoid'))
+            doc['pref_ftx'] = float(job_payload.get("pref_ftx",0))
             doc['stage'] = 'kto'
 
         doc['model_name_or_path'] = model_id    
