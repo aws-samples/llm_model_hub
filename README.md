@@ -115,7 +115,13 @@ pm2 delete modelhub
 
 # 如何升级？
 - **方法 1**. 下载新的cloudformation 模板进行重新部署，大约12分钟部署完成一个全新的modelhub (此方法以前的job 任务数据会丢失)
-- **方法 2**. 手动更新：
+- **方法 2**. 
+1. 使用一键升级脚本（1.0.6之后支持）：
+```bash
+cd /home/ubuntu/llm_model_hub/backend/
+bash 03.upgrade.sh
+```
+- **方法 3**. 手动更新：
 1. 更新代码, 重新打包byoc镜像
 ```bash
 git pull
@@ -123,7 +129,7 @@ git submodule update --remote
 cd /home/ubuntu/llm_model_hub/backend/byoc
 bash build_and_push.sh 
 ```
-3. 重启服务
+2. 重启服务
 ```bash
 pm2 restart all
 ```
