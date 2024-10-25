@@ -188,12 +188,12 @@ i18n
             hyper_params_settings:'Hyper Parameters Settings',
             training_instance_settings:'Training Instances settings',
             configurations:'Configurations',
-            rlhf_beta:'Beta 参数',
-            rlhf_beta_desc:'损失函数中 beta 超参数大小.',
+            rlhf_beta:'Beta value',
+            rlhf_beta_desc:'Value of the beta parameter in the loss.',
             rlhf_ftx_gamma: 'Ftx gamma',
-            rlhf_ftx_gamma_desc: '损失函数中 SFT 损失的权重大小.',
-            rlhf_loss_type: '损失函数类型'
-
+            rlhf_ftx_gamma_desc: 'The weight of SFT loss in the final loss.',
+            rlhf_loss_type: 'Loss type',
+            public_datasets:'Public datasets'
         }
       },
       zh:{
@@ -369,11 +369,12 @@ i18n
             hyper_params_settings:'训练超参数设置',
             training_instance_settings:'训练实例设置',
             configurations:'参数设置',
-            rlhf_beta:'Beta value',
-            rlhf_beta_desc:'Value of the beta parameter in the loss.',
+            rlhf_beta:'Beta 参数',
+            rlhf_beta_desc:'损失函数中 beta 超参数大小.',
             rlhf_ftx_gamma: 'Ftx gamma',
-            rlhf_ftx_gamma_desc: 'The weight of SFT loss in the final loss.',
-            rlhf_loss_type: 'Loss type'
+            rlhf_ftx_gamma_desc: '损失函数中 SFT 损失的权重大小.',
+            rlhf_loss_type: '损失函数类型',
+            public_datasets:'开源数据集'
 
         }
       }

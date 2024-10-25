@@ -668,7 +668,7 @@ export default function DistributionPanel({
           </FormField>}
 
          <FormField
-            label="Public Datesets"
+            label={t("public_datasets")}
             stretch={false}
             description="select open-source datasets from hf"
             errorText={errors.dataset}
