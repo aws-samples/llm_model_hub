@@ -40,6 +40,9 @@ export const  INSTANCE_TYPES =[
   { label: 'ml.g6.2xlarge', value: 'ml.g6.2xlarge' },
   { label: 'ml.g6.12xlarge', value: 'ml.g6.12xlarge' },
   { label: 'ml.g6.48xlarge', value: 'ml.g6.48xlarge' },
+  { label: 'ml.g6e.2xlarge', value: 'ml.g6e.2xlarge' },
+  { label: 'ml.g6e.12xlarge', value: 'ml.g6e.12xlarge' },
+  { label: 'ml.g6e.48xlarge', value: 'ml.g6e.48xlarge' },
   { label: 'ml.p4d.24xlarge', value: 'ml.p4d.24xlarge' },
   { label: 'ml.p4de.24xlarge', value: 'ml.p4de.24xlarge' },
   { label: 'ml.p5.48xlarge', value: 'ml.p5.48xlarge' }
@@ -48,7 +51,7 @@ export const  INSTANCE_TYPES =[
 
 export const TRAINING_STAGES = [
   { label: 'Supervised Fine-Tuning', value: 'sft' },
-  // { label: 'Pre-Training', value: 'pt' },
+  { label: 'Pre-Training', value: 'pt' },
   // { label: 'Reward Modeling', value: 'rm' },
   // { label: 'PPO', value: 'ppo' },
   { label: 'DPO', value: 'dpo' },
