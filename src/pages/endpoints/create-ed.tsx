@@ -110,6 +110,8 @@ const defaultData = {
   extra_params:{}
 }
 
+const instanceCalculator = process.env.REACT_APP_CALCULATOR;
+
 const SelectModelName = ({ data, setData, readOnly }: SelectModelProps) => {
   // console.log(data)
   const [loadStatus, setLoadStatus] = useState<any>("loading");
@@ -508,7 +510,9 @@ export const DeployModelModal = ({
 
         <FormField
           label="Instance Type"
-          description="Select a Instance type to deploy the model."
+          // description="Select a Instance type to deploy the model."
+          description={<Link href={`${instanceCalculator}`} external>使用机型计算器估算</Link>}
+
           stretch={false}
           errorText={errors.instance_type}
           i18nStrings={{ errorIconAriaLabel: 'Error' }}
