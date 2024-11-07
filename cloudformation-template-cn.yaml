@@ -107,7 +107,8 @@ Resources:
               # Write the EC2_IP and SageMakerRoleArn to frontend .env file
               echo "REACT_APP_API_ENDPOINT=http://$EC2_IP:8000/v1" > /home/ubuntu/llm_model_hub/.env
               echo "REACT_APP_API_KEY=$RANDOM_KEY" >> /home/ubuntu/llm_model_hub/.env
-              
+              echo "REACT_APP_CALCULATOR=https://aws-gpu-memory-caculator.streamlit.app/" >> /home/ubuntu/llm_model_hub/.env
+
               ## write sagemaker role
               echo "AK=" >> /home/ubuntu/llm_model_hub/backend/.env
               echo "SK=" >> /home/ubuntu/llm_model_hub/backend/.env
