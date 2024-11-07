@@ -129,7 +129,8 @@ class TrainingJobExcutor(BaseModel):
         doc['output_dir'] ='/tmp/finetuned_model'
         doc['per_device_train_batch_size'] =int(job_payload['per_device_train_batch_size'])
         doc['gradient_accumulation_steps'] =int(job_payload['gradient_accumulation_steps'])
-        
+        doc['template'] =  DEFAULT_TEMPLATE[job_payload['prompt_template']]
+
         #如果使用lora微调
         if job_payload['finetuning_method'] == 'lora':
             doc['finetuning_type'] = 'lora'
@@ -153,6 +154,9 @@ class TrainingJobExcutor(BaseModel):
             doc['pref_loss'] = float(job_payload.get("pref_loss",'sigmoid'))
             doc['pref_ftx'] = float(job_payload.get("pref_ftx",0))
             doc['stage'] = 'kto'
+        elif stage == 'pt':
+            doc['stage'] = 'pt'
+            doc['template'] = 'default'
 
         doc['model_name_or_path'] = model_id    
         doc['learning_rate']=  float(job_payload['learning_rate'])
@@ -164,9 +168,7 @@ class TrainingJobExcutor(BaseModel):
         
         if val_size:=float(job_payload['val_size']):
             doc['val_size'] = val_size
-            
-        doc['template'] =  DEFAULT_TEMPLATE[job_payload['prompt_template']]
-        
+                    
         if job_payload['booster_option'] == 'fa2':
             doc['flash_attn'] = 'fa2'
         elif job_payload['booster_option']  == 'use_unsloth':
@@ -334,7 +336,7 @@ class TrainingJobExcutor(BaseModel):
         model_id=get_model_path_by_name(job_payload['model_name'],repo) if len(job_payload['model_name'].split('/')) < 2 else job_payload['model_name']
         logger.info(f"model_id:{model_id},repo type:{repo}")
         
-        if job_payload['stage'] in ['sft','dpo','kto']:
+        if job_payload['stage'] in ['sft','dpo','kto','pt']:
             sg_config,sg_lora_merge_config= self.create_training_yaml(
                     stage=job_payload['stage'],
                     data_keys=data_keys,
