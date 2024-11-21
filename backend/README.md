@@ -48,6 +48,7 @@ cd ~/llm_model_hub/backend/byoc
 bash build_and_push.sh
 source ../../miniconda3/bin/activate py311
 conda activate py311
+pip install -U sagemaker
 python3 startup.py 
 ```
 
