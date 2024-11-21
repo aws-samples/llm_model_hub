@@ -156,7 +156,6 @@ Resources:
               log "Adding user to database"
               source ../miniconda3/bin/activate py311
               conda activate py311
-              pip install -U sagemaker
               python3 users/add_user.py demo_user $RANDOM_PASSWORD default || { log "Failed to add user to database"; exit 1; }
 
               # 构建镜像
