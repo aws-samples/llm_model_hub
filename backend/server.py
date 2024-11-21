@@ -11,7 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.security.http import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseSettings
+# from pydantic_settings import BaseSettings
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.responses import StreamingResponse
 from typing import AsyncIterable

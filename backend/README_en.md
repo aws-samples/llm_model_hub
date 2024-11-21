@@ -1,86 +1,139 @@
-## ENV Setup
-
-### Install python virtual env
+# Backend Environment Installation
+## 0. Notes for China Region (Overseas regions can skip)
+1. If deploying in China region, please execute the following script first to modify pip source and docker source.
 ```bash
-conda create -n py311 python=3.11
+bash 0.setup-cn.sh
+```
+
+## 1. Install Backend Environment
+1. Enter backend directory, copy env.sample file to .env
+```bash
+cd backend
+cp env.sample .env
+```
+2. Modify and edit .env file
+```bash
+vim .env
+```
+* 1. If EC2 is already bound to a role, no need to fill in AK, SK and profile
+* 2. Modify region to actual region
+* 3. Modify role to the arn of the sagemaker execution role created earlier in IAM
+* 4. Modify api_keys to match the api key in the parent directory's .env file, keep frontend and backend consistent
+* 5. Some models (like LLaMA etc.) require HUGGING_FACE_HUB_TOKEN, please add it to .env
+```bash
+AK=
+SK=
+profile=
+region=us-east-1
+role=arn:aws:iam::
+db_host=127.0.0.1
+db_name=llm
+db_user=llmdata
+db_password=llmdata
+api_keys=
+HUGGING_FACE_HUB_TOKEN=
+WANDB_API_KEY=
+WANDB_BASE_URL=
+MAX_MODEL_LEN=4096
+```
+
+2. Still in backend/ directory, execute the following command to install
+```bash
+bash 01.setup.sh
+```
+
+- 2.1 Package vllm inference image
+```bash
+cd ~/llm_model_hub/backend/byoc
+bash build_and_push.sh
+source ../../miniconda3/bin/activate py311
 conda activate py311
+pip install -U sagemaker
+python3 startup.py
 ```
 
-### Install requirements
+## 2. Add Users
+- Still in backend/ directory, execute the following Python script command to add users
 ```bash
-pip install -r requirements.txt
+cd ~/llm_model_hub/backend/
+source ../miniconda3/bin/activate py311
+conda activate py311
+python3 users/add_user.py your_username your_password default
 ```
+Please add your own username and password, and save them in a secure location.
 
-### Setup MYSQL
-- Install Docker
-Log in to the EC2 instance using SSH command as the ec2-user user or use the AWS EC2 Instance Connect feature in the EC2 console to log in to the command line. 
-
-In the session, execute the following commands.
- **Note: Execute each command one line at a time.**
-```bash  
-# Install components
-sudo yum install docker python3-pip git -y && pip3 install -U awscli && pip install pyyaml==5.3.1 && pip3 install docker-compose
-
-
-# Fix docker python wrapper 7.0 SSL version issue  
-pip3 install docker==6.1.3
-
-# Configure components
-sudo systemctl enable docker && sudo systemctl start docker && sudo usermod -aG docker $USER
-
-```
-
-- Pull the MySQL Docker image:
-Open a terminal and run the following command to download the official MySQL image:
-- Create and run a MySQL container:
+## 3. Start Background Processes
+- Execute the following command to start background processes
 ```bash
-docker run -d \
-  --name hub-mysql \
-  -p 3306:3306 \
-  -e MYSQL_ROOT_PASSWORD=1234560 \
-  -e MYSQL_DATABASE=llm \
-  -e MYSQL_USER=llmdata \
-  -e MYSQL_PASSWORD=llmdata \
-  -v mysql-data:/var/lib/mysql \
-  -v $(pwd)/scripts:/opt/data \
-  --restart always \
-  mysql:8.0
+bash 02.start_backend.sh
 ```
-
-- Verify the container is running:
+- Use the following command to check if background processes started successfully
 ```bash
-docker ps
+pm2 list
 ```
+modelhub is the frontend process, modelhub-engine and modelhub-server are backend processes
+![alt text](../assets/image-pm2list.png)
 
-- Download script file and setup the database:
+## 4. Install nginx (Optional)
+- Install nginx
 ```bash
-cd scripts 
-
-docker exec hub-mysql sh -c "mysql -u root -p1234560 -D llm  < /opt/data/mysql_setup.sql"
+sudo apt update
+sudo apt install nginx
 ```
 
-- To login in cmd line
+- Create nginx configuration file
+Purpose:
+  Let backend webserver Listen on port 443 without SSL
+  Forward requests to your application running on localhost:8000
+
+Note: Need to change xxx.compute.amazonaws.com to actual EC2 DNS name
 ```bash
-docker exec -it hub-mysql mysql -u root -p1234560
+sudo vim /etc/nginx/sites-available/modelhub
 ```
 
-- To stop the container when you're done, use:
+```nginx
+server {
+    listen 80;
+    server_name xxx.compute.amazonaws.com;
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 443;
+    server_name xxx.compute.amazonaws.com;
+
+    location / {
+        proxy_pass http://localhost:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+- Change server name bucket size
+- Open nginx configuration file
 ```bash
-docker stop hub-mysql
+sudo vim /etc/nginx/nginx.conf
+```
+- Change server_names_hash_bucket_size to 256
+```nginx
+http {
+    server_names_hash_bucket_size 256;
+    # ... other configurations ...
+}
 ```
 
-- To remove the container when you're done, use:
+- Apply configuration:
 ```bash
-docker rm hub-mysql
+sudo ln -s /etc/nginx/sites-available/modelhub /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
 ```
-
-- To start it again later, use:
-```bash
-docker start hub-mysql
-```
-
-### Run
-```bash
-python3 server.py --host 0.0.0.0 --port 8000
-```
-
