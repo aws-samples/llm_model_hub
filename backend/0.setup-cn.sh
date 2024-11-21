@@ -50,10 +50,19 @@ sudo tee "$DOCKER_CONFIG" > /dev/null <<EOT
 { 
   "registry-mirrors" : 
     [ 
-        "https://docker.m.daocloud.io",
-        "https://dockerproxy.com",
-        "https://docker.nju.edu.cn",
-        "https://docker.mirrors.ustc.edu.cn"
+        "https://docker.registry.cyou",
+        "https://docker-cf.registry.cyou",
+        "https://dockerpull.com",
+        "https://dockerproxy.cn",
+        "https://docker.1panel.live",
+        "https://hub.rat.dev",
+        "https://docker.anyhub.us.kg",
+        "https://docker.chenby.cn",
+        "https://dockerhub.icu",
+        "https://docker.awsl9527.cn",
+        "https://dhub.kubesre.xyz",
+        "https://docker.hlyun.org",
+        "https://docker.m.daocloud.io"
     ] 
 }
 EOT
