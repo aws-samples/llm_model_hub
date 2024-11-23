@@ -1,4 +1,3 @@
 [submodule "backend/LLaMA-Factory"]
 	path = backend/LLaMA-Factory
-	url = https://github.com/xiehust/LLaMA-Factory.git
-	branch = main
+	url = https://github.com/hiyouga/LLaMA-Factory.git

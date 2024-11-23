@@ -7,10 +7,10 @@ import pickle
 
 dotenv.load_dotenv()
 print(os.environ)
-QLORA_BASE_CONFIG = './LLaMA-Factory/examples/train_qlora/llama3_lora_sft_bitsandbytes.yaml'
-LORA_BASE_CONFIG = './LLaMA-Factory/examples/train_lora/llama3_lora_sft.yaml'
-FULL_BASE_CONFIG = './LLaMA-Factory/examples/train_full/llama3_full_sft_ds3.yaml'
-DATASET_INFO_FILE = './LLaMA-Factory/data/dataset_info.json'
+QLORA_BASE_CONFIG = './docker/LLaMA-Factory/examples/train_qlora/llama3_lora_sft_bitsandbytes.yaml'
+LORA_BASE_CONFIG = './docker/LLaMA-Factory/examples/train_lora/llama3_lora_sft.yaml'
+FULL_BASE_CONFIG = './docker/LLaMA-Factory/examples/train_full/llama3_full_sft_ds3.yaml'
+DATASET_INFO_FILE = './docker/LLaMA-Factory/data/dataset_info.json'
 SUPPORTED_MODELS_FILE = './utils/supported_models.pkl'
 DEFAULT_TEMPLATE_FILE = './utils/default_template.pkl'
 
