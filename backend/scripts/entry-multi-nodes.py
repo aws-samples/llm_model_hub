@@ -189,4 +189,3 @@ if __name__ == "__main__":
         sync_final_command = f'./s5cmd sync --exclude "checkpoint-*" /tmp/finetuned_model {os.environ["OUTPUT_MODEL_S3_PATH"]}'
         run_command(sync_final_command)
         print(f'-----finished cp-------')
-  

@@ -71,5 +71,4 @@ echo "Docker configuration added to $DOCKER_CONFIG"
 # 重启 Docker 服务
 sudo systemctl restart docker
 echo "Docker service restarted"
-
 echo "Script execution completed."

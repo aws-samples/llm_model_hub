@@ -267,7 +267,7 @@ class TrainingJobExcutor(BaseModel):
             "merge_args_path":sg_lora_merge_config,
             "train_args_path":sg_config,
             'OUTPUT_MODEL_S3_PATH': output_s3_path, # destination 
-            "PIP_INDEX":'https://pypi.tuna.tsinghua.edu.cn/simple' if DEFAULT_REGION.startswith('cn') else '',
+            "PIP_INDEX":'https://mirrors.aliyun.com/pypi/simple' if DEFAULT_REGION.startswith('cn') else '',
             "USE_MODELSCOPE_HUB": "1" if DEFAULT_REGION.startswith('cn') else '0'
             
         }
@@ -277,36 +277,35 @@ class TrainingJobExcutor(BaseModel):
             environment["WANDB_API_KEY"] = WANDB_API_KEY
         else:
             environment["WANDB_DISABLED"] = "true"
-        entry_point = 'entry_single_lora.py' if instance_num == 1 else 'entry-multi-nodes.py'
         self.output_s3_path = output_s3_path
-        # self.estimator = PyTorch(entry_point=entry_point,
-        #                             source_dir='./LLaMA-Factory/',
-        #                             role=role,
-        #                             use_spot_instances=use_spot,
-        #                             sagemaker_session=sagemaker_session,
-        #                             base_job_name=base_job_name,
-        #                             environment=environment,
-        #                             framework_version='2.3.0',
-        #                             py_version='py311',
-        #                             script_mode=True,
-        #                             instance_count=instance_num,
-        #                             instance_type=instance_type,
-        #                             max_wait= 3600*max_spot_wait if use_spot else None,
-        #                             enable_remote_debug=True,
-        #                             # keep_alive_period_in_seconds=600,
-        #                             max_run=3600*max_job_run_hour)
-        self.estimator = Estimator(image_uri=os.environ['training_image'],
-                            role=role,
-                            use_spot_instances=use_spot,
-                            sagemaker_session=sagemaker_session,
-                            base_job_name=base_job_name,
-                            environment=environment,
-                            instance_count=instance_num,
-                            instance_type=instance_type,
-                            max_wait= 3600*max_spot_wait if use_spot else None,
-                            max_run=3600*max_job_run_hour,
-                            enable_remote_debug=True
-                            )
+        self.estimator = PyTorch(entry_point='train.py',
+                                    source_dir='./LLaMA-Factory/',
+                                    role=role,
+                                    use_spot_instances=use_spot,
+                                    sagemaker_session=sagemaker_session,
+                                    base_job_name=base_job_name,
+                                    environment=environment,
+                                    framework_version='2.3.0',
+                                    py_version='py311',
+                                    script_mode=True,
+                                    instance_count=instance_num,
+                                    instance_type=instance_type,
+                                    max_wait= 3600*max_spot_wait if use_spot else None,
+                                    enable_remote_debug=True,
+                                    # keep_alive_period_in_seconds=600,
+                                    max_run=3600*max_job_run_hour)
+        # self.estimator = Estimator(image_uri=os.environ['training_image'],
+        #                     role=role,
+        #                     use_spot_instances=use_spot,
+        #                     sagemaker_session=sagemaker_session,
+        #                     base_job_name=base_job_name,
+        #                     environment=environment,
+        #                     instance_count=instance_num,
+        #                     instance_type=instance_type,
+        #                     max_wait= 3600*max_spot_wait if use_spot else None,
+        #                     max_run=3600*max_job_run_hour,
+        #                     enable_remote_debug=True
+        #                     )
         
         
     def create(self):

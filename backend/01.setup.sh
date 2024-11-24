@@ -40,3 +40,6 @@ sleep 60
 echo "create database and import data....."
 cd scripts 
 docker exec hub-mysql sh -c "mysql -u root -p1234560 -D llm  < /opt/data/mysql_setup.sql"
+
+#把脚本拷入到LF目录下 
+cp scripts/* LLaMA-Factory/
