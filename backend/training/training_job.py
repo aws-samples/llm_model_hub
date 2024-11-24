@@ -295,8 +295,7 @@ class TrainingJobExcutor(BaseModel):
         #                             enable_remote_debug=True,
         #                             # keep_alive_period_in_seconds=600,
         #                             max_run=3600*max_job_run_hour)
-        self.estimator = PyTorch(image_uri=os.environ['training_image'],
-                            entry_point = "training/train.py",
+        self.estimator = Estimator(image_uri=os.environ['training_image'],
                             role=role,
                             use_spot_instances=use_spot,
                             sagemaker_session=sagemaker_session,
@@ -305,7 +304,8 @@ class TrainingJobExcutor(BaseModel):
                             instance_count=instance_num,
                             instance_type=instance_type,
                             max_wait= 3600*max_spot_wait if use_spot else None,
-                            max_run=3600*max_job_run_hour
+                            max_run=3600*max_job_run_hour,
+                            enable_remote_debug=True
                             )
         
         

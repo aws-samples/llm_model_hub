@@ -17,10 +17,8 @@ RUN apt-get update && apt-get install -y \
 
 # Make PIP_INDEX available after FROM
 ARG PIP_INDEX
-ARG INSTALL_FLASHATTN=true
 # Install sagemaker-training toolkit that contains the common functionality necessary to create a container compatible with SageMaker and the Python SDK.
 RUN pip3 install sagemaker-training
-
 
 
 
@@ -38,15 +36,11 @@ RUN pip config set global.index-url "$PIP_INDEX" && \
     python -m pip install --upgrade pip && \
     python -m pip install -r requirements.txt && pip install -e .
 
-# Rebuild flash attention
-# RUN pip uninstall -y transformer-engine flash-attn && \
-# if [ "$INSTALL_FLASHATTN" == "true" ]; then \
-#     pip uninstall -y ninja && pip install ninja && \
-#     pip install --no-cache-dir flash-attn --no-build-isolation; \
-# fi
 
 # Instal extral dependencies
-RUN python -m pip install -r requirements_deps.txt
+RUN python -m pip install -r requirements_deps.txt 
+RUN pip3 uninstall -y intel-extension-for-pytorch
+
 
 
 # 定义环境变量

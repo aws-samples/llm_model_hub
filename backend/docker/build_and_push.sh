@@ -14,7 +14,7 @@ region=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/la
 # region=$(aws configure get region)
 suffix="com"
 
-if [[ "$region" == cn*  ]]; then
+if [ "$region" == cn*  ]; then
     suffix="com.cn"
 fi
 
@@ -34,15 +34,15 @@ then
 fi
 
 # Get the login command from ECR and execute it directly
-# aws  ecr get-login-password --region $region | docker login --username AWS --password-stdin $account.dkr.ecr.$region.amazonaws.${suffix}
+aws  ecr get-login-password --region $region | docker login --username AWS --password-stdin $account.dkr.ecr.$region.amazonaws.${suffix}
 # First, authenticate with AWS ECR
 # Run these commands in your terminal before building:
 
-if [[ "$region" == cn*  ]]; then
-    aws ecr get-login-password --region $region | docker login --username AWS --password-stdin 727897471807.dkr.ecr.$region.amazonaws.${suffix}
-else
-    aws ecr get-login-password --region $region | docker login --username AWS --password-stdin 763104351884.dkr.ecr.$region.amazonaws.${suffix}
-fi
+# if [[ "$region" == cn*  ]]; then
+#     aws ecr get-login-password --region $region | docker login --username AWS --password-stdin 727897471807.dkr.ecr.$region.amazonaws.${suffix}
+# else
+#     aws ecr get-login-password --region $region | docker login --username AWS --password-stdin 763104351884.dkr.ecr.$region.amazonaws.${suffix}
+# fi
 
 aws ecr set-repository-policy \
     --repository-name "${inference_image}" \
@@ -52,12 +52,13 @@ aws ecr set-repository-policy \
 # Build the docker image locally with the image name and then push it to ECR
 # with the full name.
 
-# Add variables for build arguments
+# Add variables for build arguments pytorch-training:2.5.1-gpu-py311-cu124-ubuntu22.04-sagemaker
+# https://github.com/aws/deep-learning-containers/blob/master/available_images.md
 if [[ "$region" == cn*  ]]; then
-    BASE_IMAGE="727897471807.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.5.1-gpu-py311-cu124-ubuntu22.04-sagemaker"
+    BASE_IMAGE="727897471807.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.3.0-gpu-py311"
     PIP_INDEX="https://mirrors.aliyun.com/pypi/simple"
 else
-    BASE_IMAGE="763104351884.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.5.1-gpu-py311-cu124-ubuntu22.04-sagemaker"
+    BASE_IMAGE="763104351884.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.3.0-gpu-py311"
     PIP_INDEX="https://pypi.org/simple"
 fi
 
