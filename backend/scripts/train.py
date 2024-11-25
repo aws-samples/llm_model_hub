@@ -112,14 +112,14 @@ if __name__ == "__main__":
     os.environ['NODE_INDEX'] = str(host_rank)
     os.environ['SM_MASTER'] = str(master)
     os.environ['SM_MASTER_ADDR'] = str(master_addr)
-    os.environ['NCCL_SOCKET_IFNAME'] = 'eth0'
+    os.environ['NCCL_SOCKET_IFNAME'] = os.environ["SM_NETWORK_INTERFACE_NAME"]
 
     # backend env config
     # os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
     os.environ['FI_PROVIDER'] = 'efa'
-    os.environ['NCCL_PROTO'] = 'simple'
+    # os.environ['NCCL_PROTO'] = 'simple'
     # os.environ['FI_EFA_USE_DEVICE_RDMA'] = '1'
-    os.environ['NCCL_DEBUG'] = 'INFO'
+    os.environ['NCCL_DEBUG'] = 'ERROR'
     os.environ['HCCL_OVER_OFI'] = '1'
     os.environ["NCCL_IGNORE_DISABLED_P2P"] = "1"
 
@@ -173,9 +173,9 @@ if __name__ == "__main__":
         # 启动checkpoint监控进程
         start_monitoring()
 
-    print(f'------envs------\nnum_machines:{num_machines}\nnum_processes:{num_processes}\nhost_rank:{host_rank}\n')
+    print(f'------envs------\nnum_machines:{num_machines}\nnum_processes:{num_processes}\nnode_rank:{host_rank}\n')
     if num_machines > 1: 
-        train_command = f"FORCE_TORCHRUN=1  NNODES={num_machines} RANK={host_rank} MASTER_ADDR={master_addr} MASTER_PORT=29500 llamafactory-cli train {train_args}"
+        train_command = f"FORCE_TORCHRUN=1  NNODES={num_machines} NODE_RANK={host_rank} MASTER_ADDR={master_addr} llamafactory-cli train {train_args}"
     else:
         train_command = f"CUDA_VISIBLE_DEVICES={DEVICES} llamafactory-cli train {train_args}"
 

@@ -285,7 +285,7 @@ class TrainingJobExcutor(BaseModel):
                                     sagemaker_session=sagemaker_session,
                                     base_job_name=base_job_name,
                                     environment=environment,
-                                    framework_version='2.3.0',
+                                    framework_version='2.4.0',
                                     py_version='py311',
                                     script_mode=True,
                                     instance_count=instance_num,
