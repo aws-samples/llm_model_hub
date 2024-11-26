@@ -16,7 +16,7 @@ from utils.llamafactory.extras.constants import DEFAULT_TEMPLATE,DownloadSource
 import time
 import dotenv
 import os
-from utils.config import boto_sess,role,default_bucket,sagemaker_session, \
+from utils.config import boto_sess,role,default_bucket,sagemaker_session, is_efa, \
 LORA_BASE_CONFIG,DEEPSPEED_BASE_CONFIG_MAP,FULL_BASE_CONFIG,DEFAULT_REGION,WANDB_API_KEY, WANDB_BASE_URL
 
 dotenv.load_dotenv()
@@ -242,6 +242,7 @@ class TrainingJobExcutor(BaseModel):
         
     def create_training(self,
                         model_id:str,
+                        dataset_info_path:str,
                         sg_config:str,
                         use_spot:bool,
                         max_spot_wait:int,
@@ -261,13 +262,16 @@ class TrainingJobExcutor(BaseModel):
         environment = {
             'NODE_NUMBER':str(instance_num),
             "s3_data_paths":f"{training_input_path}",
+            "dataset_info_path":dataset_info_path,
             "s3_checkpoint":s3_checkpoint,
             "s3_model_path":s3_model_path,
+            "USE_EFA": "1" if is_efa(instance_type) else "0",
             "HUGGING_FACE_HUB_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
+            "merge_lora":merge_lora,
             "merge_args_path":sg_lora_merge_config,
             "train_args_path":sg_config,
             'OUTPUT_MODEL_S3_PATH': output_s3_path, # destination 
-            "PIP_INDEX":'https://pypi.tuna.tsinghua.edu.cn/simple' if DEFAULT_REGION.startswith('cn') else '',
+            "PIP_INDEX":'https://mirrors.aliyun.com/pypi/simple' if DEFAULT_REGION.startswith('cn') else '',
             "USE_MODELSCOPE_HUB": "1" if DEFAULT_REGION.startswith('cn') else '0'
             
         }
@@ -277,7 +281,7 @@ class TrainingJobExcutor(BaseModel):
             environment["WANDB_API_KEY"] = WANDB_API_KEY
         else:
             environment["WANDB_DISABLED"] = "true"
-        entry_point = 'entry_single_lora.py' if instance_num == 1 else 'entry-multi-nodes.py'
+        # entry_point = 'entry_single_lora.py' if instance_num == 1 else 'entry-multi-nodes.py'
         self.output_s3_path = output_s3_path
         # self.estimator = PyTorch(entry_point=entry_point,
         #                             source_dir='./LLaMA-Factory/',
@@ -333,7 +337,14 @@ class TrainingJobExcutor(BaseModel):
         
         data_keys = job_payload.get('dataset',[])+s3_datakeys
 
-        prepare_dataset_info(dataset_info)
+        # add to dataset_info
+        dataset_info = prepare_dataset_info(dataset_info)
+        # upload to s3
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        uuid = shortuuid.uuid()
+        dataset_info_path = f's3://{default_bucket}/llm_modelhub/dataset_info/dataset_info_{timestamp}_{uuid}.json'
+        save_json_to_s3(dataset_info_path, dataset_info)
+
         
         #model_id参数
         repo = DownloadSource.MODELSCOPE if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
@@ -368,6 +379,7 @@ class TrainingJobExcutor(BaseModel):
                     
             print('use_spot:',job_payload.get("use_spot",False))
             self.create_training(sg_config=sg_config,
+                                    dataset_info_path=dataset_info_path,
                                     use_spot = job_payload.get("use_spot",False),
                                     max_spot_wait = int(job_payload.get("max_spot_wait",72)),
                                     max_job_run_hour = int(job_payload.get("max_job_run_hour",48)),

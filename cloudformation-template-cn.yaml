@@ -57,8 +57,15 @@ Resources:
           !Sub 
             - |
               #!/bin/bash
-              echo "Starting UserData script execution" >> /var/log/user-data.log
+              # 设置日志文件
+              LOG_FILE="/var/log/user-data.log"
 
+              # 函数：记录日志
+              log() {
+                echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
+              }
+
+              log "Starting UserData script execution"
               sudo apt update
               sudo apt install -y git
               
@@ -135,10 +142,17 @@ Resources:
               conda activate py311
               python3 users/add_user.py demo_user $RANDOM_PASSWORD default
 
-              #build image
+              #build vllm image
               cd /home/ubuntu/llm_model_hub/backend/byoc
               sudo -u ubuntu bash build_and_push.sh
               sleep 5
+
+              # 构建llamafactory镜像
+              log "Building and pushing llamafactory image"
+              cd /home/ubuntu/llm_model_hub/backend/docker
+              sudo -u ubuntu bash build_and_push.sh || { log "Failed to build and push llamafactory image"; exit 1; }
+              sleep 5
+
               #upload dummy tar.gz
               sudo -u ubuntu ../../miniconda3/envs/py311/bin/python startup.py 
 

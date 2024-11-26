@@ -23,11 +23,13 @@ def prepare_dataset_info(data_info:Dict[str,Any]):
                 datainfo = json.load(f)
             for key in list(data_info.keys()):
                 datainfo[key] = data_info[key]
-            with open(file_name, 'w') as f:
-                json.dump(datainfo, f)
+            # with open(file_name, 'w') as f:
+            #     json.dump(datainfo, f)
+            return datainfo
             # logger.info('Successfully saved dataset_info.json')
         except Exception as e:
             print(f'Error in prepare_dataset_info: {str(e)}')
+            return {}
             
 
 def to_datetime_string(unix_timestamp, format_string="%Y-%m-%d %H:%M:%S.%f"):

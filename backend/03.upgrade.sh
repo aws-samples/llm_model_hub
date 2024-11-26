@@ -1,10 +1,9 @@
 #!/bin/bash
-rm /home/ubuntu/llm_model_hub/backend/LLaMA-Factory/sg_config*
-cd /home/ubuntu/llm_model_hub/backend/LLaMA-Factory/
-git stash
+cd /home/ubuntu/llm_model_hub/backend/docker/
+sh build_and_push.sh
 cd /home/ubuntu/llm_model_hub/backend/
 git pull
-git submodule update --remote
+git submodule update 
 source ../miniconda3/bin/activate py311
 pip install -r requirements.txt
 cd /home/ubuntu/llm_model_hub/backend/byoc/

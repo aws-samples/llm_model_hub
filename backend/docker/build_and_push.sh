@@ -21,7 +21,7 @@ fi
 # Get the account number associated with the current IAM credentials
 account=$(aws sts  get-caller-identity --query Account --output text)
 
-VERSION=latest
+VERSION=0.9.2.dev0
 inference_image=llamafactory/llamafactory
 inference_fullname=${account}.dkr.ecr.${region}.amazonaws.${suffix}/${inference_image}:${VERSION}
 
@@ -35,14 +35,15 @@ fi
 
 # Get the login command from ECR and execute it directly
 aws  ecr get-login-password --region $region | docker login --username AWS --password-stdin $account.dkr.ecr.$region.amazonaws.${suffix}
+
 # First, authenticate with AWS ECR
 # Run these commands in your terminal before building:
 
-# if [[ "$region" == cn*  ]]; then
-#     aws ecr get-login-password --region $region | docker login --username AWS --password-stdin 727897471807.dkr.ecr.$region.amazonaws.${suffix}
-# else
-#     aws ecr get-login-password --region $region | docker login --username AWS --password-stdin 763104351884.dkr.ecr.$region.amazonaws.${suffix}
-# fi
+if [[ "$region" == cn*  ]]; then
+    aws ecr get-login-password --region $region | docker login --username AWS --password-stdin 727897471807.dkr.ecr.$region.amazonaws.${suffix}
+else
+    aws ecr get-login-password --region $region | docker login --username AWS --password-stdin 763104351884.dkr.ecr.$region.amazonaws.${suffix}
+fi
 
 aws ecr set-repository-policy \
     --repository-name "${inference_image}" \
@@ -55,10 +56,10 @@ aws ecr set-repository-policy \
 # Add variables for build arguments pytorch-training:2.5.1-gpu-py311-cu124-ubuntu22.04-sagemaker
 # https://github.com/aws/deep-learning-containers/blob/master/available_images.md
 if [[ "$region" == cn*  ]]; then
-    BASE_IMAGE="727897471807.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.3.0-gpu-py311"
+    BASE_IMAGE="727897471807.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.4.0-gpu-py311"
     PIP_INDEX="https://mirrors.aliyun.com/pypi/simple"
 else
-    BASE_IMAGE="763104351884.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.3.0-gpu-py311"
+    BASE_IMAGE="763104351884.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.4.0-gpu-py311"
     PIP_INDEX="https://pypi.org/simple"
 fi
 

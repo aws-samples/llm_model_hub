@@ -158,10 +158,16 @@ Resources:
               conda activate py311
               python3 users/add_user.py demo_user $RANDOM_PASSWORD default || { log "Failed to add user to database"; exit 1; }
 
-              # 构建镜像
-              log "Building and pushing image"
+              # 构建vllm镜像
+              log "Building and pushing vllm image"
               cd /home/ubuntu/llm_model_hub/backend/byoc
-              sudo -u ubuntu bash build_and_push.sh || { log "Failed to build and push image"; exit 1; }
+              sudo -u ubuntu bash build_and_push.sh || { log "Failed to build and push vllm image"; exit 1; }
+              sleep 5
+
+              # 构建llamafactory镜像
+              log "Building and pushing llamafactory image"
+              cd /home/ubuntu/llm_model_hub/backend/docker
+              sudo -u ubuntu bash build_and_push.sh || { log "Failed to build and push llamafactory image"; exit 1; }
               sleep 5
 
               # 上传 dummy tar.gz

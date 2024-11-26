@@ -39,7 +39,7 @@ RUN pip config set global.index-url "$PIP_INDEX" && \
 
 # Instal extral dependencies
 RUN python -m pip install -r requirements_deps.txt 
-RUN pip3 uninstall -y intel-extension-for-pytorch
+RUN pip uninstall -y intel-extension-for-pytorch
 
 
 

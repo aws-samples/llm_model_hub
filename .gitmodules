@@ -1,3 +1,3 @@
-[submodule "backend/LLaMA-Factory"]
-	path = backend/LLaMA-Factory
+[submodule "backend/docker/LLaMA-Factory"]
+	path = backend/docker/LLaMA-Factory
 	url = https://github.com/hiyouga/LLaMA-Factory.git

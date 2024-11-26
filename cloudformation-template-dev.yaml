@@ -27,6 +27,11 @@ Parameters:
     Description: Optional WANDB API Key for view W&B in wandb.ai
     Default: ""
 
+  WandbBaseUrl:
+    Type: String
+    Description: Optional WANDB Base URL for view W&B own Wandb portal
+    Default: ""
+
 Resources:
   EC2Instance:
     Type: AWS::EC2::Instance
@@ -44,7 +49,7 @@ Resources:
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
-            VolumeSize: 200
+            VolumeSize: 500
             VolumeType: gp3
       IamInstanceProfile: !Ref EC2InstanceProfile
       UserData:
@@ -86,7 +91,7 @@ Resources:
               log "Cloning repository"
               sudo su ubuntu
               cd /home/ubuntu/
-              git clone --recurse-submodule https://github.com/aws-samples/llm_model_hub.git -b dev|| { log "Failed to clone repository"; exit 1; }
+              git clone --recurse-submodule https://github.com/aws-samples/llm_model_hub.git -b docker|| { log "Failed to clone repository"; exit 1; }
               cd /home/ubuntu/llm_model_hub
               yarn install || { log "Failed to run yarn install"; exit 1; }
 
@@ -129,6 +134,7 @@ Resources:
               api_keys=$RANDOM_KEY
               HUGGING_FACE_HUB_TOKEN=${HuggingFaceHubToken}
               WANDB_API_KEY=${WandbApiKey}
+              WANDB_BASE_URL=${WandbBaseUrl}
               MAX_MODEL_LEN=4096
               EOF
 
@@ -152,10 +158,16 @@ Resources:
               conda activate py311
               python3 users/add_user.py demo_user $RANDOM_PASSWORD default || { log "Failed to add user to database"; exit 1; }
 
-              # 构建镜像
-              log "Building and pushing image"
+              # 构建vllm镜像
+              log "Building and pushing vllm image"
               cd /home/ubuntu/llm_model_hub/backend/byoc
-              sudo -u ubuntu bash build_and_push.sh || { log "Failed to build and push image"; exit 1; }
+              sudo -u ubuntu bash build_and_push.sh || { log "Failed to build and push vllm image"; exit 1; }
+              sleep 5
+
+              # 构建llamafactory镜像
+              log "Building and pushing llamafactory image"
+              cd /home/ubuntu/llm_model_hub/backend/docker
+              sudo -u ubuntu bash build_and_push.sh || { log "Failed to build and push llamafactory image"; exit 1; }
               sleep 5
 
               # 上传 dummy tar.gz
@@ -187,6 +199,7 @@ Resources:
             - SageMakerRoleArn: !GetAtt SageMakerExecutionRole.Arn
               HuggingFaceHubToken: !Ref HuggingFaceHubToken
               WandbApiKey: !Ref WandbApiKey
+              WandbBaseUrl: !Ref WandbBaseUrl
 
   EC2SecurityGroup:
     Type: AWS::EC2::SecurityGroup

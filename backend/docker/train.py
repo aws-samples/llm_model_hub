@@ -96,6 +96,11 @@ if __name__ == "__main__":
 
     train_args_json = load_s3_json(os.environ['train_args_path'])
     merge_args_json = load_s3_json(os.environ['merge_args_path'])
+    datainfo = load_s3_json(os.environ['dataset_info_path'])
+
+    #save to data folder
+    with open('/opt/ml/code/data/dataset_info.json', 'w') as f:
+        json.dump(datainfo, f)
 
     train_args = dict_to_cmd_args(train_args_json)
     merge_args = dict_to_cmd_args(merge_args_json)
@@ -112,16 +117,22 @@ if __name__ == "__main__":
     os.environ['NODE_INDEX'] = str(host_rank)
     os.environ['SM_MASTER'] = str(master)
     os.environ['SM_MASTER_ADDR'] = str(master_addr)
-    os.environ['NCCL_SOCKET_IFNAME'] = 'eth0'
 
     # backend env config
     # os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-    os.environ['FI_PROVIDER'] = 'efa'
-    os.environ['NCCL_PROTO'] = 'simple'
-    # os.environ['FI_EFA_USE_DEVICE_RDMA'] = '1'
-    os.environ['NCCL_DEBUG'] = 'INFO'
-    os.environ['HCCL_OVER_OFI'] = '1'
+    if os.environ.get('USE_EFA') == '1':
+        os.environ['FI_PROVIDER'] = 'efa'
+        os.environ['FI_EFA_USE_DEVICE_RDMA'] = '1'
+    else:
+        os.environ['NCCL_SOCKET_IFNAME'] = os.environ["SM_NETWORK_INTERFACE_NAME"]
+
+
+    os.environ['NCCL_DEBUG'] = 'ERROR'
+    # os.environ['NCCL_OVER_OFI'] = '1'
     os.environ["NCCL_IGNORE_DISABLED_P2P"] = "1"
+ 
+    # override deepspeed auto-detect pitfall
+    os.environ["DS_ACCELERATOR"] = "cuda"
 
     s3_data_paths = os.environ.get('s3_data_paths')
 
@@ -132,11 +143,12 @@ if __name__ == "__main__":
 
     # index_path = os.environ.get('PIP_INDEX')
     # if index_path:
-    #     os.system(f"pip install -r requirements.txt -i {index_path}")
+    #     os.system(f"pip config set global.index-url {index_path}")
+    #     os.system(f"pip config set global.extra-index-url  {index_path}")
+    #     os.system(f"pip install -r requirements_deps.txt")
     # else:
-    #     os.system("pip install -r requirements.txt")
-    #     ## China region cannot install flash_attn from pip
-    #     os.system("pip install flash_attn==2.6.3")
+    #     os.system(f"pip install -r requirements_deps.txt")
+
     
     os.system("chmod +x ./s5cmd")
 
@@ -165,16 +177,16 @@ if __name__ == "__main__":
         run_command(f'./s5cmd sync --exclude "checkpoint-*" {s3_model_path}/* /tmp/model_path/')
         
         # change the model path to local
-        merge_args = update_arg_value(merge_args,"model_name_or_path","/tmp/model_path/")
+        train_args = update_arg_value(train_args,"model_name_or_path","/tmp/model_path/")
         print(f"s3 model_name_or_path {s3_model_path}")
 
     if host_rank == 0:
         # 启动checkpoint监控进程
         start_monitoring()
 
-    print(f'------envs------\nnum_machines:{num_machines}\nnum_processes:{num_processes}\nhost_rank:{host_rank}\n')
+    print(f'------envs------\nnum_machines:{num_machines}\nnum_processes:{num_processes}\nnode_rank:{host_rank}\n')
     if num_machines > 1: 
-        train_command = f"FORCE_TORCHRUN=1  NNODES={num_machines} RANK={host_rank} MASTER_ADDR={master_addr} MASTER_PORT=29500 llamafactory-cli train {train_args}"
+        train_command = f"FORCE_TORCHRUN=1  NNODES={num_machines} NODE_RANK={host_rank} MASTER_ADDR={master_addr} MASTER_PORT=29500 llamafactory-cli train {train_args}"
     else:
         train_command = f"CUDA_VISIBLE_DEVICES={DEVICES} llamafactory-cli train {train_args}"
 
@@ -206,39 +218,9 @@ if __name__ == "__main__":
         run_command(sync_final_command)
         print(f'-----finished cp-------')
 
-    # 启动checkpoint监控进程
-    start_monitoring()
-    # 训练命令
-    train_command = f"CUDA_VISIBLE_DEVICES={DEVICES} llamafactory-cli train {train_args}"
-    # run_command(train_command)
-    exit_code = os.system(train_command)
-    if exit_code != 0:
-        print(f"Train failed with exit code: {exit_code}")
-        # 停止checkpoint监控
-        stop_monitoring()
-        sys.exit(1)
 
-    # 停止checkpoint监控
-    stop_monitoring()
-    # 如果需要合并LoRA
-    if os.environ.get("merge_lora") == '1':
-       
-        merge_command = f"CUDA_VISIBLE_DEVICES=0 llamafactory-cli export {merge_args}"
-        run_command(merge_command)
-        
-        sync_merged_command = f'./s5cmd sync --exclude "checkpoint-*" /tmp/finetuned_model_merged {os.environ["OUTPUT_MODEL_S3_PATH"]}'
-        run_command(sync_merged_command)
-        
-    print("*****************finished training, start cp finetuned model*****************************")
-    # 同步最终模型
-    sync_final_command = f'./s5cmd sync --exclude "checkpoint-*" /tmp/finetuned_model {os.environ["OUTPUT_MODEL_S3_PATH"]}'
-    run_command(sync_final_command)
-    
-
-    print(f'-----finished cp-------')
-
-    if os.environ.get("MMLU_EVAL") == '1':
-        print(f'-----start model eval-------')
-        model_path = "/tmp/finetuned_model_merged" if  os.environ.get("merge_lora") == '1' else "/tmp/finetuned_model"
-        eval_command = f"llamafactory-cli eval --model_name_or_path {model_path} --task mmlu_test --template fewshot --lang en --n_shot 5 --batch_size 4"
-        os.system(eval_command)
+    # if os.environ.get("MMLU_EVAL") == '1':
+    #     print(f'-----start model eval-------')
+    #     model_path = "/tmp/finetuned_model_merged" if  os.environ.get("merge_lora") == '1' else "/tmp/finetuned_model"
+    #     eval_command = f"llamafactory-cli eval --model_name_or_path {model_path} --task mmlu_test --template fewshot --lang en --n_shot 5 --batch_size 4"
+    #     os.system(eval_command)
