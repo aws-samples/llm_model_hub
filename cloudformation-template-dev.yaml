@@ -171,6 +171,7 @@ Resources:
               sleep 5
 
               # 上传 dummy tar.gz
+              cd /home/ubuntu/llm_model_hub/backend/byoc
               log "Uploading dummy tar.gz"
               sudo -u ubuntu ../../miniconda3/envs/py311/bin/python startup.py || { log "Failed to upload dummy tar.gz"; exit 1; }
 

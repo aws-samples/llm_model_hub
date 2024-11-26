@@ -154,6 +154,7 @@ Resources:
               sleep 5
 
               #upload dummy tar.gz
+              cd /home/ubuntu/llm_model_hub/backend/byoc
               sudo -u ubuntu ../../miniconda3/envs/py311/bin/python startup.py 
 
               #start backend
