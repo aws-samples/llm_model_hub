@@ -22,7 +22,7 @@ fi
 account=$(aws sts  get-caller-identity --query Account --output text)
 
 VERSION=0.9.2.dev0
-inference_image=llamafactory/llamafactory
+inference_image=sagemaker/llamafactory
 inference_fullname=${account}.dkr.ecr.${region}.amazonaws.${suffix}/${inference_image}:${VERSION}
 
 # If the repository doesn't exist in ECR, create it.
