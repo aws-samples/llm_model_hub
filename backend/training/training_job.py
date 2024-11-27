@@ -178,7 +178,7 @@ class TrainingJobExcutor(BaseModel):
         #WANDB
         if WANDB_API_KEY:
             doc['report_to'] = "wandb"
-            timestp = to_datetime_string(time.time())
+            timestp = to_datetime_string(time.time()).replace(' ', '_')
             doc['run_name'] = f"modelhub_run_{timestp}"
             
         #训练精度
