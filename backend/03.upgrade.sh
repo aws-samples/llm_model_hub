@@ -1,9 +1,9 @@
 #!/bin/bash
+git pull
+git submodule update 
 cd /home/ubuntu/llm_model_hub/backend/docker/
 sh build_and_push.sh
 cd /home/ubuntu/llm_model_hub/backend/
-git pull
-git submodule update 
 source ../miniconda3/bin/activate py311
 pip install -r requirements.txt
 cd /home/ubuntu/llm_model_hub/backend/byoc/
