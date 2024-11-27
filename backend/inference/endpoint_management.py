@@ -194,10 +194,11 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
     env={
         "HF_MODEL_ID": model_name,
         "DTYPE": dtype,
+        "LIMIT_MM_PER_PROMPT":extra_params.get('limit_mm_per_prompt',''),
         "S3_MODEL_PATH":model_path,
         "VLLM_ALLOW_LONG_MAX_MODEL_LEN":"1",
          "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
-         "MAX_MODEL_LEN":extra_params.get('max_model_len', os.environ.get('MAX_MODEL_LEN',"4096")), 
+         "MAX_MODEL_LEN":extra_params.get('max_model_len', os.environ.get('MAX_MODEL_LEN',"12288")), 
          "ENABLE_PREFIX_CACHING": "1" if extra_params.get('enable_prefix_caching') else "0",
          "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type))),
          "MAX_NUM_SEQS": extra_params.get('max_num_seqs','256'),
@@ -280,10 +281,11 @@ def deploy_endpoint_ms(job_id:str,engine:str,instance_type:str,quantize:str,enab
     env={
         "HF_MODEL_ID": model_name,
         "DTYPE": dtype,
+        "LIMIT_MM_PER_PROMPT":extra_params.get('limit_mm_per_prompt',''),
         "S3_MODEL_PATH":model_path,
         "VLLM_ALLOW_LONG_MAX_MODEL_LEN":"1",
          "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
-         "MAX_MODEL_LEN":extra_params.get('max_model_len', os.environ.get('MAX_MODEL_LEN',"4096")), 
+         "MAX_MODEL_LEN":extra_params.get('max_model_len', os.environ.get('MAX_MODEL_LEN',"12288")), 
          "ENABLE_PREFIX_CACHING": "1" if extra_params.get('enable_prefix_caching') else "0",
          "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type))),
          "MAX_NUM_SEQS": extra_params.get('max_num_seqs','256'),
@@ -332,7 +334,7 @@ def deploy_endpoint_ms(job_id:str,engine:str,instance_type:str,quantize:str,enab
             endpoint_name=endpoint_name,
             wait=False,
             accept_eula=True,
-            container_startup_health_check_timeout=900
+            container_startup_health_check_timeout=1800
         )
         #更新端点状态为creating
         database.update_endpoint_status(
