@@ -135,7 +135,6 @@ Resources:
               HUGGING_FACE_HUB_TOKEN=${HuggingFaceHubToken}
               WANDB_API_KEY=${WandbApiKey}
               WANDB_BASE_URL=${WandbBaseUrl}
-              MAX_MODEL_LEN=4096
               EOF
 
               # 设置权限

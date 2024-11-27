@@ -420,8 +420,6 @@ export const DeployModelModal = ({
       then(res => {
         if (res.response.result) {
           setVisible(false);
-          // setDisplayNotify(true);
-          // setNotificationData({ status: 'success', content: `Create Endpoint Name:${res.response.endpoint_name}` });
           setLoading(false);
           setNotificationItems((item: any) => [
             ...item,
@@ -441,8 +439,6 @@ export const DeployModelModal = ({
           navigate('/endpoints');
         } else {
           setVisible(false);
-          // setDisplayNotify(true);
-          // setNotificationData({ status: 'error', content: `Create Endpoint failed:${res.response.endpoint_name}` });
           setLoading(false);
           setNotificationItems((item: any) => [
             ...item,
@@ -463,9 +459,7 @@ export const DeployModelModal = ({
 
       })
       .catch(err => {
-        // setDisplayNotify(true);
         setVisible(false);
-        // setNotificationData({ status: 'error', content: `Create Endpoint failed:${err}` });
         setNotificationItems((item: any) => [
           ...item,
           {
