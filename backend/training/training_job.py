@@ -2,12 +2,10 @@ from sagemaker.estimator import Estimator
 from sagemaker.pytorch import PyTorch
 from datetime import datetime
 import yaml,json
-import sagemaker
 import shortuuid
-import boto3
 import logging
-from typing import Annotated, Sequence, TypedDict, Dict, Optional,List, Any,TypedDict
-from pydantic import BaseModel,Field
+from typing import Dict,List, Any
+from pydantic import BaseModel
 import sys
 sys.path.append('./')
 from logger_config import setup_logger
@@ -18,7 +16,7 @@ from utils.llamafactory.extras.constants import DEFAULT_TEMPLATE,DownloadSource
 import time
 import dotenv
 import os
-from utils.config import boto_sess,role,default_bucket,sagemaker_session, \
+from utils.config import boto_sess,role,default_bucket,sagemaker_session, is_efa, \
 LORA_BASE_CONFIG,DEEPSPEED_BASE_CONFIG_MAP,FULL_BASE_CONFIG,DEFAULT_REGION,WANDB_API_KEY, WANDB_BASE_URL
 
 dotenv.load_dotenv()
@@ -26,6 +24,11 @@ dotenv.load_dotenv()
 logger = setup_logger('training_job.py', log_file='processing_engine.log', level=logging.INFO)
 
 
+def save_json_to_s3(s3_path,data):
+    s3_resource = boto_sess.resource('s3')
+    bucket_name,key = s3_path.replace('s3://','').split('/',1)
+    s3_resource.Object(bucket_name,key).put(Body=json.dumps(data))
+    return s3_path
 def get_all_log_streams(logs_client,log_group_name):
     """
     获取指定日志组中的所有日志流
@@ -67,12 +70,7 @@ def fetch_log(log_group_name:str='/aws/sagemaker/TrainingJobs',log_stream_name:s
     logs_client = boto_sess.client('logs')
     
     log_streams = get_all_log_streams(logs_client,log_group_name)
-    # response = logs_client.describe_log_streams(
-    #     logGroupName=log_group_name,
-    #     limit = 50,
-    # )
-    # # print(response)
-    # log_streams = response['logStreams']
+
     results = []
     next_forward_token,next_backward_token = None,None
     # 遍历每个日志流并检索其日志事件
@@ -106,7 +104,7 @@ def fetch_log(log_group_name:str='/aws/sagemaker/TrainingJobs',log_stream_name:s
                 results.append(f'{timestamp}: {message}')
                 # print(f'{timestamp}: {message}')
     return results,next_forward_token,next_backward_token
-                
+
                 
 class TrainingJobExcutor(BaseModel):
     estimator:Any = None
@@ -117,7 +115,7 @@ class TrainingJobExcutor(BaseModel):
         super().__init__(*args, **kwargs)
 
         
-    def create_training_yaml(self,
+    def create_training_args(self,
                              stage:str,
                              job_payload:Dict[str,Any],
                              data_keys:List[str],
@@ -180,7 +178,7 @@ class TrainingJobExcutor(BaseModel):
         #WANDB
         if WANDB_API_KEY:
             doc['report_to'] = "wandb"
-            timestp = to_datetime_string(time.time())
+            timestp = to_datetime_string(time.time()).replace(' ', '_')
             doc['run_name'] = f"modelhub_run_{timestp}"
             
         #训练精度
@@ -215,38 +213,36 @@ class TrainingJobExcutor(BaseModel):
         doc['max_samples'] = int(job_payload['max_samples'])
         #数据集
         doc['dataset'] = ','.join(data_keys)
-        logger.info(f'training config:\n{doc}')
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         uuid = shortuuid.uuid()
-        sg_config = f'sg_config_{timestamp}_{uuid}.yaml'
-        with open(f'./LLaMA-Factory/{sg_config}', 'w') as f:
-            yaml.safe_dump(doc, f)
-        logger.info(f'save {sg_config}')
-        
-        #如果使用lora微调 config lora merge
-        sg_lora_merge_config = f'sg_config_lora_merge_{timestamp}_{uuid}.yaml'
+        train_args_path = f's3://{default_bucket}/llm_modelhub/args/train_args_{timestamp}_{uuid}.json'
+        save_json_to_s3(train_args_path, doc)
+        logger.info(f'training args:\n{doc}')
+        logger.info(f'save training args:\n{train_args_path}')
+
         doc_merge = {}
         doc_merge['model_name_or_path'] = model_id
         doc_merge['adapter_name_or_path'] ='/tmp/finetuned_model'
         doc_merge['export_dir'] ='/tmp/finetuned_model_merged'
         doc_merge['template'] =  DEFAULT_TEMPLATE[job_payload['prompt_template']]
         doc_merge['export_size'] = 5
-        doc_merge['export_device'] = 'cpu'
+        doc_merge['export_device'] = 'auto'
         doc_merge['export_legacy_format'] = False
-        print(DEFAULT_TEMPLATE)
-        with open(f'./LLaMA-Factory/{sg_lora_merge_config}', 'w') as f:
-            yaml.safe_dump(doc_merge, f)
+
         
-        logger.info(f'lora merge config:\n{doc_merge}')
-        logger.info(f'save {sg_lora_merge_config}')
-        
-        return sg_config,sg_lora_merge_config
+        merge_args_path = f's3://{default_bucket}/llm_modelhub/args/merge_args_{timestamp}_{uuid}.json'
+        save_json_to_s3(merge_args_path, doc_merge)
+        logger.info(f'merge args:\n{doc}')
+        logger.info(f'save merge args:\n{merge_args_path}')
+
+        return train_args_path,merge_args_path
 
 
 
         
     def create_training(self,
                         model_id:str,
+                        dataset_info_path:str,
                         sg_config:str,
                         use_spot:bool,
                         max_spot_wait:int,
@@ -266,14 +262,16 @@ class TrainingJobExcutor(BaseModel):
         environment = {
             'NODE_NUMBER':str(instance_num),
             "s3_data_paths":f"{training_input_path}",
+            "dataset_info_path":dataset_info_path,
             "s3_checkpoint":s3_checkpoint,
             "s3_model_path":s3_model_path,
+            "USE_EFA": "1" if is_efa(instance_type) else "0",
             "HUGGING_FACE_HUB_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
             "merge_lora":merge_lora,
-            "sg_config":sg_config,
-            "sg_lora_merge_config":sg_lora_merge_config,
+            "merge_args_path":sg_lora_merge_config,
+            "train_args_path":sg_config,
             'OUTPUT_MODEL_S3_PATH': output_s3_path, # destination 
-            "PIP_INDEX":'https://pypi.tuna.tsinghua.edu.cn/simple' if DEFAULT_REGION.startswith('cn') else '',
+            "PIP_INDEX":'https://mirrors.aliyun.com/pypi/simple' if DEFAULT_REGION.startswith('cn') else '',
             "USE_MODELSCOPE_HUB": "1" if DEFAULT_REGION.startswith('cn') else '0'
             
         }
@@ -283,24 +281,36 @@ class TrainingJobExcutor(BaseModel):
             environment["WANDB_API_KEY"] = WANDB_API_KEY
         else:
             environment["WANDB_DISABLED"] = "true"
-        entry_point = 'entry_single_lora.py' if instance_num == 1 else 'entry-multi-nodes.py'
+        # entry_point = 'entry_single_lora.py' if instance_num == 1 else 'entry-multi-nodes.py'
         self.output_s3_path = output_s3_path
-        self.estimator = PyTorch(entry_point=entry_point,
-                                    source_dir='./LLaMA-Factory/',
-                                    role=role,
-                                    use_spot_instances=use_spot,
-                                    sagemaker_session=sagemaker_session,
-                                    base_job_name=base_job_name,
-                                    environment=environment,
-                                    framework_version='2.3.0',
-                                    py_version='py311',
-                                    script_mode=True,
-                                    instance_count=instance_num,
-                                    instance_type=instance_type,
-                                    max_wait= 3600*max_spot_wait if use_spot else None,
-                                    enable_remote_debug=True,
-                                    # keep_alive_period_in_seconds=600,
-                                    max_run=3600*max_job_run_hour)
+        # self.estimator = PyTorch(entry_point=entry_point,
+        #                             source_dir='./LLaMA-Factory/',
+        #                             role=role,
+        #                             use_spot_instances=use_spot,
+        #                             sagemaker_session=sagemaker_session,
+        #                             base_job_name=base_job_name,
+        #                             environment=environment,
+        #                             framework_version='2.3.0',
+        #                             py_version='py311',
+        #                             script_mode=True,
+        #                             instance_count=instance_num,
+        #                             instance_type=instance_type,
+        #                             max_wait= 3600*max_spot_wait if use_spot else None,
+        #                             enable_remote_debug=True,
+        #                             # keep_alive_period_in_seconds=600,
+        #                             max_run=3600*max_job_run_hour)
+        self.estimator = Estimator(image_uri=os.environ['training_image'],
+                            role=role,
+                            use_spot_instances=use_spot,
+                            sagemaker_session=sagemaker_session,
+                            base_job_name=base_job_name,
+                            environment=environment,
+                            instance_count=instance_num,
+                            instance_type=instance_type,
+                            max_wait= 3600*max_spot_wait if use_spot else None,
+                            max_run=3600*max_job_run_hour,
+                            enable_remote_debug=True
+                            )
         
         
     def create(self):
@@ -327,7 +337,14 @@ class TrainingJobExcutor(BaseModel):
         
         data_keys = job_payload.get('dataset',[])+s3_datakeys
 
-        prepare_dataset_info(dataset_info)
+        # add to dataset_info
+        dataset_info = prepare_dataset_info(dataset_info)
+        # upload to s3
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        uuid = shortuuid.uuid()
+        dataset_info_path = f's3://{default_bucket}/llm_modelhub/dataset_info/dataset_info_{timestamp}_{uuid}.json'
+        save_json_to_s3(dataset_info_path, dataset_info)
+
         
         #model_id参数
         repo = DownloadSource.MODELSCOPE if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
@@ -337,7 +354,7 @@ class TrainingJobExcutor(BaseModel):
         logger.info(f"model_id:{model_id},repo type:{repo}")
         
         if job_payload['stage'] in ['sft','dpo','kto','pt']:
-            sg_config,sg_lora_merge_config= self.create_training_yaml(
+            sg_config,sg_lora_merge_config= self.create_training_args(
                     stage=job_payload['stage'],
                     data_keys=data_keys,
                     job_payload=job_payload,
@@ -362,6 +379,7 @@ class TrainingJobExcutor(BaseModel):
                     
             print('use_spot:',job_payload.get("use_spot",False))
             self.create_training(sg_config=sg_config,
+                                    dataset_info_path=dataset_info_path,
                                     use_spot = job_payload.get("use_spot",False),
                                     max_spot_wait = int(job_payload.get("max_spot_wait",72)),
                                     max_job_run_hour = int(job_payload.get("max_job_run_hour",48)),

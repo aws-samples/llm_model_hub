@@ -49,7 +49,7 @@ class FetchLogResponse(BaseModel):
     next_forward_token:Optional[str] = None
     
 class CreateJobsRequest(BaseModel):
-    request_id:Optional[str]
+    request_id:Optional[str] = ''
     # job_type : Literal["sft","pt"] = Field(default="sft")
     job_type : JobType  = Field(default=JobType.sft)
     job_name: str

@@ -67,7 +67,7 @@ export const DEEPSPEED =[
   { label: 'None', value: 'none' },
   // { label: 'Stage 1', value: 'stage_1' ,description:'Only optimizer states is partitioned'},
   { label: 'Stage 2', value: 'stage_2', description:'optimizer states + gradients are partitioned' },
-  { label: 'Stage 3', value: 'stage_3' ,description:'(Recommend) Stage 2 + weights are partitioned'  }
+  { label: 'Stage 3', value: 'stage_3' ,description:'Stage 2 + weights are partitioned'  }
 ]
 
 export const QUANT_OPTIONS = [

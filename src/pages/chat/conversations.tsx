@@ -94,10 +94,8 @@ const ImageUrlItems = ({ images,who,text }: { images: File[],who:string, text:st
 
   return (
     <ImageList
-      // key ={generateUniqueId()}
       sx={{ width: 1024, height: "auto", objectFit: "contain" }}
       cols={Math.max(4)}
-    // rowHeight={256}
     >
       {images.map((image, idx) => {
         try {
@@ -105,17 +103,13 @@ const ImageUrlItems = ({ images,who,text }: { images: File[],who:string, text:st
           return (<ImageListItem key={`${image.name}-${idx}`}>
             <EnlargableImage key={`${image.name}-${idx}-image`} src={url} alt={image.name} who={who} text={text} />
             <ImageListItemBar
-              // title={image.name}
-              // key={generateUniqueId()}
               key={`${image.name}-${idx}-bar`}
               subtitle={
                 <span>size: {(image.size / 1024).toFixed(1)}KB</span>
               }
-            // position="below"
             />
           </ImageListItem>)
         } catch (err) {
-          // console.log(err)
           return  <MarkdownToHtml text={text} key={`markdown-${idx}`} />
         }
       }
@@ -149,7 +143,7 @@ const EnlargableImage = memo((props:EnlargableImageProps) => {
 
   return (
     <Box textAlign="left">
-       <MarkdownToHtml text={newlines.join(" ")} />
+       {/* <MarkdownToHtml text={newlines.join(" ")} /> */}
       <div style={{ borderStyle: "solid", borderRadius: '5px', borderColor: '#0972d3' }}>
         <img src={props.src} alt={props.alt}
           style={{
@@ -204,6 +198,7 @@ const MemoizedMsgItem = memo(({ who, text, images_base64, images, id }: MsgItemP
           <Stack direction="row" spacing={2} sx={{ alignItems: "top" }}>
             <Avatar src={userlogo} alt={"User"} />
             <TextItem sx={{ bgcolor: "#f2fcf3", borderColor: "#037f0c" }}>
+                <MarkdownToHtml text={text} />
               <ImageUrlItems images={memoizedImages} who={who} text={text} />
             </TextItem>
           </Stack>

@@ -37,7 +37,7 @@ Resources:
     Type: AWS::EC2::Instance
     CreationPolicy:
       ResourceSignal:
-        Timeout: PT30M
+        Timeout: PT60M
     Properties:
       Tags:
         - Key: Name
@@ -57,8 +57,15 @@ Resources:
           !Sub 
             - |
               #!/bin/bash
-              echo "Starting UserData script execution" >> /var/log/user-data.log
+              # 设置日志文件
+              LOG_FILE="/var/log/user-data.log"
 
+              # 函数：记录日志
+              log() {
+                echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
+              }
+
+              log "Starting UserData script execution"
               sudo apt update
               sudo apt install -y git
               
@@ -122,7 +129,6 @@ Resources:
               echo "HUGGING_FACE_HUB_TOKEN=${HuggingFaceHubToken}" >> /home/ubuntu/llm_model_hub/backend/.env
               echo "WANDB_API_KEY=${WandbApiKey}" >> /home/ubuntu/llm_model_hub/backend/.env
               echo "WANDB_BASE_URL=${WandbBaseUrl}" >> /home/ubuntu/llm_model_hub/backend/.env
-              echo "MAX_MODEL_LEN=4096" >> /home/ubuntu/llm_model_hub/backend/.env
               # Set proper permissions 
               sudo chown -R ubuntu:ubuntu /home/ubuntu/
               RANDOM_PASSWORD=$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1) 
@@ -135,11 +141,19 @@ Resources:
               conda activate py311
               python3 users/add_user.py demo_user $RANDOM_PASSWORD default
 
-              #build image
+              #build vllm image
               cd /home/ubuntu/llm_model_hub/backend/byoc
               sudo -u ubuntu bash build_and_push.sh
               sleep 5
+
+              # 构建llamafactory镜像
+              log "Building and pushing llamafactory image"
+              cd /home/ubuntu/llm_model_hub/backend/docker
+              sudo -u ubuntu bash build_and_push.sh || { log "Failed to build and push llamafactory image"; exit 1; }
+              sleep 5
+
               #upload dummy tar.gz
+              cd /home/ubuntu/llm_model_hub/backend/byoc
               sudo -u ubuntu ../../miniconda3/envs/py311/bin/python startup.py 
 
               #start backend

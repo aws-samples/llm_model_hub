@@ -194,10 +194,11 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
     env={
         "HF_MODEL_ID": model_name,
         "DTYPE": dtype,
+        "LIMIT_MM_PER_PROMPT":extra_params.get('limit_mm_per_prompt',''),
         "S3_MODEL_PATH":model_path,
         "VLLM_ALLOW_LONG_MAX_MODEL_LEN":"1",
          "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
-         "MAX_MODEL_LEN":extra_params.get('max_model_len', os.environ.get('MAX_MODEL_LEN',"4096")), 
+         "MAX_MODEL_LEN":extra_params.get('max_model_len', "12288"), 
          "ENABLE_PREFIX_CACHING": "1" if extra_params.get('enable_prefix_caching') else "0",
          "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type))),
          "MAX_NUM_SEQS": extra_params.get('max_num_seqs','256'),
@@ -207,7 +208,7 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
     if DEFAULT_REGION.startswith('cn'):
         env['VLLM_USE_MODELSCOPE']='1'
 
-    print(env)
+    logger.info(env)
     pure_model_name = model_name.split('/')[1]
 
     create_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -280,10 +281,11 @@ def deploy_endpoint_ms(job_id:str,engine:str,instance_type:str,quantize:str,enab
     env={
         "HF_MODEL_ID": model_name,
         "DTYPE": dtype,
+        "LIMIT_MM_PER_PROMPT":extra_params.get('limit_mm_per_prompt',''),
         "S3_MODEL_PATH":model_path,
         "VLLM_ALLOW_LONG_MAX_MODEL_LEN":"1",
          "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
-         "MAX_MODEL_LEN":extra_params.get('max_model_len', os.environ.get('MAX_MODEL_LEN',"4096")), 
+         "MAX_MODEL_LEN":extra_params.get('max_model_len', "12288"), 
          "ENABLE_PREFIX_CACHING": "1" if extra_params.get('enable_prefix_caching') else "0",
          "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type))),
          "MAX_NUM_SEQS": extra_params.get('max_num_seqs','256'),
@@ -293,7 +295,7 @@ def deploy_endpoint_ms(job_id:str,engine:str,instance_type:str,quantize:str,enab
     # 这个VLLM_USE_MODELSCOPE启用之后还是会访问hf的一些api，所以不起作用了
     # if DEFAULT_REGION.startswith('cn'):
     #     env['VLLM_USE_MODELSCOPE']='1'
-    print(env)
+    logger.info(env)
     # Create the SageMaker Model object. In this example we let LMI configure the deployment settings based on the model architecture  
     model = Model(
             image_uri=lmi_image_uri,
@@ -332,7 +334,7 @@ def deploy_endpoint_ms(job_id:str,engine:str,instance_type:str,quantize:str,enab
             endpoint_name=endpoint_name,
             wait=False,
             accept_eula=True,
-            container_startup_health_check_timeout=900
+            container_startup_health_check_timeout=1800
         )
         #更新端点状态为creating
         database.update_endpoint_status(
@@ -360,7 +362,6 @@ def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_
             model_path = jobinfo.output_s3_path + 'finetuned_model_merged/'
         else:
             model_path = jobinfo.output_s3_path + 'finetuned_model/'
-        # model_name = jobinfo.job_payload["model_name"]
     #如果是使用原始模型
     elif not model_name == '':
         #判断是否是中国区
@@ -415,11 +416,6 @@ def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_
         env['OPTION_QUANTIZE'] = quantize
     elif engine == 'trt-llm' and  quantize in ['awq','smoothquant']:
         env['OPTION_QUANTIZE'] = quantize
-    
-    #patches   
-    ##Mistral-7B 在g5.2x下kv cache不能超过12k，否则会报错  
-    if engine == 'vllm' and instance_type.endswith('2xlarge'):
-        env['OPTION_MAX_MODEL_LEN'] = '12288'
     
     
     create_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
