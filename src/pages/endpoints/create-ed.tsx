@@ -249,13 +249,13 @@ const InputS3Path = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
 };
 
 const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
-  const [value1, setValue1] = useState<string>('12288');
+  const [value1, setValue1] = useState<string>('');
   const [value2, setValue2] = useState<string>('');
   const [valueMaxNumSeqs, setMaxNumSeqs] = useState<string>('');
 
   const [value3, setValue3] = useState<boolean>(false);
   const [value4, setValue4] = useState<boolean>(false);
-  const [value5, setValue5] = useState<string>('image=5,video=2');
+  const [value5, setValue5] = useState<string>('');
 
 
   return (
@@ -322,12 +322,13 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
       </FormField>
       <FormField
         label="limit-mm-per-prompt"
-        description="For each multimodal plugin, limit how many input instances to allow for each prompt. "
+        description="一个请求最大支持图片或者video数量，默认是image=1，设置值格式为 image=N,video=M"
         stretch={false}
       >
         <Input
           readOnly={readOnly}
           value={value5}
+          placeholder='image=5,video=2'
           onChange={({ detail }) => {
             setValue5(detail.value);
             setData((pre: any) => ({ ...pre,  extra_params:{...pre.extra_params,limit_mm_per_prompt: detail.value } }))

@@ -23,9 +23,6 @@ fi
 # Find the first subdirectory in the base directory
 model_dir=$(find "$base_dir" -mindepth 1 -maxdepth 1 -type d -print -quit)
 
-# Get env variable LIMIT_MM_PER_RPOMPT, if none then set a default value image=20,video=2
-LIMIT_MM_PER_PROMPT=${LIMIT_MM_PER_PROMPT:-"image=5,video=2"}
-
 
 # Check if a subdirectory was found
 if [ -z "$model_dir" ]; then
@@ -74,7 +71,7 @@ else
             # Set model_id to base_dir for local loading
             echo "Using model: $file_dir"
 
-            command="python3 -m vllm.entrypoints.openai.api_server --port $SAGEMAKER_BIND_TO_PORT --download-dir $file_dir --trust-remote-code --model $file_dir --max-model-len $max_model_len --tensor-parallel-size $tensor_parallel_size --dtype $dtype --max-num-seqs $max_num_seqs --limit-mm-per-prompt $LIMIT_MM_PER_PROMPT"
+            command="python3 -m vllm.entrypoints.openai.api_server --port $SAGEMAKER_BIND_TO_PORT --download-dir $file_dir --trust-remote-code --model $file_dir --max-model-len $max_model_len --tensor-parallel-size $tensor_parallel_size --dtype $dtype --max-num-seqs $max_num_seqs"
             
             if [ "${ENABLE_PREFIX_CACHING}" = "1" ]; then
                 command="$command --enable-prefix-caching"
@@ -82,6 +79,11 @@ else
 
             if [ "${ENFORCE_EAGER}" = "1" ]; then
                 command="$command --enforce-eager"
+            fi
+
+            #if LIMIT_MM_PER_RPOMPT is not None then append to command
+            if [ -n "${LIMIT_MM_PER_PROMPT}" ]; then
+                command="$command --limit-mm-per-prompt $LIMIT_MM_PER_PROMPT"
             fi
             
             eval $command
@@ -91,7 +93,7 @@ else
             # If model_id file exists, use its content as model_id
             # model_id=$(cat "$model_dir/model_id")
             echo "using: $model_id"
-            command="python3 -m vllm.entrypoints.openai.api_server --port $SAGEMAKER_BIND_TO_PORT --trust-remote-code --model $model_id --max-model-len $max_model_len --tensor-parallel-size $tensor_parallel_size --dtype $dtype --max-num-seqs $max_num_seqs --limit-mm-per-prompt $LIMIT_MM_PER_PROMPT"
+            command="python3 -m vllm.entrypoints.openai.api_server --port $SAGEMAKER_BIND_TO_PORT --trust-remote-code --model $model_id --max-model-len $max_model_len --tensor-parallel-size $tensor_parallel_size --dtype $dtype --max-num-seqs $max_num_seqs"
             
             if [ "${ENABLE_PREFIX_CACHING}" = "1" ]; then
                 command="$command --enable-prefix-caching"
@@ -99,6 +101,11 @@ else
 
             if [ "${ENFORCE_EAGER}" = "1" ]; then
                 command="$command --enforce-eager"
+            fi
+
+            #if LIMIT_MM_PER_RPOMPT is not None then append to command
+            if [ -n "${LIMIT_MM_PER_PROMPT}" ]; then
+                command="$command --limit-mm-per-prompt $LIMIT_MM_PER_PROMPT"
             fi
             
             eval $command
