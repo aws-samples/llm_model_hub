@@ -203,6 +203,9 @@ if __name__ == "__main__":
         stop_monitoring()
         
     if os.environ.get("merge_lora") == '1' and host_rank == 0:
+        ## update model path as local folder as s3 provided
+        if s3_model_path:
+            merge_args = update_arg_value(merge_args,"model_name_or_path","/tmp/model_path/")
         print(f'-----start merge lora-------')
         merge_command = f'CUDA_VISIBLE_DEVICES=0 llamafactory-cli export {merge_args}'
         run_command(merge_command)
