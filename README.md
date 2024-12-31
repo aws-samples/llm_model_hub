@@ -16,7 +16,7 @@ Model Hub V2是提供一站式的模型微调，部署，调试的无代码可�
 - ⚠️注意，stack显示部署完成之后，启动的EC2还需要8-10分钟自动运行一些脚本，如果不行，请等待8-10分钟，然后刷新页面
 ![alt text](./assets/image-cf4.png)
 
-# 2.手动部署
+# 2.手动部署（中国区）
 ## 1.环境安装
 - 硬件需求：一台ec2 Instance, m5.xlarge, 200GB EBS storage
 - os需求：ubuntu 22.04
@@ -38,7 +38,7 @@ Model Hub V2是提供一站式的模型微调，部署，调试的无代码可�
 - 找到刚才的role，创建一个inline policy
 - ![alt text](./assets/image-3.png)
 - ![alt text](./assets/image-4.png)
-- 注意，如果是中国区，需要把 "arn:aws:s3:::*"改成 "arn:aws-cn:s3:::sagemaker*"
+- 注意，如果是非中国区手动创建，需要把 "arn:aws-cn:s3:::*"改成 "arn:aws:s3:::sagemaker*"
 ```json
 {
     "Version": "2012-10-17",
@@ -53,69 +53,38 @@ Model Hub V2是提供一站式的模型微调，部署，调试的无代码可�
                 "s3:CreateBucket"
             ],
             "Resource": [
-                "arn:aws:s3:::*"
+                "arn:aws-cn:s3:::*"
             ]
         }
     ]
 }
 ```
 - ssh 到ec2 instance
-
 - 如果是中国区需要手动下载代码并打包传到ec2中
-- 请先在能访问github的环境中执行以下命令下载代码，然后把代码打包成zip文件，上传到ec2服务器。
+- 请先在能访问github的环境中执行以下命令下载代码，然后把代码打包成zip文件，上传到ec2服务器的/home/ubuntu/下。
 - 使用--recurse-submodule下载代码  
 ```bash
 git clone --recurse-submodule https://github.com/aws-samples/llm_model_hub.git
 ```
+## 2.ssh登陆到ec2服务器，解压到/home/ubuntu/目录
+```sh
+unzip llm_model_hub.zip
+```
 
-## 2.部署前端
-1. 安装nodejs 18
+## 3.设置环境变量
+```sh
+export SageMakerRoleArn=<上面步骤创建的sagemaker_exection_role的完整arn,如 arn:aws-cn:iam:1234567890:role/sagemaker_exection_role>
+```
+
+## 4.执行脚本
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+bash cn-region-deploy.sh
 ```
-2. 如果是中国区安装，则用设置中国代理
-```bash
-npm config set registry https://registry.npm.taobao.org
-```
-3. 安装yarn
-```bash
-sudo apt install -y nodejs
-sudo npm install --global yarn
-```
-2. 配置环境变量
-- copy llm_model_hub/env.sample 到 .env 文件,修改ip改成对应的ec2的ip，随机给一个api key，这个key需要与下一部分后端配置backend/.env中的apikey保持一致
-```
-REACT_APP_API_ENDPOINT=http://{ip}:8000/v1
-REACT_APP_API_KEY=随机给一个key
-```
+大约30之后执行完成，可以在/home/ubuntu/setup.log中查看安装日志。
 
-
-
-3. 启动web page
-- 安装yarn
-```bash
-yarn install
-```
-
-```bash
-#install pm2
-sudo yarn global add pm2
-pm2 start pm2run.config.js 
-```
-- 以下是其他的管理命令(作为参考，不用执行):
-```bash
-pm2 list
-pm2 stop modelhub
-pm2 restart modelhub
-pm2 delete modelhub
-```
-
-## 3.后端配置
-请见[后端配置](./backend/README.md)
-
-## 4.启动前端
-- 以上都部署完成后，前端启动之后，可以通过浏览器访问http://{ip}:3000访问前端
-- 如果需要做端口转发，则参考后端配置中的nginx配置部分
+## 5.访问
+- 以上都部署完成后，前端启动之后，可以通过浏览器访问http://{ip}:3000访问前端，/home/ubuntu/setup.log中查看用户名和随机密码
+- 如果需要做端口转发，则参考[后端配置](./backend/README.md)中的nginx配置部分
 
 
 # 如何升级？

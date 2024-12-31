@@ -23,6 +23,17 @@ def dict_to_cmd_args(doc: dict) -> str:
     cmd_parts = [f"--{key} {value}" for key, value in doc.items()]
     return " ".join(cmd_parts)
 
+# delete arg from cmd args
+def delete_arg(args_string, arg_name):
+    parts = args_string.split()
+    for i,part in enumerate(parts):
+        if part.startswith(f"--{arg_name}"):
+            next_part = parts[i+1]
+            parts.remove(part)
+            parts.remove(next_part)
+            break
+    return " ".join(parts)
+
 def update_arg_value(args_string, arg_name, new_value):
     parts = args_string.split()
     for i, part in enumerate(parts):
@@ -141,14 +152,6 @@ if __name__ == "__main__":
     GPUS_PER_NODE = int(os.environ["SM_NUM_GPUS"])
     DEVICES = ','.join([str(i) for i in range(GPUS_PER_NODE)])
 
-    # index_path = os.environ.get('PIP_INDEX')
-    # if index_path:
-    #     os.system(f"pip config set global.index-url {index_path}")
-    #     os.system(f"pip config set global.extra-index-url  {index_path}")
-    #     os.system(f"pip install -r requirements_deps.txt")
-    # else:
-    #     os.system(f"pip install -r requirements_deps.txt")
-
     
     os.system("chmod +x ./s5cmd")
 
@@ -166,6 +169,9 @@ if __name__ == "__main__":
         s3_checkpoint = s3_checkpoint[:-1] if s3_checkpoint.endswith('/') else s3_checkpoint
         # download to local
         run_command(f'./s5cmd sync --exclude "checkpoint-*" {s3_checkpoint}/* /tmp/checkpoint/')
+        # change the model path to local
+        train_args = update_arg_value(train_args,"model_name_or_path","/tmp/checkpoint/")
+        #add resume_from_checkpoint arg
         train_args += " --resume_from_checkpoint /tmp/checkpoint/"
         print(f"resume_from_checkpoint {s3_checkpoint}")
     
@@ -180,9 +186,9 @@ if __name__ == "__main__":
         train_args = update_arg_value(train_args,"model_name_or_path","/tmp/model_path/")
         print(f"s3 model_name_or_path {s3_model_path}")
 
-    if host_rank == 0:
-        # 启动checkpoint监控进程
-        start_monitoring()
+    # if host_rank == 0:
+    # 启动checkpoint监控进程，ckpt分布在各个节点保存
+    start_monitoring()
 
     print(f'------envs------\nnum_machines:{num_machines}\nnum_processes:{num_processes}\nnode_rank:{host_rank}\n')
     if num_machines > 1: 
@@ -198,9 +204,9 @@ if __name__ == "__main__":
             stop_monitoring()
         sys.exit(1)
 
-    if host_rank == 0:
-        # 停止checkpoint监控
-        stop_monitoring()
+    # if host_rank == 0:
+    # 停止checkpoint监控
+    stop_monitoring()
         
     if os.environ.get("merge_lora") == '1' and host_rank == 0:
         ## update model path as local folder as s3 provided

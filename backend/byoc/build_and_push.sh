@@ -14,7 +14,7 @@ region=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/la
 # region=$(aws configure get region)
 suffix="com"
 
-if [[ "$region" == cn*  ]]; then
+if [[ $region =~ ^cn ]]; then
     suffix="com.cn"
 fi
 
