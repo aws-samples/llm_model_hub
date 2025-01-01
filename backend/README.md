@@ -132,6 +132,11 @@ http {
 }
 ```
 
+- 修改llm_modelhub/.env 文件中的域名和端口
+```
+REACT_APP_API_ENDPOINT==http://xxxx.compute-1.amazonaws.com:443/v1
+```
+
 - 生效配置:
 ```bash
 sudo ln -s /etc/nginx/sites-available/modelhub /etc/nginx/sites-enabled/ 

@@ -32,6 +32,12 @@ Parameters:
     Description: Optional WANDB Base URL for view W&B own Wandb portal
     Default: ""
 
+  SwanlabApiKey:
+    Type: String
+    Description: Optional SWANLAB for view Metrics on https://swanlab.cn/
+    Default: ""
+
+
 Resources:
   EC2Instance:
     Type: AWS::EC2::Instance
@@ -135,6 +141,7 @@ Resources:
               HUGGING_FACE_HUB_TOKEN=${HuggingFaceHubToken}
               WANDB_API_KEY=${WandbApiKey}
               WANDB_BASE_URL=${WandbBaseUrl}
+              SWANLAB_API_KEY=${SwanlabApiKey}
               EOF
 
               # 设置权限
@@ -200,6 +207,7 @@ Resources:
               HuggingFaceHubToken: !Ref HuggingFaceHubToken
               WandbApiKey: !Ref WandbApiKey
               WandbBaseUrl: !Ref WandbBaseUrl
+              SwanlabApiKey: !Ref SwanlabApiKey
 
   EC2SecurityGroup:
     Type: AWS::EC2::SecurityGroup

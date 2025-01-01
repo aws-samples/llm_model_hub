@@ -14,7 +14,7 @@ region=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/la
 # region=$(aws configure get region)
 suffix="com"
 
-if [ "$region" == cn*  ]; then
+if [[ $region =~ ^cn ]]; then
     suffix="com.cn"
 fi
 
@@ -39,7 +39,7 @@ aws  ecr get-login-password --region $region | docker login --username AWS --pas
 # First, authenticate with AWS ECR
 # Run these commands in your terminal before building:
 
-if [[ "$region" == cn*  ]]; then
+if [[ $region =~ ^cn ]]; then
     aws ecr get-login-password --region $region | docker login --username AWS --password-stdin 727897471807.dkr.ecr.$region.amazonaws.${suffix}
 else
     aws ecr get-login-password --region $region | docker login --username AWS --password-stdin 763104351884.dkr.ecr.$region.amazonaws.${suffix}
@@ -55,7 +55,7 @@ aws ecr set-repository-policy \
 
 # Add variables for build arguments pytorch-training:2.5.1-gpu-py311-cu124-ubuntu22.04-sagemaker
 # https://github.com/aws/deep-learning-containers/blob/master/available_images.md
-if [[ "$region" == cn*  ]]; then
+if [[ $region =~ ^cn ]]; then
     BASE_IMAGE="727897471807.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.4.0-gpu-py311"
     PIP_INDEX="https://mirrors.aliyun.com/pypi/simple"
 else
