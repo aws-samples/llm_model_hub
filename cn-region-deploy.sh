@@ -31,7 +31,6 @@ npm config set registry https://registry.npmmirror.com
 sudo npm config set registry https://registry.npmmirror.com
 sudo npm install --global yarn
 yarn config set registry https://registry.npmmirror.com
-sudo yarn config set registry https://registry.npmmirror.com
 
 rm /home/ubuntu/llm_model_hub/yarn.lock
 
@@ -42,7 +41,8 @@ cd /home/ubuntu/
 cd /home/ubuntu/llm_model_hub
 yarn install
 #install pm2
-sudo yarn global add pm2
+sudo npm install pm2@latest -g
+# sudo yarn global add pm2
 
 # 等待一段时间以确保实例已完全启动
 sleep 30
@@ -82,11 +82,11 @@ echo "SWANLAB_API_KEY=${SWANLAB_API_KEY}" >> /home/ubuntu/llm_model_hub/backend/
 # Set proper permissions 
 sudo chown -R ubuntu:ubuntu /home/ubuntu/
 RANDOM_PASSWORD=$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1) 
-aws ssm put-parameter --name "/modelhub/RandomPassword" --value "$RANDOM_PASSWORD" --type "SecureString" --overwrite --region "$REGION"
+# aws ssm put-parameter --name "/modelhub/RandomPassword" --value "$RANDOM_PASSWORD" --type "SecureString" --overwrite --region "$REGION"
 log "Run CN setup script"
 cd /home/ubuntu/llm_model_hub/backend
 bash 0.setup-cn.sh
-sleep 30
+sleep 15
 #add user in db
 source ../miniconda3/bin/activate py311
 conda activate py311

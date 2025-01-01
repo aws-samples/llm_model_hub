@@ -74,22 +74,22 @@ Resources:
         - arn:aws-cn:iam::aws:policy/CloudWatchLogsFullAccess
         - arn:aws-cn:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws-cn:iam::aws:policy/AmazonSageMakerFullAccess
-      Policies:
-        - PolicyName: CloudFormationSignalPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action: cloudformation:SignalResource
-                Resource: !Sub 'arn:aws-cn:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*'
-        - PolicyName: SSMParameterAccess
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - ssm:PutParameter
-                Resource: !Sub 'arn:aws-cn:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/*'
+      # Policies:
+      #   - PolicyName: CloudFormationSignalPolicy
+      #     PolicyDocument:
+      #       Version: '2012-10-17'
+      #       Statement:
+      #         - Effect: Allow
+      #           Action: cloudformation:SignalResource
+      #           Resource: !Sub 'arn:aws-cn:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*'
+      #   - PolicyName: SSMParameterAccess
+      #     PolicyDocument:
+      #       Version: '2012-10-17'
+      #       Statement:
+      #         - Effect: Allow
+      #           Action:
+      #             - ssm:PutParameter
+      #           Resource: !Sub 'arn:aws-cn:ssm:${AWS::Region}:${AWS::AccountId}:parameter/modelhub/*'
 
 
   EC2InstanceProfile:
