@@ -38,7 +38,6 @@ Model Hub V2是提供一站式的模型微调，部署，调试的无代码可�
 - 找到刚才的role，创建一个inline policy
 - ![alt text](./assets/image-3.png)
 - ![alt text](./assets/image-4.png)
-- 注意，如果是非中国区手动创建，需要把 "arn:aws-cn:s3:::*"改成 "arn:aws:s3:::sagemaker*"
 ```json
 {
     "Version": "2012-10-17",
@@ -53,7 +52,16 @@ Model Hub V2是提供一站式的模型微调，部署，调试的无代码可�
                 "s3:CreateBucket"
             ],
             "Resource": [
-                "arn:aws-cn:s3:::*"
+                "*"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ssmmessages:CreateControlChannel"
+            ],
+            "Resource": [
+                "*"
             ]
         }
     ]
@@ -75,12 +83,11 @@ unzip llm_model_hub.zip
 ```sh
 export SageMakerRoleArn=<上面步骤创建的sagemaker_exection_role的完整arn,如 arn:aws-cn:iam:1234567890:role/sagemaker_exection_role>
 ```
-- （可选）如需要设置Swanlab或者wandb作为metrics监控看板：
+- （可选）如需要设置Swanlab或者wandb作为metrics监控看板,也可以后期在backend/.env中添加，添加之后运行pm2 restart all重启服务
 ```sh
 export SWANLAB_API_KEY=<SWANLAB_API_KEY>
 export WANDB_API_KEY=<WANDB_API_KEY>
 export WANDB_BASE_URL=<WANDB_BASE_URL>
-
 ```
 
 ## 4.执行脚本
