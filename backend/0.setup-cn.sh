@@ -1,6 +1,6 @@
 
 # 定义要添加的内容
-PIP_INDEX="http://mirrors.aliyun.com/pypi/simple/"
+PIP_INDEX="https://pypi.tuna.tsinghua.edu.cn/simple"
 
 pip config set global.index-url "$PIP_INDEX" &&     pip config set global.extra-index-url "$PIP_INDEX" 
 
