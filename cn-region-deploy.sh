@@ -23,74 +23,6 @@ if ! command -v aws &> /dev/null; then
     sudo ./aws/install
 fi
 
-# echo "##create sagemaker execution role"
-# # Create trust policy
-# echo '{
-#   "Version": "2012-10-17",
-#   "Statement": [
-#     {
-#       "Effect": "Allow",
-#       "Principal": {
-#         "Service": "sagemaker.amazonaws.com"
-#       },
-#       "Action": "sts:AssumeRole"
-#     }
-#   ]
-# }' > trust-policy.json
-
-# # Create S3 policy
-# echo '{
-#     "Version": "2012-10-17",
-#     "Statement": [
-#         {
-#             "Effect": "Allow",
-#             "Action": [
-#                 "s3:GetObject",
-#                 "s3:PutObject",
-#                 "s3:DeleteObject",
-#                 "s3:ListBucket",
-#                 "s3:CreateBucket"
-#             ],
-#             "Resource": [
-#                 "arn:aws-cn:s3:::*"
-#             ]
-#         }
-#     ]
-# }' > s3-policy.json
-
-# # Generate random suffix
-# RANDOM_SUFFIX=$(date +%s | sha256sum | base64 | head -c 8)
-# ROLE_NAME="sagemaker_execution_role_${RANDOM_SUFFIX}"
-# POLICY_NAME="sagemaker_s3_policy_${RANDOM_SUFFIX}"
-
-# # Create role and capture the ARN
-# SageMakerRoleArn=$(aws iam create-role \
-#     --role-name ${ROLE_NAME} \
-#     --assume-role-policy-document file://trust-policy.json \
-#     --query 'Role.Arn' --output text)
-
-# # Create policy
-# POLICY_ARN=$(aws iam create-policy \
-#     --policy-name ${POLICY_NAME} \
-#     --policy-document file://s3-policy.json \
-#     --query 'Policy.Arn' --output text)
-
-# # Attach policies
-# aws iam attach-role-policy \
-#     --role-name ${ROLE_NAME} \
-#     --policy-arn ${POLICY_ARN}
-
-# aws iam attach-role-policy \
-#     --role-name ${ROLE_NAME} \
-#     --policy-arn arn:aws-cn:iam::aws:policy/AmazonSageMakerFullAccess
-
-# # Clean up temporary files
-# rm trust-policy.json s3-policy.json
-
-# echo "Created role: ${ROLE_NAME}" >>  "$LOG_FILE"
-# echo "Role ARN: ${SageMakerRoleArn}" >>  "$LOG_FILE"
-
-
 #install nodejs 
 log "Installing nodejs"
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
@@ -108,11 +40,6 @@ sudo yarn global add pm2
 
 # 等待一段时间以确保实例已完全启动
 sleep 30
-
-log "Run cn setup script"
-#如果是中国区则执行
-cd /home/ubuntu/llm_model_hub/backend/
-bash 0.setup-cn.sh
 
 # 尝试使用 IMDSv2 获取 token
 TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
@@ -150,8 +77,9 @@ echo "SWANLAB_API_KEY=${SWANLAB_API_KEY}" >> /home/ubuntu/llm_model_hub/backend/
 sudo chown -R ubuntu:ubuntu /home/ubuntu/
 RANDOM_PASSWORD=$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1) 
 aws ssm put-parameter --name "/modelhub/RandomPassword" --value "$RANDOM_PASSWORD" --type "SecureString" --overwrite --region "$REGION"
+log "Run CN setup script"
 cd /home/ubuntu/llm_model_hub/backend
-bash 01.setup.sh
+bash 0.setup-cn.sh
 sleep 30
 #add user in db
 source ../miniconda3/bin/activate py311
