@@ -28,8 +28,10 @@ log "Installing nodejs"
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt install -y nodejs
 npm config set registry https://registry.npmmirror.com
+sudo npm config set registry https://registry.npmmirror.com
 sudo npm install --global yarn
 yarn config set registry https://registry.npmmirror.com
+rm /home/ubuntu/llm_model_hub/yarn.lock
 
 # download file
 cd /home/ubuntu/
