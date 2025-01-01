@@ -17,33 +17,22 @@ Parameters:
     Default: /aws/service/canonical/ubuntu/server-minimal/24.04/stable/20241002/amd64/hvm/ebs-gp3/ami-id
     Description: Ubuntu 24.04 AMI ID
 
-  HuggingFaceHubToken:
-    Type: String
-    Description: Optional Hugging Face Hub Token
-    Default: ""
-
-  WandbApiKey:
-    Type: String
-    Description: Optional WANDB API Key for view W&B in wandb.ai
-    Default: ""
-
-  WandbBaseUrl:
-    Type: String
-    Description: Optional WANDB Base URL for view W&B own Wandb portal
-    Default: ""
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    AllowedPattern: ".+"
+    MinLength: 1
 
 Resources:
   EC2Instance:
     Type: AWS::EC2::Instance
-    CreationPolicy:
-      ResourceSignal:
-        Timeout: PT60M
     Properties:
       Tags:
         - Key: Name
           Value: ModelHubServer
       InstanceType: !Ref InstanceType
       ImageId: !Ref AMIId
+      KeyName: !Ref KeyPairName
       SecurityGroupIds: 
         - !Ref EC2SecurityGroup
       BlockDeviceMappings:
@@ -52,134 +41,16 @@ Resources:
             VolumeSize: 500
             VolumeType: gp3
       IamInstanceProfile: !Ref EC2InstanceProfile
-      UserData:
-        Fn::Base64:
-          !Sub 
-            - |
-              #!/bin/bash
-              # 设置日志文件
-              LOG_FILE="/var/log/user-data.log"
-
-              # 函数：记录日志
-              log() {
-                echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
-              }
-
-              log "Starting UserData script execution"
-              sudo apt update
-              sudo apt install -y git
-              
-              if ! command -v aws &> /dev/null; then
-                  #安装awscli
-                  curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-                  unzip awscliv2.zip
-                  sudo ./aws/install
-              fi
-
-              #install nodejs 
-              curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-              sudo apt install -y nodejs
-              sudo npm install --global yarn
-              # download file
-              sudo su ubuntu
-              cd /home/ubuntu/
-              git clone --recurse-submodule https://github.com/aws-samples/llm_model_hub.git
-              cd /home/ubuntu/llm_model_hub
-              yarn install
-              #install pm2
-              sudo yarn global add pm2
-
-              # 等待一段时间以确保实例已完全启动
-              sleep 30
-
-
-              #如果是中国区则执行
-              if [[ "$AWS_REGION" == cn* ]]; then
-                  echo "AWS Region is in China: $AWS_REGION"
-                  cd /home/ubuntu/llm_model_hub/backend/
-                  sudo -u ubuntu bash 0.setup-cn.sh
-              fi 
-
-              # 尝试使用 IMDSv2 获取 token
-              TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
-
-              # Get the EC2 instance's public IP
-              EC2_IP=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/public-ipv4)
-              # Get the current region and write it to the backend .env file
-              REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/region)
-
-              echo "Get IP:$EC2_IP and Region:REGION " >> /var/log/user-data.log
-              # Generate a random string key
-              RANDOM_KEY=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
-              # Write the EC2_IP and SageMakerRoleArn to frontend .env file
-              echo "REACT_APP_API_ENDPOINT=http://$EC2_IP:8000/v1" > /home/ubuntu/llm_model_hub/.env
-              echo "REACT_APP_API_KEY=$RANDOM_KEY" >> /home/ubuntu/llm_model_hub/.env
-              echo "REACT_APP_CALCULATOR=https://aws-gpu-memory-caculator.streamlit.app/" >> /home/ubuntu/llm_model_hub/.env
-
-              ## write sagemaker role
-              echo "AK=" >> /home/ubuntu/llm_model_hub/backend/.env
-              echo "SK=" >> /home/ubuntu/llm_model_hub/backend/.env
-              echo "role=${SageMakerRoleArn}" >> /home/ubuntu/llm_model_hub/backend/.env
-              echo "region=$REGION" >> /home/ubuntu/llm_model_hub/backend/.env
-              echo "db_host=127.0.0.1" >> /home/ubuntu/llm_model_hub/backend/.env
-              echo "db_name=llm" >> /home/ubuntu/llm_model_hub/backend/.env
-              echo "db_user=llmdata" >> /home/ubuntu/llm_model_hub/backend/.env
-              echo "db_password=llmdata" >> /home/ubuntu/llm_model_hub/backend/.env
-              echo "api_keys=$RANDOM_KEY" >> /home/ubuntu/llm_model_hub/backend/.env
-              echo "HUGGING_FACE_HUB_TOKEN=${HuggingFaceHubToken}" >> /home/ubuntu/llm_model_hub/backend/.env
-              echo "WANDB_API_KEY=${WandbApiKey}" >> /home/ubuntu/llm_model_hub/backend/.env
-              echo "WANDB_BASE_URL=${WandbBaseUrl}" >> /home/ubuntu/llm_model_hub/backend/.env
-              # Set proper permissions 
-              sudo chown -R ubuntu:ubuntu /home/ubuntu/
-              RANDOM_PASSWORD=$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1) 
-              aws ssm put-parameter --name "/${AWS::StackName}/RandomPassword" --value "$RANDOM_PASSWORD" --type "SecureString" --overwrite --region ${AWS::Region}
-              cd /home/ubuntu/llm_model_hub/backend
-              sudo -u ubuntu bash 01.setup.sh
-              sleep 30
-              #add user in db
-              source ../miniconda3/bin/activate py311
-              conda activate py311
-              python3 users/add_user.py demo_user $RANDOM_PASSWORD default
-
-              #build vllm image
-              cd /home/ubuntu/llm_model_hub/backend/byoc
-              sudo -u ubuntu bash build_and_push.sh
-              sleep 5
-
-              # 构建llamafactory镜像
-              log "Building and pushing llamafactory image"
-              cd /home/ubuntu/llm_model_hub/backend/docker
-              sudo -u ubuntu bash build_and_push.sh || { log "Failed to build and push llamafactory image"; exit 1; }
-              sleep 5
-
-              #upload dummy tar.gz
-              cd /home/ubuntu/llm_model_hub/backend/byoc
-              sudo -u ubuntu ../../miniconda3/envs/py311/bin/python startup.py 
-
-              #start backend
-              cd /home/ubuntu/llm_model_hub/backend/
-              sudo -u ubuntu bash 02.start_backend.sh
-              sleep 15
-
-              #start frontend
-              cd /home/ubuntu/llm_model_hub/
-              sudo -u ubuntu pm2 start pm2run.config.js 
-              # 安装 cfn-signal
-              sudo pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
-              # 发送成功信号
-              /usr/local/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
-              echo "RandomPassword=$RANDOM_PASSWORD" >> /etc/environment
-              echo "Run User Data Script Done! " >> /var/log/user-data.log
-            - SageMakerRoleArn: !GetAtt SageMakerExecutionRole.Arn
-              HuggingFaceHubToken: !Ref HuggingFaceHubToken
-              WandbApiKey: !Ref WandbApiKey
-              WandbBaseUrl: !Ref WandbBaseUrl
 
   EC2SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Allow SSH, port 8000 and 3000
       SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22 
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
         - IpProtocol: tcp
           FromPort: 8000
           ToPort: 8000
@@ -253,33 +124,18 @@ Resources:
                   - s3:ListBucket
                   - s3:CreateBucket
                 Resource:
-                  - arn:aws-cn:s3:::*
-
-  SSMConsoleAccessRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ec2.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws-cn:iam::aws:policy/AmazonSSMFullAccess
-      Policies:
-        - PolicyName: SSMConsoleAccess
+                  - '*'
+        - PolicyName: SSMSessionManagerPolicy
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
                 Action:
-                  - ssm:StartSession
-                  - ssm:DescribeSessions
-                  - ssm:TerminateSession
-                  - ssm:ResumeSession
-                Resource: '*'
-
+                  - ssmmessages:CreateControlChannel
+                  - ssmmessages:CreateDataChannel
+                  - ssmmessages:OpenControlChannel
+                  - ssmmessages:OpenDataChannel
+                Resource: !Sub 'arn:aws-cn:sagemaker:${AWS::Region}:${AWS::AccountId}:*'     
                 
 Outputs:
   InstanceId:
@@ -291,6 +147,3 @@ Outputs:
   SageMakerRoleArn:
     Description: ARN of the SageMaker Execution Role
     Value: !GetAtt SageMakerExecutionRole.Arn
-  RandomPasswordParameter:
-    Description: AWS Systems Manager Parameter name for the random password
-    Value: !Sub '/${AWS::StackName}/RandomPassword'
