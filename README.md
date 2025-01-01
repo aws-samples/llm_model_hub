@@ -75,12 +75,20 @@ unzip llm_model_hub.zip
 ```sh
 export SageMakerRoleArn=<上面步骤创建的sagemaker_exection_role的完整arn,如 arn:aws-cn:iam:1234567890:role/sagemaker_exection_role>
 ```
+- （可选）如需要设置Swanlab或者wandb作为metrics监控看板：
+```sh
+export SWANLAB_API_KEY=<SWANLAB_API_KEY>
+export WANDB_API_KEY=<WANDB_API_KEY>
+export WANDB_BASE_URL=<WANDB_BASE_URL>
+
+```
 
 ## 4.执行脚本
 ```bash
+cd /home/ubuntu/llm_model_hub
 bash cn-region-deploy.sh
 ```
-大约30之后执行完成，可以在/home/ubuntu/setup.log中查看安装日志。
+大约40~60分钟（取决于docker镜像网站速度）之后执行完成，可以在/home/ubuntu/setup.log中查看安装日志。
 
 ## 5.访问
 - 以上都部署完成后，前端启动之后，可以通过浏览器访问http://{ip}:3000访问前端，/home/ubuntu/setup.log中查看用户名和随机密码

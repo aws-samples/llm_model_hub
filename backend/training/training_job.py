@@ -17,7 +17,7 @@ import time
 import dotenv
 import os
 from utils.config import boto_sess,role,default_bucket,sagemaker_session, is_efa, \
-LORA_BASE_CONFIG,DEEPSPEED_BASE_CONFIG_MAP,FULL_BASE_CONFIG,DEFAULT_REGION,WANDB_API_KEY, WANDB_BASE_URL
+LORA_BASE_CONFIG,DEEPSPEED_BASE_CONFIG_MAP,FULL_BASE_CONFIG,DEFAULT_REGION,WANDB_API_KEY, WANDB_BASE_URL, SWANLAB_API_KEY
 
 dotenv.load_dotenv()
 
@@ -180,6 +180,13 @@ class TrainingJobExcutor(BaseModel):
             doc['report_to'] = "wandb"
             timestp = to_datetime_string(time.time()).replace(' ', '_')
             doc['run_name'] = f"modelhub_run_{timestp}"
+
+        if SWANLAB_API_KEY:
+            doc['use_swanlab'] = True
+            timestp = to_datetime_string(time.time()).replace(' ', '_')
+            doc['swanlab_run_name'] = f"sagemaker_modelhub_run_{timestp}"
+            doc['swanlab_project'] = f"sagemaker_modelhub"
+            doc['swanlab_api_key'] = SWANLAB_API_KEY
             
         #训练精度
         if job_payload['training_precision'] == 'bf16':
@@ -271,7 +278,8 @@ class TrainingJobExcutor(BaseModel):
             "merge_args_path":sg_lora_merge_config,
             "train_args_path":sg_config,
             'OUTPUT_MODEL_S3_PATH': output_s3_path, # destination 
-            "PIP_INDEX":'https://mirrors.aliyun.com/pypi/simple' if DEFAULT_REGION.startswith('cn') else '',
+            "REGION": DEFAULT_REGION,
+            # "PIP_INDEX":'https://mirrors.aliyun.com/pypi/simple' if DEFAULT_REGION.startswith('cn') else '',
             "USE_MODELSCOPE_HUB": "1" if DEFAULT_REGION.startswith('cn') else '0'
             
         }

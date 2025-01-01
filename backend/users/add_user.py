@@ -1,5 +1,6 @@
 import sys
 sys.path.append('./')
+
 from db_management.database import DatabaseWrapper
 from logger_config import setup_logger
 import argparse

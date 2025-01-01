@@ -11,8 +11,8 @@ from urllib.parse import urlparse
 from multiprocessing import Process
 
 
-def load_s3_json(s3_path):
-    s3_client = boto3.client('s3')
+def load_s3_json(s3_path,region_name):
+    s3_client = boto3.client('s3',region_name)
     parsed = urlparse(s3_path)
     bucket = parsed.netloc
     key = parsed.path.lstrip('/')
@@ -105,9 +105,10 @@ def stop_monitoring():
 
 if __name__ == "__main__":
 
-    train_args_json = load_s3_json(os.environ['train_args_path'])
-    merge_args_json = load_s3_json(os.environ['merge_args_path'])
-    datainfo = load_s3_json(os.environ['dataset_info_path'])
+    regin_name = os.environ['REGION'] 
+    train_args_json = load_s3_json(os.environ['train_args_path'],regin_name)
+    merge_args_json = load_s3_json(os.environ['merge_args_path'],regin_name)
+    datainfo = load_s3_json(os.environ['dataset_info_path'],regin_name)
 
     #save to data folder
     with open('/opt/ml/code/data/dataset_info.json', 'w') as f:

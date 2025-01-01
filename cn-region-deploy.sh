@@ -64,7 +64,7 @@ fi
 # POLICY_NAME="sagemaker_s3_policy_${RANDOM_SUFFIX}"
 
 # # Create role and capture the ARN
-# ROLE_ARN=$(aws iam create-role \
+# SageMakerRoleArn=$(aws iam create-role \
 #     --role-name ${ROLE_NAME} \
 #     --assume-role-policy-document file://trust-policy.json \
 #     --query 'Role.Arn' --output text)
@@ -88,10 +88,11 @@ fi
 # rm trust-policy.json s3-policy.json
 
 # echo "Created role: ${ROLE_NAME}" >>  "$LOG_FILE"
-# echo "Role ARN: ${ROLE_ARN}" >>  "$LOG_FILE"
+# echo "Role ARN: ${SageMakerRoleArn}" >>  "$LOG_FILE"
 
 
 #install nodejs 
+log "Installing nodejs"
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt install -y nodejs
 sudo npm config set registry http://mirrors.cloud.tencent.com/npm/
@@ -108,7 +109,7 @@ sudo yarn global add pm2
 # 等待一段时间以确保实例已完全启动
 sleep 30
 
-
+log "Run cn setup script"
 #如果是中国区则执行
 cd /home/ubuntu/llm_model_hub/backend/
 bash 0.setup-cn.sh
@@ -125,6 +126,8 @@ echo "Get IP:$EC2_IP and Region:$REGION " >> "$LOG_FILE"
 # Generate a random string key
 RANDOM_KEY=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
 # Write the EC2_IP to frontend .env file
+rm /home/ubuntu/llm_model_hub/.env
+rm /home/ubuntu/llm_model_hub/backend/.env
 echo "REACT_APP_API_ENDPOINT=http://$EC2_IP:8000/v1" > /home/ubuntu/llm_model_hub/.env
 echo "REACT_APP_API_KEY=$RANDOM_KEY" >> /home/ubuntu/llm_model_hub/.env
 echo "REACT_APP_CALCULATOR=https://aws-gpu-memory-caculator.streamlit.app/" >> /home/ubuntu/llm_model_hub/.env
@@ -132,7 +135,7 @@ echo "REACT_APP_CALCULATOR=https://aws-gpu-memory-caculator.streamlit.app/" >> /
 ## write sagemaker role
 echo "AK=" >> /home/ubuntu/llm_model_hub/backend/.env
 echo "SK=" >> /home/ubuntu/llm_model_hub/backend/.env
-echo "role=${ROLE_ARN}" >> /home/ubuntu/llm_model_hub/backend/.env
+echo "role=${SageMakerRoleArn}" >> /home/ubuntu/llm_model_hub/backend/.env
 echo "region=$REGION" >> /home/ubuntu/llm_model_hub/backend/.env
 echo "db_host=127.0.0.1" >> /home/ubuntu/llm_model_hub/backend/.env
 echo "db_name=llm" >> /home/ubuntu/llm_model_hub/backend/.env
@@ -140,8 +143,9 @@ echo "db_user=llmdata" >> /home/ubuntu/llm_model_hub/backend/.env
 echo "db_password=llmdata" >> /home/ubuntu/llm_model_hub/backend/.env
 echo "api_keys=$RANDOM_KEY" >> /home/ubuntu/llm_model_hub/backend/.env
 echo "HUGGING_FACE_HUB_TOKEN=${HuggingFaceHubToken}" >> /home/ubuntu/llm_model_hub/backend/.env
-echo "WANDB_API_KEY=${WandbApiKey}" >> /home/ubuntu/llm_model_hub/backend/.env
-echo "WANDB_BASE_URL=${WandbBaseUrl}" >> /home/ubuntu/llm_model_hub/backend/.env
+echo "WANDB_API_KEY=${WANDB_API_KEY}" >> /home/ubuntu/llm_model_hub/backend/.env
+echo "WANDB_BASE_URL=${WANDB_BASE_URL}" >> /home/ubuntu/llm_model_hub/backend/.env
+echo "SWANLAB_API_KEY=${SWANLAB_API_KEY}" >> /home/ubuntu/llm_model_hub/backend/.env
 # Set proper permissions 
 sudo chown -R ubuntu:ubuntu /home/ubuntu/
 RANDOM_PASSWORD=$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1) 
