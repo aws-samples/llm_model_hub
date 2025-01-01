@@ -31,6 +31,8 @@ npm config set registry https://registry.npmmirror.com
 sudo npm config set registry https://registry.npmmirror.com
 sudo npm install --global yarn
 yarn config set registry https://registry.npmmirror.com
+sudo yarn config set registry https://registry.npmmirror.com
+
 rm /home/ubuntu/llm_model_hub/yarn.lock
 
 # download file
