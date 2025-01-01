@@ -27,8 +27,10 @@ fi
 log "Installing nodejs"
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt install -y nodejs
-sudo npm config set registry http://mirrors.cloud.tencent.com/npm/
+npm config set registry https://registry.npmmirror.com
 sudo npm install --global yarn
+yarn config set registry https://registry.npmmirror.com
+
 # download file
 cd /home/ubuntu/
 #中国区事先手动下载
