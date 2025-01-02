@@ -1,15 +1,15 @@
-deepspeed<=0.15.4
+# deepspeed<=0.15.4
 # intel-extension-for-pytorch==2.4.0 
 # autoawq @git+https://github.com/casper-hansen/AutoAWQ.git@79547665bdb27768a9b392ef375776b020acbf0c
-autoawq<=0.2.7
-metrics
-bitsandbytes>=0.39.0
-rouge-chinese
-jieba
+# autoawq<=0.2.7
+# metrics
+# bitsandbytes>=0.39.0
+# rouge-chinese
+# jieba
 peft>=0.11.1
 pandas
-modelscope
+# modelscope
 wandb
-nltk
-swanlab
+# nltk
+# swanlab
 flash_attn==2.6.3
