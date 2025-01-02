@@ -34,7 +34,7 @@ WORKDIR /opt/ml/code/
 RUN pip config set global.index-url "$PIP_INDEX" && \
     pip config set global.extra-index-url "$PIP_INDEX" && \
     python -m pip install --upgrade pip && \
-    python -m pip install -r requirements.txt && pip install -e .
+    python -m pip install -r requirements.txt && pip install -e ".[metrics,bitsandbytes,deepspeed,gptq,awq,qwen,modelscope,swanlab]"
 
 
 # Instal extral dependencies
