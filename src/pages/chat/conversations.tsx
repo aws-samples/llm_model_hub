@@ -10,8 +10,8 @@ import {
   Button,
   Modal,
 } from "@cloudscape-design/components";
-import SyntaxHighlighter from "react-syntax-highlighter";
-import { a11yDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
+import {Prism, SyntaxHighlighterProps} from 'react-syntax-highlighter';
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 // import { CopyBlock,a11yDark } from "react-code-blocks";
 import { useChatData, generateUniqueId } from "./common-components";
 import { useTranslation } from "react-i18next";
@@ -40,7 +40,7 @@ import { grey } from "@mui/material/colors";
 
 const BOTNAME = "assistant";
 const MAX_CONVERSATIONS = 6;
-
+const SyntaxHighlighter = (Prism as any) as React.FC<SyntaxHighlighterProps>;
 
 
 const MarkdownToHtml = ({ text }: { text: string }) => {
@@ -55,7 +55,7 @@ const MarkdownToHtml = ({ text }: { text: string }) => {
             <SyntaxHighlighter
               {...props}
               children={String(children).replace(/\n$/, "")}
-              style={a11yDark}
+              style={vscDarkPlus}
               wrapLongLines
               language={match[1]}
               PreTag="div"

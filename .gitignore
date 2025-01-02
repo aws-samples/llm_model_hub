@@ -23,7 +23,10 @@ lib-cov
 # Coverage directory used by tools like istanbul
 coverage
 *.lcov
-
+.vscode/
+*.tar.gz
+miniconda3/
+Miniconda3-*
 # nyc test coverage
 .nyc_output
 
