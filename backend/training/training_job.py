@@ -62,7 +62,7 @@ def get_all_log_streams(logs_client,log_group_name):
     
     except Exception as e:
         print(f"An error occurred: {e}")
-        return None
+        return []
 
 
 def fetch_log(log_group_name:str='/aws/sagemaker/TrainingJobs',log_stream_name:str=None,next_token:str=None):
