@@ -88,4 +88,4 @@ instance_gpus_map={
 }
 
 def is_efa(instance_type):
-    return 'ml.p4' in instance_type or 'ml.p5' in instance_type or 'ml.g6e' in instance_type or 'ml.g5' in instance_type
+    return 'ml.p4' in instance_type or 'ml.p5' in instance_type or 'ml.g6e' in instance_type
