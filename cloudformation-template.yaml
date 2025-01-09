@@ -14,7 +14,7 @@ Parameters:
 
   AMIId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
+    Default: /aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id
     Description: Ubuntu 22.04 AMI ID
 
   HuggingFaceHubToken:
@@ -76,11 +76,13 @@ Resources:
               # 更新和安装基本软件
               log "Updating apt and installing git"
               sudo apt update && sudo apt install -y git || { log "Failed to update apt or install git"; exit 1; }
-
+              sudo apt install unzip
               # 检查并安装 AWS CLI
               if ! command -v aws &> /dev/null; then
                 log "Installing AWS CLI"
-                sudo apt update && sudo apt install -y awscli || { log "Failed to install AWS CLI"; exit 1; }
+                curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                unzip awscliv2.zip
+                sudo ./aws/install
               else
                 log "AWS CLI already installed"
               fi
