@@ -166,12 +166,24 @@ class TrainingJobExcutor(BaseModel):
         
         if val_size:=float(job_payload['val_size']):
             doc['val_size'] = val_size
+            doc['eval_steps'] = int(job_payload['logging_steps'])
+            doc['eval_strategy'] = 'steps'
+            doc['per_device_eval_batch_size'] = 2
+        else:
+            if 'val_size' in doc:
+                doc.pop('val_size', None)
+                doc.pop('eval_strategy', None)
+                doc.pop('per_device_eval_batch_size', None)
+                doc.pop('eval_steps', None)
                     
         if job_payload['booster_option'] == 'fa2':
             doc['flash_attn'] = 'fa2'
         elif job_payload['booster_option']  == 'use_unsloth':
             doc['flash_attn'] = 'auto'
             doc['use_unsloth'] = True
+        elif job_payload['booster_option']  == 'liger_kernel':
+            doc['flash_attn'] = 'auto'
+            doc['enable_liger_kernel'] = True
         else:
             doc['flash_attn'] = 'auto'
             
@@ -180,6 +192,8 @@ class TrainingJobExcutor(BaseModel):
             doc['report_to'] = "wandb"
             timestp = to_datetime_string(time.time()).replace(' ', '_')
             doc['run_name'] = f"modelhub_run_{timestp}"
+        else:
+            doc['report_to'] = "none"
 
         if SWANLAB_API_KEY:
             doc['use_swanlab'] = True

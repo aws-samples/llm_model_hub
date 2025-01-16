@@ -58,6 +58,8 @@ aws ecr set-repository-policy \
 if [[ $region =~ ^cn ]]; then
     BASE_IMAGE="727897471807.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.4.0-gpu-py311"
     PIP_INDEX="https://mirrors.aliyun.com/pypi/simple"
+    sed -i '/^RUN pip install "unsloth[cu121-torch240]/d' /home/ubuntu/llm_model_hub/backend/docker/Dockerfile
+
 else
     BASE_IMAGE="763104351884.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.4.0-gpu-py311"
     PIP_INDEX="https://pypi.org/simple"
