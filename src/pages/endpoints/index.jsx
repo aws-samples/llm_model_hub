@@ -20,6 +20,7 @@ import { useDistributions } from './hooks';
 import { TopNav } from '../commons/top-nav';
 import {DeleteModelModal} from '../endpoints/delete-ed';
 import {DeployModelModal} from '../endpoints/create-ed';
+import {ViewCodeModal} from '../endpoints/view-code';
 import {useSimpleNotifications} from '../commons/use-notifications';
 
 import '../../styles/base.scss';
@@ -39,6 +40,7 @@ function ServerSideTable({
   const [sortingColumn, setSortingColumn] = useState(columnDefinitions[0]);
   const [refresh,setRefresh] = useState(false);
   const [visible, setVisible] = useState(false);
+  const [codeVisible,setCodeVisible] = useState(false);
   const [deployVisible, setDeployVisible] = useState(false);
   const [selectedItems, setSelectedItems] = useState([]);
   const { pageSize } = preferences;
@@ -76,6 +78,10 @@ function ServerSideTable({
     setVisible(true);
   }
 
+  const onViewCode = ()=>{
+    setCodeVisible(true);
+  }
+
   const onRefresh = () => {
     setRefresh((prev)=>!prev);
   };
@@ -90,6 +96,7 @@ function ServerSideTable({
     selectedItems={selectedItems} setVisible={setVisible} visible={visible}/>}
     {deployVisible&&<DeployModelModal setDisplayNotify={setDisplayNotify} setNotificationData={setNotificationData} onRefresh={onRefresh}
     selectedItems={selectedItems} setVisible={setDeployVisible} visible={deployVisible}/>}
+    {codeVisible&&<ViewCodeModal selectedItems={selectedItems} setVisible={setCodeVisible} visible={codeVisible}/>}
 
     <Table
       enableKeyboardNavigation={true}
@@ -124,6 +131,7 @@ function ServerSideTable({
           counter={!loading && getHeaderCounterServerSideText(totalCount, selectedItems.length)}
           onInfoLinkClick={loadHelpPanelContent}
           onRefresh={onRefresh}
+          onViewCode={onViewCode}
         />
       }
       loadingText="Loading"

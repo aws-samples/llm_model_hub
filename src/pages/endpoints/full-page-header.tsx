@@ -16,6 +16,7 @@ interface FullPageHeaderProps extends HeaderProps {
   onDelete?: () => void;
   onRefresh?: () => void;
   onDeploy?: () => void;
+  onViewCode?: () => void;
 }
 // || selectedItems[0].endpoint_status !== 'INSERVICE'
 export function FullPageHeader({
@@ -30,6 +31,7 @@ export function FullPageHeader({
   onDelete,
   onRefresh,
   onDeploy,
+  onViewCode,
   ...props
 }: FullPageHeaderProps) {
   // console.log("selectedItems",selectedItems)
@@ -51,6 +53,9 @@ export function FullPageHeader({
           </Button>
           <Button data-testid="header-btn-chat" variant="primary" disabled={selectedItemsCount === 0 || selectedItems&&selectedItems[0]?.endpoint_status !== 'INSERVICE' } href={`/chat/${selectedItems&&selectedItems[0]?.endpoint_name}`}>
             {createButtonText}
+          </Button>
+          <Button data-testid="header-btn-viewcode" disabled={selectedItemsCount === 0 || selectedItems&&selectedItems[0]?.endpoint_status !== 'INSERVICE' } onClick={onViewCode}>
+          {t('viewcode')}
           </Button>
         </SpaceBetween>
       }

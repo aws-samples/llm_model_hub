@@ -193,7 +193,8 @@ i18n
             rlhf_ftx_gamma: 'Ftx gamma',
             rlhf_ftx_gamma_desc: 'The weight of SFT loss in the final loss.',
             rlhf_loss_type: 'Loss type',
-            public_datasets:'Public datasets'
+            public_datasets:'Public datasets',
+            viewcode:'Invoke Code'
         }
       },
       zh:{
@@ -374,7 +375,8 @@ i18n
             rlhf_ftx_gamma: 'Ftx gamma',
             rlhf_ftx_gamma_desc: '损失函数中 SFT 损失的权重大小.',
             rlhf_loss_type: '损失函数类型',
-            public_datasets:'开源数据集'
+            public_datasets:'开源数据集',
+            viewcode:'调用代码'
 
         }
       }
