@@ -11,7 +11,7 @@ import tempfile
 from modelscope.hub.snapshot_download import snapshot_download
 from model.data_model import *
 from db_management.database import DatabaseWrapper
-from datetime import datetime
+from datetime import datetime,timedelta
 from training.jobs import sync_get_job_by_id
 from utils.config import boto_sess,role,sagemaker_session,DEFAULT_REGION,SUPPORTED_MODELS_FILE,DEFAULT_TEMPLATE_FILE,default_bucket,VLLM_IMAGE,MODEL_ARTIFACT,instance_gpus_map
 from utils.get_factory_config import get_model_path_by_name
@@ -25,7 +25,8 @@ import threading
 import concurrent.futures
 database = DatabaseWrapper()
 logger = setup_logger('endpoint_management.py', log_file='deployment.log', level=logging.INFO)
-
+DEFAULT_CACHE_DIR = "./model_cache"  # 默认缓存目录
+CACHE_EXPIRY_DAYS = 30  # 缓存有效期(天)
 
 
 endpoints_lock = threading.Lock()
@@ -42,36 +43,65 @@ def check_deployment_status(endpoint_name:str):
             logger.info('a thread exit')
             return True
 
-
-def ms_download_and_upload_model(model_repo, s3_bucket, s3_prefix):
-    # 创建临时目录作为缓存
-    with tempfile.TemporaryDirectory() as cache_dir:
-        try:
-            # 从 ModelScope 下载模型到缓存目录
-            local_dir = snapshot_download(model_repo, cache_dir=cache_dir)
-            
-            # 配置 S3 客户端
-            s3_client = boto_sess.client('s3')
-            
-            # 上传模型文件到 S3
-            for root, _, files in os.walk(local_dir):
-                for file in files:
-                    local_path = os.path.join(root, file)
-                    relative_path = os.path.relpath(local_path, local_dir)
-                    s3_key = os.path.join(s3_prefix, relative_path)
-                    s3_client.upload_file(local_path, s3_bucket, s3_key)
-            
-            # 构建并返回 S3 URL
-            s3_url = f"s3://{s3_bucket}/{s3_prefix}"
-            logger.info(f"successfully downloaded:{model_repo}, and uploaded to {s3_url}")
-            return s3_url
+def cleanup_expired_cache(cache_dir):
+    """清理过期的缓存文件"""
+    if not os.path.exists(cache_dir):
+        return
         
-        finally:
-            # 清理临时目录（这步可以省略，因为使用了 with tempfile.TemporaryDirectory()）
-            if os.path.exists(cache_dir):
-                shutil.rmtree(cache_dir)
+    expiry_time = time.time() - (CACHE_EXPIRY_DAYS * 24 * 60 * 60)
     
-                
+    for item in os.listdir(cache_dir):
+        item_path = os.path.join(cache_dir, item)
+        if os.path.getctime(item_path) < expiry_time:
+            try:
+                if os.path.isfile(item_path):
+                    os.remove(item_path)
+                elif os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+                logger.info(f"Cleaned up expired cache: {item_path}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up {item_path}: {str(e)}")
+
+
+def ms_download_and_upload_model(model_repo, s3_bucket, s3_prefix, cache_dir=DEFAULT_CACHE_DIR):
+    """
+    从ModelScope下载模型并上传到S3
+    
+    Args:
+        model_repo: ModelScope模型仓库名
+        s3_bucket: S3存储桶名
+        s3_prefix: S3路径前缀
+        cache_dir: 缓存目录路径,默认为DEFAULT_CACHE_DIR
+    """
+    try:
+        # 创建缓存目录(如果不存在)
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        # 清理过期缓存
+        cleanup_expired_cache(cache_dir)
+        
+        # 从ModelScope下载模型到缓存目录
+        local_dir = snapshot_download(model_repo, cache_dir=cache_dir)
+        
+        s3_client = boto_sess.client('s3')
+        
+        # 上传模型文件到S3
+        for root, _, files in os.walk(local_dir):
+            for file in files:
+                local_path = os.path.join(root, file)
+                relative_path = os.path.relpath(local_path, local_dir)
+                s3_key = os.path.join(s3_prefix, relative_path)
+                s3_client.upload_file(local_path, s3_bucket, s3_key)
+        
+        # 构建并返回S3 URL
+        s3_url = f"s3://{s3_bucket}/{s3_prefix}"
+        logger.info(f"Successfully downloaded {model_repo} and uploaded to {s3_url}")
+        return s3_url
+        
+    except Exception as e:
+        logger.error(f"Error processing model {model_repo}: {str(e)}")
+        raise
+       
 
 def get_endpoint_status(endpoint_name:str) ->EndpointStatus:
     client = boto_sess.client('sagemaker')
