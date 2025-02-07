@@ -76,4 +76,5 @@ docker tag ${inference_image}:${VERSION} ${inference_fullname}
 docker push ${inference_fullname}
 # 删除 .env 文件中的 training_image= 这一行
 sed -i '/^training_image=/d' /home/ubuntu/llm_model_hub/backend/.env
+echo "" >> /home/ubuntu/llm_model_hub/backend/.env
 echo "training_image=${inference_fullname}" >> /home/ubuntu/llm_model_hub/backend/.env
