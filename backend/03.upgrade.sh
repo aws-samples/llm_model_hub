@@ -1,4 +1,5 @@
 #!/bin/bash
+git stash
 git pull
 git submodule update 
 cd /home/ubuntu/llm_model_hub/backend/docker/

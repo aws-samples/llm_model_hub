@@ -5,7 +5,7 @@ import boto3
 import time
 
 # 更改成model hub部署的endpoint名称和region name
-endpoint_name = "DeepSeek-R1-Distill-Qwen-32B-2025-02-07-05-01-54-000"
+endpoint_name = "DeepSeek-R1-Distill-Qwen-32B-2025-02-07-07-58-47-569"
 region_name = 'us-east-1'
 runtime = boto3.client('runtime.sagemaker',region_name=region_name)
 payload = {
@@ -15,7 +15,7 @@ payload = {
         "content": "Write a quick sort in python"
     }
     ],
-    "max_tokens": 8000,
+    "max_tokens": 128,
     "stream": False
 }
 
