@@ -2,30 +2,37 @@
 import re
 import json
 import boto3
+import time
 
 # 更改成model hub部署的endpoint名称和region name
-endpoint_name = "DeepSeek-R1-Distill-Llama-8B-2025-02-06-13-14-15-806"
+endpoint_name = "DeepSeek-R1-Distill-Qwen-32B-2025-02-07-05-01-54-000"
 region_name = 'us-east-1'
 runtime = boto3.client('runtime.sagemaker',region_name=region_name)
 payload = {
     "messages": [
     {
         "role": "user",
-        "content": "who are you"
+        "content": "Write a quick sort in python"
     }
     ],
-    "max_tokens": 1024,
+    "max_tokens": 8000,
     "stream": False
 }
 
 # 非流式
+t1 = time.time()
 response = runtime.invoke_endpoint(
     EndpointName=endpoint_name,
     ContentType='application/json',
     Body=json.dumps(payload)
 )
-
-print(json.loads(response['Body'].read())["choices"][0]["message"]["content"])
+t2 = time.time()
+body = json.loads(response['Body'].read())
+cost = t2-t1
+print(f"cost time:{cost} s")
+completion_tokens = body['usage']['completion_tokens']
+print(f"output tokens per s:{completion_tokens/cost}")
+print(body["choices"][0]["message"]["content"])
 
 
 payload = {
@@ -35,7 +42,7 @@ payload = {
         "content": "Write a quick sort in python"
     }
     ],
-    "max_tokens": 1024,
+    "max_tokens": 8000,
     "stream": True
 }
 
