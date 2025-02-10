@@ -7,7 +7,7 @@ from sglang.utils import (
 import argparse
 
 
-if __file__ == "__main__":
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-path", type=str)
     parser.add_argument("--dtype",type=str,default="auto")
