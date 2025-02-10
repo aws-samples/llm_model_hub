@@ -67,7 +67,7 @@ else
             # Set model_id to base_dir for local loading
             echo "Using model: $file_dir"
 
-            command="python3 start.py --model-path $file_dir --tp-size $tensor_parallel_size --dtype $dtype"
+            command="/usr/bin/python3 start.py --model-path $file_dir --tp-size $tensor_parallel_size --dtype $dtype"
             
             eval $command
  
@@ -78,7 +78,7 @@ else
             echo "using: $model_id"
             # command="python3 start.py --model-path $model_id --tp-size $tensor_parallel_size --dtype $dtype"
 
-            command="python3 -m sglang.launch_server --model-path $model_id --tp-size $tensor_parallel_size  --dtype $dtype --port $SAGEMAKER_BIND_TO_PORT --host 0.0.0.0 --trust-remote-code"
+            command="/usr/bin/python3 -m sglang.launch_server --model-path $model_id --tp-size $tensor_parallel_size  --dtype $dtype --port $SAGEMAKER_BIND_TO_PORT --host 0.0.0.0 --trust-remote-code"
 
             eval $command
         fi
