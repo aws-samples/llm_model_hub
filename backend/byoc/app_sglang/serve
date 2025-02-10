@@ -1,5 +1,6 @@
 #!/bin/bash
-
+set -x  # 启用调试模式
+set -e  # 遇到错误立即退出
 # Set the directory to check
 base_dir="/opt/ml/model/"
 file_dir="/tmp/model_file/"
@@ -75,6 +76,9 @@ else
         else
             # If model_id file exists, use its content as model_id
             # model_id=$(cat "$model_dir/model_id")
+            echo "Current directory: $(pwd)"
+            echo "Python path: $PYTHONPATH"
+            echo "Python version: $(python3 --version)"
             echo "using: $model_id"
             # command="python3 start.py --model-path $model_id --tp-size $tensor_parallel_size --dtype $dtype"
 
