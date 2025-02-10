@@ -67,7 +67,7 @@ else
             # Set model_id to base_dir for local loading
             echo "Using model: $file_dir"
 
-            command="python3 start.py --model-path $file_dir --trust-remote-code --tp-size $tensor_parallel_size --dtype $dtype"
+            command="python3 start.py --model-path $file_dir --tp-size $tensor_parallel_size --dtype $dtype"
             
             eval $command
  
@@ -76,7 +76,7 @@ else
             # If model_id file exists, use its content as model_id
             # model_id=$(cat "$model_dir/model_id")
             echo "using: $model_id"
-            command="python3 start.py --model-path $file_dir --trust-remote-code --tp-size $tensor_parallel_size --dtype $dtype"
+            command="python3 start.py --model-path $file_dir --tp-size $tensor_parallel_size --dtype $dtype"
 
             eval $command
         fi
