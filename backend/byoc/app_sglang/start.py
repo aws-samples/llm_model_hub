@@ -14,7 +14,7 @@ if __file__ == "__main__":
     parser.add_argument("--tp-size",type=int,default=1)
     args = parser.parse_args()
 
-    print_highlight(f"Running with {args.num_gpus} GPUs")
+    print(f"Running with {args.model_path}")
 
     execute_shell_command(
         f"""
