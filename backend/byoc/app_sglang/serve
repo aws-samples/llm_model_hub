@@ -76,7 +76,9 @@ else
             # If model_id file exists, use its content as model_id
             # model_id=$(cat "$model_dir/model_id")
             echo "using: $model_id"
-            command="python3 start.py --model-path $model_id --tp-size $tensor_parallel_size --dtype $dtype"
+            # command="python3 start.py --model-path $model_id --tp-size $tensor_parallel_size --dtype $dtype"
+
+            command="python3 -m sglang.launch_server --model-path $model_id --tp-size $tensor_parallel_size  --dtype $dtype --port $SAGEMAKER_BIND_TO_PORT --host 0.0.0.0 --trust-remote-code"
 
             eval $command
         fi
