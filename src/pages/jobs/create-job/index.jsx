@@ -39,7 +39,7 @@ const defaultData = {
   training_precision: 'bf16',
   max_samples: 50000,
   cutoff_len: 1024,
-  val_size: 0.1,
+  val_size: 0.05,
   logging_steps: 10,
   warmup_steps: 10,
   save_steps: 500,
