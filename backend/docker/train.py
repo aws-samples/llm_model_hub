@@ -170,8 +170,9 @@ if __name__ == "__main__":
         s3_checkpoint = s3_checkpoint[:-1] if s3_checkpoint.endswith('/') else s3_checkpoint
         # download to local
         run_command(f'./s5cmd sync --exclude "checkpoint-*" {s3_checkpoint}/* /tmp/checkpoint/')
-        # change the model path to local
-        train_args = update_arg_value(train_args,"model_name_or_path","/tmp/checkpoint/")
+        if not train_args_json.get('finetuning_type') == 'lora':
+            # if not lora change the model path to local
+            train_args = update_arg_value(train_args,"model_name_or_path","/tmp/checkpoint/")
         #add resume_from_checkpoint arg
         train_args += " --resume_from_checkpoint /tmp/checkpoint/"
         print(f"resume_from_checkpoint {s3_checkpoint}")
