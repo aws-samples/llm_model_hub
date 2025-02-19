@@ -68,14 +68,30 @@ try:
 except Exception as e:
     print(e) 
 
-VLLM_IMAGE = os.environ.get('vllm_image','')
-MODEL_ARTIFACT = os.environ.get('model_artifact','')
+VLLM_IMAGE = os.environ.get('vllm_image')
+SGLANG_IMAGE = os.environ.get('sglang_image')
+MODEL_ARTIFACT = os.environ.get('model_artifact')
 
+# check
+if not VLLM_IMAGE:
+    raise('vllm_image is not set in .env file')
 
+# if not SGLANG_IMAGE:
+#     raise('sglang_image is not set in .env file')
+
+if not MODEL_ARTIFACT:
+    raise('model_artifact is not set in .env file')
+
+if not os.environ.get('role'):
+    raise('role is not set in .env file')
+
+if MODEL_ARTIFACT and not MODEL_ARTIFACT.endswith('.tar.gz'):
+    raise('model_artifact must end with .tar.gz')
 
 instance_gpus_map={
 'ml.g4dn.2xlarge':1,
 'ml.g4dn.12xlarge':4, 
+'ml.g5.xlarge':1,
 'ml.g5.2xlarge':1,
 'ml.g5.4xlarge':1,
 'ml.g5.12xlarge':4,
@@ -89,6 +105,8 @@ instance_gpus_map={
 'ml.p4d.24xlarge':8,
 'ml.p4de.24xlarge':8,
 'ml.p5.48xlarge':8,
+'ml.p5e.48xlarge':8,
+'ml.p5en.48xlarge':8,
 }
 
 def is_efa(instance_type):

@@ -5,7 +5,7 @@ sys.path.append('../')
 import json
 import os
 import logging
-from typing import Annotated, Sequence, TypedDict, Dict, Optional,List, Any,TypedDict
+from typing import  Dict, Optional,List, Any
 import shutil
 import tempfile
 from modelscope.hub.snapshot_download import snapshot_download
@@ -13,10 +13,9 @@ from model.data_model import *
 from db_management.database import DatabaseWrapper
 from datetime import datetime,timedelta
 from training.jobs import sync_get_job_by_id
-from utils.config import boto_sess,role,sagemaker_session,DEFAULT_REGION,SUPPORTED_MODELS_FILE,DEFAULT_TEMPLATE_FILE,default_bucket,VLLM_IMAGE,MODEL_ARTIFACT,instance_gpus_map
+from utils.config import boto_sess,role,sagemaker_session,DEFAULT_REGION,SUPPORTED_MODELS_FILE,default_bucket,VLLM_IMAGE,SGLANG_IMAGE,MODEL_ARTIFACT,instance_gpus_map
 from utils.get_factory_config import get_model_path_by_name
-from utils.llamafactory.extras.constants import register_model_group,DownloadSource,DEFAULT_TEMPLATE,SUPPORTED_MODELS
-from collections import OrderedDict, defaultdict
+from utils.llamafactory.extras.constants import register_model_group,DownloadSource,SUPPORTED_MODELS
 from sagemaker import image_uris, Model
 import sagemaker
 import pickle
@@ -175,6 +174,84 @@ def register_cust_model(cust_repo_type:DownloadSource,cust_repo_addr:str):
 def get_auto_tensor_parallel_size(instance_type:str) -> int:
     return instance_gpus_map.get(instance_type, 1)
 
+def deploy_engine(job_id:str,engine:str,instance_type:str,enable_lora:bool,model_name:str,model_path:str,extra_params:Dict[str,Any]) -> Dict[bool,str]:
+    if engine in ['auto','vllm']:
+        lmi_image_uri = VLLM_IMAGE
+        dtype = 'half' if instance_type.startswith('ml.g4dn') else 'auto' # g4dn does not support bf16, need to use fp16
+        env={
+            "HF_MODEL_ID": model_name,
+            "DTYPE": dtype,
+            "LIMIT_MM_PER_PROMPT":extra_params.get('limit_mm_per_prompt',''),
+            "S3_MODEL_PATH":model_path,
+            "VLLM_ALLOW_LONG_MAX_MODEL_LEN":"1",
+            "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
+            "MAX_MODEL_LEN":extra_params.get('max_model_len', "12288"), 
+            "ENABLE_PREFIX_CACHING": "1" if extra_params.get('enable_prefix_caching') else "0",
+            "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type))),
+            "MAX_NUM_SEQS": extra_params.get('max_num_seqs','256'),
+            "ENFORCE_EAGER": "1" if extra_params.get('enforce_eager') else "0",
+
+        }
+        if DEFAULT_REGION.startswith('cn'):
+            env['VLLM_USE_MODELSCOPE']='1'
+
+    elif engine in ['sglang']:
+        lmi_image_uri = SGLANG_IMAGE
+        env={
+            "HF_MODEL_ID": model_name,
+            "S3_MODEL_PATH":model_path,
+            "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
+        }
+    
+    else:
+        return False,f"Not supported: {engine}"
+
+    logger.info(env)
+    pure_model_name = model_name.split('/')[1]
+
+    create_time = datetime.now().strftime('%Y-%m-%d %H:%M')
+    
+    endpoint_name = sagemaker.utils.name_from_base(pure_model_name).replace('.','-').replace('_','-')+f"-{engine}-endpoint"
+    endpoint_name = endpoint_name[:63] #must have length less than or equal to 63
+    instance_count = int(extra_params.get("instance_count",1))
+
+    # Create the SageMaker Model object. In this example we let LMI configure the deployment settings based on the model architecture  
+    model = Model(
+            image_uri=lmi_image_uri,
+            role=role,
+            name=endpoint_name,
+            sagemaker_session=sagemaker_session,
+            env=env,
+            model_data=MODEL_ARTIFACT,
+    )
+    try:
+        model.deploy(
+            instance_type= instance_type,
+            initial_instance_count= instance_count,
+            endpoint_name=endpoint_name,
+            wait=False,
+            accept_eula=True,
+            container_startup_health_check_timeout=900
+        )
+        database.create_endpoint(job_id= job_id,
+                                 model_name= model_name,
+                                 model_s3_path= model_path,
+                                 instance_type= instance_type,
+                                 instance_count = instance_count,
+                                 endpoint_name= endpoint_name,
+                                 endpoint_create_time= create_time,
+                                 endpoint_delete_time= None,
+                                 extra_config= None,
+                                 engine=engine,
+                                 enable_lora=enable_lora,
+                                 endpoint_status = EndpointStatus.CREATING
+                                 )
+        return True,endpoint_name
+    except Exception as e:
+        logger.error(f"failed to create_endpoint:{e}")
+        print(e)
+        return False,str(e)
+    
 def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str,extra_params:Dict[str,Any]) -> Dict[bool,str]:
     repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
     #统一处理成repo/modelname格式
@@ -215,74 +292,15 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
         model_name = 'custom/custom_model_in_s3' if not model_name else model_name
 
 
-    logger.info(f"deploy endpoint with model_name:{model_name},model_path:{model_path}")
+    logger.info(f"deploy endpoint with engine:{engine},model_name:{model_name},model_path:{model_path}")
     
-    lmi_image_uri = VLLM_IMAGE
 
-    # g4dn does not support bf16, need to use fp16
-    dtype = 'half' if instance_type.startswith('ml.g4dn') else 'auto'
-    env={
-        "HF_MODEL_ID": model_name,
-        "DTYPE": dtype,
-        "LIMIT_MM_PER_PROMPT":extra_params.get('limit_mm_per_prompt',''),
-        "S3_MODEL_PATH":model_path,
-        "VLLM_ALLOW_LONG_MAX_MODEL_LEN":"1",
-         "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
-         "MAX_MODEL_LEN":extra_params.get('max_model_len', "12288"), 
-         "ENABLE_PREFIX_CACHING": "1" if extra_params.get('enable_prefix_caching') else "0",
-         "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type))),
-         "MAX_NUM_SEQS": extra_params.get('max_num_seqs','256'),
-         "ENFORCE_EAGER": "1" if extra_params.get('enforce_eager') else "0",
+    return deploy_engine(job_id=job_id,engine=engine,instance_type=instance_type,enable_lora=enable_lora,
+                           model_name=model_name,model_path=model_path,extra_params=extra_params)
 
-    }
-    if DEFAULT_REGION.startswith('cn'):
-        env['VLLM_USE_MODELSCOPE']='1'
 
-    logger.info(env)
-    pure_model_name = model_name.split('/')[1]
 
-    create_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
-    endpoint_name = sagemaker.utils.name_from_base(pure_model_name).replace('.','-').replace('_','-')
-    instance_count = int(extra_params.get("instance_count",1))
 
-    # Create the SageMaker Model object. In this example we let LMI configure the deployment settings based on the model architecture  
-    model = Model(
-            image_uri=lmi_image_uri,
-            role=role,
-            name=endpoint_name,
-            sagemaker_session=sagemaker_session,
-            env=env,
-            model_data=MODEL_ARTIFACT,
-    )
-    try:
-        model.deploy(
-            instance_type= instance_type,
-            initial_instance_count= instance_count,
-            endpoint_name=endpoint_name,
-            wait=False,
-            accept_eula=True,
-            container_startup_health_check_timeout=900
-        )
-        database.create_endpoint(job_id= job_id,
-                                 model_name= model_name,
-                                 model_s3_path= model_path,
-                                 instance_type= instance_type,
-                                 instance_count = instance_count,
-                                 endpoint_name= endpoint_name,
-                                 endpoint_create_time= create_time,
-                                 endpoint_delete_time= None,
-                                 extra_config= None,
-                                 engine=engine,
-                                 enable_lora=enable_lora,
-                                 endpoint_status = EndpointStatus.CREATING
-                                 )
-    except Exception as e:
-        logger.error(f"create_endpoint:{e}")
-        print(e)
-        return False,str(e)
-    
-    return True,endpoint_name
 
 
 def deploy_endpoint_background(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str,extra_params:Dict[str,Any]):
@@ -297,34 +315,41 @@ def deploy_endpoint_background(job_id:str,engine:str,instance_type:str,quantize:
                                  cust_repo_type=cust_repo_type,
                                  cust_repo_addr=cust_repo_addr,
                                  extra_params=extra_params
-                                 )
+                                )
 
 def deploy_endpoint_ms(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str,extra_params:Dict[str,Any]) -> Dict[bool,str]:
     pure_model_name = model_name.split('/')[1]
     create_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    endpoint_name = sagemaker.utils.name_from_base(pure_model_name).replace('.','-').replace('_','-')
+    endpoint_name = sagemaker.utils.name_from_base(pure_model_name).replace('.','-').replace('_','-')+f"-{engine}-endpoint"
+    endpoint_name = endpoint_name[:63] 
     instance_count = int(extra_params.get("instance_count",1))
-    lmi_image_uri = VLLM_IMAGE
     model_path = f"s3://{default_bucket}/original_model_file/{model_name}"
-    # g4dn does not support bf16, need to use fp16
-    dtype = 'half' if instance_type.startswith('ml.g4dn') else 'auto'
-    env={
-        "HF_MODEL_ID": model_name,
-        "DTYPE": dtype,
-        "LIMIT_MM_PER_PROMPT":extra_params.get('limit_mm_per_prompt',''),
-        "S3_MODEL_PATH":model_path,
-        "VLLM_ALLOW_LONG_MAX_MODEL_LEN":"1",
-         "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
-         "MAX_MODEL_LEN":extra_params.get('max_model_len', "12288"), 
-         "ENABLE_PREFIX_CACHING": "1" if extra_params.get('enable_prefix_caching') else "0",
-         "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type))),
-         "MAX_NUM_SEQS": extra_params.get('max_num_seqs','256'),
-         "ENFORCE_EAGER": "1" if extra_params.get('enforce_eager') else "0",
-
-    }
-    # 这个VLLM_USE_MODELSCOPE启用之后还是会访问hf的一些api，所以不起作用了
-    # if DEFAULT_REGION.startswith('cn'):
-    #     env['VLLM_USE_MODELSCOPE']='1'
+    if engine in ['auto','vllm']:
+        lmi_image_uri = VLLM_IMAGE
+        # g4dn does not support bf16, need to use fp16
+        dtype = 'half' if instance_type.startswith('ml.g4dn') else 'auto'
+        env={
+            "HF_MODEL_ID": model_name,
+            "DTYPE": dtype,
+            "LIMIT_MM_PER_PROMPT":extra_params.get('limit_mm_per_prompt',''),
+            "S3_MODEL_PATH":model_path,
+            "VLLM_ALLOW_LONG_MAX_MODEL_LEN":"1",
+            "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
+            "MAX_MODEL_LEN":extra_params.get('max_model_len', "12288"), 
+            "ENABLE_PREFIX_CACHING": "1" if extra_params.get('enable_prefix_caching') else "0",
+            "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type))),
+            "MAX_NUM_SEQS": extra_params.get('max_num_seqs','256'),
+            "ENFORCE_EAGER": "1" if extra_params.get('enforce_eager') else "0",
+        }   
+    elif engine in ['sglang']:
+        lmi_image_uri = SGLANG_IMAGE
+        env={
+            "HF_MODEL_ID": model_name,
+            "S3_MODEL_PATH":model_path,
+            "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
+        }
+    else:
+        return False,f"Not supported: {engine}"
     logger.info(env)
     # Create the SageMaker Model object. In this example we let LMI configure the deployment settings based on the model architecture  
     model = Model(
@@ -350,13 +375,10 @@ def deploy_endpoint_ms(job_id:str,engine:str,instance_type:str,quantize:str,enab
                                 endpoint_status = EndpointStatus.PRECREATING
                                 )
     logger.info(f"pre creating endpoint with model_name:{model_name}")
-
     #如果是modelscope，则需要下载到本地再上传到S3
-                # 构建并返回 S3 URL
-    
+    # 构建并返回 S3 URL
     ms_download_and_upload_model(model_repo=model_name,s3_bucket=default_bucket,s3_prefix=f"original_model_file/{model_name}")
     logger.info(f"deploy endpoint with model_name:{model_name},model_path:{model_path}")
-    
     try:
         model.deploy(
             instance_type= instance_type,
