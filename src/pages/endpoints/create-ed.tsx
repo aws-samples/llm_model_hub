@@ -77,6 +77,7 @@ const vLLM_QUANT_TYPES = [
 const INSTANCE_TYPES: SelectProps.Option[] = [
   { label: 'ml.g4dn.2xlarge', value: 'ml.g4dn.2xlarge' },
   { label: 'ml.g4dn.12xlarge', value: 'ml.g4dn.12xlarge' },
+  { label: 'ml.g5.xlarge', value: 'ml.g5.xlarge' },
   { label: 'ml.g5.2xlarge', value: 'ml.g5.2xlarge' },
   { label: 'ml.g5.4xlarge', value: 'ml.g5.4xlarge' },
   { label: 'ml.g5.12xlarge', value: 'ml.g5.12xlarge' },
@@ -92,12 +93,15 @@ const INSTANCE_TYPES: SelectProps.Option[] = [
   { label: 'ml.p3.16xlarge', value: 'ml.p3.16xlarge' },
   { label: 'ml.p4d.24xlarge', value: 'ml.p4d.24xlarge' },
   { label: 'ml.p4de.24xlarge', value: 'ml.p4de.24xlarge' },
-  { label: 'ml.p5.48xlarge', value: 'ml.p5.48xlarge' }
+  { label: 'ml.p5.48xlarge', value: 'ml.p5.48xlarge' },
+  { label: 'ml.p5e.48xlarge', value: 'ml.p5e.48xlarge' },
+  { label: 'ml.p5en.48xlarge', value: 'ml.p5en.48xlarge' }
 ]
 
 const ENGINE: RadioGroupProps.RadioButtonDefinition[] = [
   { label: 'Auto', value: 'auto' },
   { label: 'vllm', value: 'vllm' },
+  { label: 'sglang', value: 'sglang' },
   { label: 'lmi-dist', value: 'lmi-dist' },
   { label: 'trt-llm', value: 'trt-llm' },
   { label: 'HF accelerate', value: 'scheduler' },
@@ -165,7 +169,7 @@ const SelectModelName = ({ data, setData, readOnly }: SelectModelProps) => {
   )
 }
 const SelectInstanceType = ({ data, setData, readOnly }: SelectInstanceTypeProps) => {
-  const [selectOption, setSelectOption] = useState<SelectProps.Option | null>(INSTANCE_TYPES[2]);
+  const [selectOption, setSelectOption] = useState<SelectProps.Option | null>(INSTANCE_TYPES[3]);
   return (
     <Select
       selectedOption={selectOption}
@@ -361,7 +365,7 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
 const SetQuantType = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   const quant_types = data?.engine === 'scheduler' ?
     HF_QUANT_TYPES : data?.engine === 'vllm' ?
-      vLLM_QUANT_TYPES : data?.engine == 'trt-llm' ?
+      vLLM_QUANT_TYPES : data?.engine === 'trt-llm' ?
         TRT_QUANT_TYPES : LMI_QUANT_TYPES;
   const [value, setValue] = useState<string | null>(quant_types[0].value);
   return (
@@ -554,7 +558,7 @@ export const DeployModelModal = ({
           <SetEngineType data={data} setData={setData} readOnly={false} />
         </FormField>
 
-        {data.engine == 'vllm' && 
+        {data.engine === 'vllm' && 
           <SetExtraParamsInput data={data} setData={setData} readOnly={false} />}
 
         {/* {data.engine !== 'auto' && <FormField

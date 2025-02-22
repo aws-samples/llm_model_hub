@@ -180,7 +180,7 @@ async def handle_list_s3_path(request:ListS3ObjectsRequest):
 async def handle_deploy_endpoint(request:DeployModelRequest):
     logger.info(request)
     #engine不是'auto','vllm'，则使用lmi
-    if request.engine in ['auto','vllm'] :
+    if request.engine in ['auto','vllm','sglang'] :
         try:
             ret,msg =  await asyncio.wait_for(
                 asyncio.to_thread(deploy_endpoint_byoc,
