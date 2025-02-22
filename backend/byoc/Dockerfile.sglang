@@ -1,0 +1,36 @@
+ARG SGL_VERSION
+FROM lmsysorg/sglang:$SGL_VERSION
+
+# 设置工作目录
+WORKDIR /app
+
+# 复制当前目录下的内容到容器内的/app
+COPY app_sglang/ /app
+
+# 安装新的依赖
+COPY requirements.txt /app
+RUN pip install -r requirements.txt  
+
+# 修改restapi
+RUN \
+export PYTHON_SITEPACKAGES=`python3 -c "import sglang; print(sglang.__file__.rpartition('/')[0])"`; \
+sed -i '/def launch_server(/i\
+\@app.get("/ping")\n\
+async def ping(raw_request: Request) -> Response:\n\
+\    return Response(status_code=200)\n\
+\n\
+@app.post("/invocations")\n\
+async def invocations(raw_request: Request):\n\
+\    return await v1_chat_completions(_global_state.tokenizer_manager, raw_request)\n\
+' ${PYTHON_SITEPACKAGES}/srt/entrypoints/http_server.py; \
+chmod +x /app/serve
+
+# 让端口8080在容器外可用
+EXPOSE 8080
+
+# 定义环境变量
+ENV PATH="/app:${PATH}"
+
+# 运行serve
+ENTRYPOINT []
+CMD ["serve"]
