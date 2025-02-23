@@ -160,12 +160,6 @@ Resources:
               sudo -u ubuntu bash 01.setup.sh || { log "Failed to run setup script"; exit 1; }
               sleep 30
 
-              # 添加用户到数据库
-              log "Adding user to database"
-              source ../miniconda3/bin/activate py311
-              conda activate py311
-              python3 users/add_user.py demo_user $RANDOM_PASSWORD default || { log "Failed to add user to database"; exit 1; }
-
               # 构建vllm镜像
               log "Building and pushing vllm image"
               cd /home/ubuntu/llm_model_hub/backend/byoc
@@ -182,6 +176,12 @@ Resources:
               log "Uploading dummy tar.gz"
               cd /home/ubuntu/llm_model_hub/backend/byoc
               sudo -u ubuntu ../../miniconda3/envs/py311/bin/python startup.py || { log "Failed to upload dummy tar.gz"; exit 1; }
+
+              # 添加用户到数据库
+              log "Adding user to database"
+              source ../miniconda3/bin/activate py311
+              conda activate py311
+              python3 users/add_user.py demo_user $RANDOM_PASSWORD default || { log "Failed to add user to database"; exit 1; }
 
               # 启动后端
               log "Starting backend"
