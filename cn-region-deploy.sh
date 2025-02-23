@@ -100,6 +100,7 @@ bash build_and_push.sh || { log "Failed to build and push llamafactory image"; e
 sleep 5
 
 #add user in db
+cd /home/ubuntu/llm_model_hub/backend/
 source ../miniconda3/bin/activate py311
 conda activate py311
 python3 users/add_user.py demo_user $RANDOM_PASSWORD default
