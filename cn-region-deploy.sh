@@ -87,10 +87,6 @@ log "Run CN setup script"
 cd /home/ubuntu/llm_model_hub/backend
 bash 0.setup-cn.sh
 sleep 15
-#add user in db
-source ../miniconda3/bin/activate py311
-conda activate py311
-python3 users/add_user.py demo_user $RANDOM_PASSWORD default
 
 #build vllm image
 cd /home/ubuntu/llm_model_hub/backend/byoc
@@ -102,6 +98,12 @@ log "Building and pushing llamafactory image"
 cd /home/ubuntu/llm_model_hub/backend/docker
 bash build_and_push.sh || { log "Failed to build and push llamafactory image"; exit 1; }
 sleep 5
+
+#add user in db
+source ../miniconda3/bin/activate py311
+conda activate py311
+python3 users/add_user.py demo_user $RANDOM_PASSWORD default
+
 
 #upload dummy tar.gz
 cd /home/ubuntu/llm_model_hub/backend/byoc
