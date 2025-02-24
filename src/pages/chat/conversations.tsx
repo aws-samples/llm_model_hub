@@ -437,23 +437,81 @@ const ConversationsPanel = () => {
           const decoder = new TextDecoder();
           let isNew = true;
           let buffer = '';
+          let jsonBuffer = '';
+
+          // 改进: 更可靠的JSON完整性检查
+      function isValidJsonChunk(str:string) {
+        try {
+          // 1. 检查基本结构
+          if (!str.startsWith('{') || !str.endsWith('}')) {
+            return false;
+          }
+          // 3. 如果找到完整的JSON，尝试解析
+            JSON.parse(str); // 验证是否为有效JSON
+            return true;
+        } catch (e) {
+          return false;
+        }
+      }
+
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             buffer += decoder.decode(value, { stream: true });
-            // 处理完整的数据块
+
             while (buffer.includes('\n\n')) {
               const index = buffer.indexOf('\n\n');
               const chunk = buffer.slice(0, index);
               buffer = buffer.slice(index + 2);
-              // console.log('chunk',chunk);
-              // 处理完整的行
-              const chunk_obj = extractJsonFromString(chunk)
-              // console.log('chunk_obj',chunk_obj);
-              if (chunk_obj !== '[DONE]' && chunk_obj?.choices[0].delta?.role) continue  //ship first message chunk
-              onStreamMessageCallback({ resp: chunk_obj, isNew: isNew })
-              isNew = false
+    
+              if (chunk.startsWith('data: ')) {
+                let jsonPart = chunk.slice(6).trim();
+                if (jsonPart.startsWith('data: ')){
+                  jsonPart = jsonPart.slice(6).trim();
+                }
+                
+                if (jsonPart === '[DONE]') {
+                  setLoading(false);
+                  setNewChatLoading(false);
+                  setStopFlag(false);
+                  return;
+                }
+    
+                jsonBuffer += jsonPart;
+    
+                if (isValidJsonChunk(jsonBuffer)) {
+                  try {
+                    const chunk_obj = JSON.parse(jsonBuffer);
+                    if (chunk_obj?.choices[0].delta?.role) {
+                      jsonBuffer = '';
+                      continue;
+                    }
+                    onStreamMessageCallback({ resp: chunk_obj, isNew: isNew });
+                    isNew = false;
+                    jsonBuffer = '';
+                  } catch (e) {
+                    console.log("Error parsing JSON:", jsonBuffer);
+                    // 可选：保留部分buffer以处理跨chunk的JSON
+                    // jsonBuffer = jsonBuffer.substring(jsonBuffer.lastIndexOf('{')); 
+                    jsonBuffer = '';
+                  }
+                }
+                // 如果不是有效的JSON，继续累积
+              }
             }
+            // 处理完整的数据块
+            // while (buffer.includes('\n\n')) {
+            //   const index = buffer.indexOf('\n\n');
+            //   const chunk = buffer.slice(0, index);
+            //   buffer = buffer.slice(index + 2);
+            //   // console.log('chunk',chunk);
+            //   // 处理完整的行
+            //   const chunk_obj = extractJsonFromString(chunk)
+            //   // console.log('chunk_obj',chunk_obj);
+            //   if (chunk_obj !== '[DONE]' && chunk_obj?.choices[0].delta?.role) continue  //ship first message chunk
+            //   onStreamMessageCallback({ resp: chunk_obj, isNew: isNew })
+            //   isNew = false
+            // }
           }
 
           setLoading(false);
