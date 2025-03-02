@@ -35,7 +35,8 @@ payload = {
     }
     ],
     "max_tokens": 1024,
-    "stream": False
+    "stream": False,
+    "model":"any"
 }
 
 # 非流式
@@ -56,7 +57,8 @@ payload = {
     }
     ],
     "max_tokens": 1024,
-    "stream": True
+    "stream": True,
+    "model":"any"
 }
 
 # 流式
