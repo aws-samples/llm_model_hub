@@ -166,6 +166,12 @@ Resources:
               sudo -u ubuntu bash build_and_push.sh || { log "Failed to build and push vllm image"; exit 1; }
               sleep 5
 
+              # 构建sglang镜像
+              log "Building and pushing sglang image"
+              cd /home/ubuntu/llm_model_hub/backend/byoc
+              sudo -u ubuntu bash build_and_push_sglang.sh || { log "Failed to build and push sglang image"; exit 1; }
+              sleep 5
+
               # 构建llamafactory镜像
               log "Building and pushing llamafactory image"
               cd /home/ubuntu/llm_model_hub/backend/docker
@@ -204,6 +210,7 @@ Resources:
               /usr/local/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region} || { log "Failed to send signal to CloudFormation"; exit 1; }
 
               echo "RandomPassword=$RANDOM_PASSWORD" >> /etc/environment
+              log "RandomPassword=$RANDOM_PASSWORD"
 
               log "UserData script execution completed successfully"
             - SageMakerRoleArn: !GetAtt SageMakerExecutionRole.Arn

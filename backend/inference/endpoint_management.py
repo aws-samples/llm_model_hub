@@ -211,8 +211,11 @@ def deploy_engine(job_id:str,engine:str,instance_type:str,enable_lora:bool,model
 
     create_time = datetime.now().strftime('%Y-%m-%d %H:%M')
     
-    endpoint_name = sagemaker.utils.name_from_base(pure_model_name).replace('.','-').replace('_','-')+f"-{engine}-endpoint"
-    endpoint_name = endpoint_name[:63] #must have length less than or equal to 63
+    if not extra_params.get("endpoint_name"):
+        endpoint_name = sagemaker.utils.name_from_base(pure_model_name).replace('.','-').replace('_','-')+f"-{engine}-endpoint"
+        endpoint_name = endpoint_name[:63] #must have length less than or equal to 63
+    else:
+        endpoint_name = extra_params.get("endpoint_name")[:63]
     instance_count = int(extra_params.get("instance_count",1))
 
     # Create the SageMaker Model object. In this example we let LMI configure the deployment settings based on the model architecture  
@@ -320,8 +323,11 @@ def deploy_endpoint_background(job_id:str,engine:str,instance_type:str,quantize:
 def deploy_endpoint_ms(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str,extra_params:Dict[str,Any]) -> Dict[bool,str]:
     pure_model_name = model_name.split('/')[1]
     create_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    endpoint_name = sagemaker.utils.name_from_base(pure_model_name).replace('.','-').replace('_','-')+f"-{engine}-endpoint"
-    endpoint_name = endpoint_name[:63] 
+    if not extra_params.get("endpoint_name"):
+        endpoint_name = sagemaker.utils.name_from_base(pure_model_name).replace('.','-').replace('_','-')+f"-{engine}-endpoint"
+        endpoint_name = endpoint_name[:63] 
+    else:
+        endpoint_name = extra_params.get("endpoint_name")[:63]
     instance_count = int(extra_params.get("instance_count",1))
     model_path = f"s3://{default_bucket}/original_model_file/{model_name}"
     if engine in ['auto','vllm']:
