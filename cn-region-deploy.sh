@@ -89,8 +89,15 @@ bash 0.setup-cn.sh
 sleep 15
 
 #build vllm image
+log "Building and pushing vllm image"
 cd /home/ubuntu/llm_model_hub/backend/byoc
-bash build_and_push.sh
+bash build_and_push.sh || { log "Failed to build and push vllm image"; exit 1; }
+sleep 5
+
+#build sglang image
+log "Building and pushing sglang image"
+cd /home/ubuntu/llm_model_hub/backend/byoc
+bash build_and_push_sglang.sh || { log "Failed to build and push sglang image"; exit 1; }
 sleep 5
 
 # 构建llamafactory镜像
