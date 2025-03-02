@@ -115,7 +115,7 @@ const defaultData = {
   quantize: '',
   cust_repo_type: 'hf',
   cust_repo_addr: '',
-  extra_params:{}
+  extra_params:{enable_prefix_caching:true}
 }
 
 const instanceCalculator = process.env.REACT_APP_CALCULATOR;
@@ -214,6 +214,29 @@ const SetInstanceQty = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   )
 };
 
+const InputEndpointName = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
+  const [value, setValue] = useState<string>('');
+  return (
+    <SpaceBetween size='xs'>
+      <FormField
+        description="自定义推理Endpoint名称，如果不填则自动生成"
+        stretch={true}
+      >
+        <Input
+          readOnly={readOnly}
+          value={value}
+          placeholder={`仅支持英文+数字+'-'组合`}
+          onChange={({ detail }) => {
+            setValue(detail.value);
+            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,endpoint_name: detail.value }  }))
+          }}
+        />
+      </FormField>
+    </SpaceBetween>
+  )
+}
+
+
 const InputCustRepo = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   const [value, setValue] = useState<string>('');
   const [typeValue, setTypeValue] = useState<string>('hf');
@@ -261,7 +284,7 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
   const [value2, setValue2] = useState<string>('');
   const [valueMaxNumSeqs, setMaxNumSeqs] = useState<string>('');
 
-  const [value3, setValue3] = useState<boolean>(false);
+  const [value3, setValue3] = useState<boolean>(true);
   const [value4, setValue4] = useState<boolean>(false);
   const [value5, setValue5] = useState<string>('');
 
@@ -512,7 +535,12 @@ export const DeployModelModal = ({
         >
           <SelectModelName data={data} setData={setData} readOnly={modelNameReadOnly} />
         </FormField>
-
+        <FormField
+          label="(选填)自定义Endpoint Name"
+          stretch={false}
+        >
+          <InputEndpointName data={data} setData={setData} readOnly={false} />
+        </FormField>
         <FormField
           label="自定义模型仓库"
           stretch={false}
