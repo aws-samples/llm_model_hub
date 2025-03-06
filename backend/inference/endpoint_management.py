@@ -201,6 +201,8 @@ def deploy_engine(job_id:str,engine:str,instance_type:str,enable_lora:bool,model
             "HF_MODEL_ID": model_name,
             "S3_MODEL_PATH":model_path,
             "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
+            "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type))),
+
         }
     
     else:
@@ -353,6 +355,8 @@ def deploy_endpoint_ms(job_id:str,engine:str,instance_type:str,quantize:str,enab
             "HF_MODEL_ID": model_name,
             "S3_MODEL_PATH":model_path,
             "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
+            "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type))),
+
         }
     else:
         return False,f"Not supported: {engine}"
