@@ -89,7 +89,7 @@ Resources:
 
               # 安装 Node.js
               log "Installing Node.js"
-              curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash - && \
+              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && \
               sudo apt install -y nodejs || { log "Failed to install Node.js"; exit 1; }
 
               log "Installing yarn"

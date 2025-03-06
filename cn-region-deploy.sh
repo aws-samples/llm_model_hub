@@ -25,7 +25,7 @@ fi
 
 #install nodejs 
 log "Installing nodejs"
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 npm config set registry https://registry.npmmirror.com
 sudo npm config set registry https://registry.npmmirror.com
