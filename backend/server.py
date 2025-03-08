@@ -24,7 +24,7 @@ import asyncio
 from training.jobs import create_job,list_jobs,get_job_by_id,delete_job_by_id,fetch_training_log,get_job_status
 from utils.get_factory_config import get_factory_config
 from utils.outputs import list_s3_objects
-from inference.endpoint_management import deploy_endpoint,delete_endpoint,get_endpoint_status,list_endpoints,deploy_endpoint_byoc,get_endpoint_engine
+from inference.endpoint_management import delete_endpoint,get_endpoint_status,list_endpoints,deploy_endpoint_byoc,get_endpoint_engine,get_endpoint_instance_count
 from inference.serving import inference,inference_byoc
 from users.login import login_auth
 from utils.config import DEFAULT_REGION
@@ -194,29 +194,19 @@ async def handle_deploy_endpoint(request:DeployModelRequest):
                                 model_name=request.model_name,
                                 extra_params=request.extra_params
                                 ),
-                                timeout=10)
+                                timeout=3)
             return CommonResponse(response_id=str(uuid.uuid4()),response={"result":ret, "endpoint_name": msg})
         except asyncio.TimeoutError:
-            return CommonResponse(response_id=str(uuid.uuid4()),response={"result":True, "endpoint_name": "Too long,swithing to background process"}) 
+            return CommonResponse(response_id=str(uuid.uuid4()),response={"result":True, "endpoint_name": "Deploy endpoint in background process"}) 
     else:
-        try:
-            ret,msg =  await asyncio.wait_for(
-                asyncio.to_thread(deploy_endpoint,
-                                job_id=request.job_id,
-                                engine=request.engine,
-                                instance_type=request.instance_type,
-                                quantize=request.quantize,
-                                enable_lora=request.enable_lora,
-                                cust_repo_type=request.cust_repo_type,
-                                cust_repo_addr=request.cust_repo_addr,
-                                model_name=request.model_name,
-                                extra_params=request.extra_params
-                                ),
-                                timeout=600)
-            return CommonResponse(response_id=str(uuid.uuid4()),response={"result":ret, "endpoint_name": msg})
-        except asyncio.TimeoutError:
-            return CommonResponse(response_id=str(uuid.uuid4()),response={"result":False, "endpoint_name": "Operation timed out"}) 
-    
+        return CommonResponse(response_id=str(uuid.uuid4()),response={"result":False, "endpoint_name": "Not Support Engine"}) 
+
+@app.post('/v1/get_endpoint_instance_count',dependencies=[Depends(check_api_key)])
+async def handle_get_get_endpoint_instance_count(request:EndpointRequest):
+    logger.info(request)
+    endpoint_name = request.endpoint_name
+    result = get_endpoint_instance_count(endpoint_name)
+    return CommonResponse(response_id=str(uuid.uuid4()),response={"result": result})
 
 @app.post('/v1/delete_endpoint',dependencies=[Depends(check_api_key)])
 async def handle_delete_endpoint(request:EndpointRequest):
@@ -227,20 +217,20 @@ async def handle_delete_endpoint(request:EndpointRequest):
 
 @app.post('/v1/get_endpoint_status',dependencies=[Depends(check_api_key)])
 async def handle_get_endpoint_status(request:EndpointRequest):
-    logger.info(request)
+    # logger.info(request)
     status = get_endpoint_status(endpoint_name=request.endpoint_name)
     return CommonResponse(response_id=str(uuid.uuid4()),response={"status": status.value})
 
 @app.post('/v1/list_endpoints',dependencies=[Depends(check_api_key)])
 async def handle_list_endpoints(request:ListEndpointsRequest):
-    logger.info(request)
+    # logger.info(request)
     endpoints,count = list_endpoints(request)
     return ListEndpointsResponse(response_id=str(uuid.uuid4()),endpoints=endpoints,total_count=count)
     
     
 def stream_generator(inference_request:InferenceRequest) -> AsyncIterable[bytes]:
     id = inference_request.id if inference_request.id else str(uuid.uuid4())
-    logger.info('--stream_generator---')
+    # logger.info('--stream_generator---')
     response_stream = inference(inference_request.endpoint_name, inference_request.model_name, 
                                       inference_request.messages, inference_request.params, True)
     for chunk in response_stream:
@@ -249,7 +239,7 @@ def stream_generator(inference_request:InferenceRequest) -> AsyncIterable[bytes]
     
 def stream_generator_byoc(inference_request:InferenceRequest) -> AsyncIterable[bytes]:
     id = inference_request.id if inference_request.id else str(uuid.uuid4())
-    logger.info('--stream_generator_byoc---')
+    logger.info(f'--stream_generator_byoc---\n')
     response_stream = inference_byoc(inference_request.endpoint_name, inference_request.model_name, 
                                       inference_request.messages, inference_request.params, True)
     for chunk in response_stream:
@@ -259,23 +249,14 @@ def stream_generator_byoc(inference_request:InferenceRequest) -> AsyncIterable[b
 async def handle_inference(request:InferenceRequest):
     logger.info(request)
     engine = get_endpoint_engine(request.endpoint_name)
-    # logger.info(f"engine:{engine}")
-    #engine不是'auto','vllm'，则使用lmi
-    if  engine in ['auto','vllm'] :
-        if not request.stream:
-            response = inference_byoc(request.endpoint_name,request.model_name,request.messages,request.params,False)
-            id = request.id if request.id else str(uuid.uuid4())
-            return CommonResponse(response_id=id,response=response)
-        else:
-            return StreamingResponse(stream_generator_byoc(request), media_type="text/event-stream")
+    logger.info(f"engine:{engine}")
+    if not request.stream:
+        response = inference_byoc(request.endpoint_name,request.model_name,request.messages,request.params,False)
+        id = request.id if request.id else str(uuid.uuid4())
+        return CommonResponse(response_id=id,response=response)
     else:
-
-        if not request.stream:
-            response = inference(request.endpoint_name,request.model_name,request.messages,request.params,False)
-            id = request.id if request.id else str(uuid.uuid4())
-            return CommonResponse(response_id=id,response=response)
-        else:
-            return StreamingResponse(stream_generator(request), media_type="text/event-stream")
+        return StreamingResponse(stream_generator_byoc(request), media_type="text/event-stream")
+        
 
 
 def create_price_api_server():

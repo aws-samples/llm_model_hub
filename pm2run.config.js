@@ -1,6 +1,6 @@
 module.exports = {
     apps: [{
-      name: "modelhub",
+      name: "modelhub-frontend",
       script: "yarn",
       args: "start",
       interpreter: "node"

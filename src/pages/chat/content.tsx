@@ -28,16 +28,18 @@ const Content = ({endpoint}:{endpoint:string|undefined}) => {
     params_local_storage_key + '-msgitems-'+endpoint,
     []
   );
+
   const [maxConversations, setMaxConversations] = useState<number>(10);
 
   const [msgItems, setMsgItems] = useState(localStoredMsgItems);
   const [endpointName, setEndpointName] = useState<string | undefined>(endpoint);
+  const [inferenceComponentName, setInferenceComponentName] = useState<string | undefined>(undefined);
+
   const [modelName, setModelName] = useState<string>();
   const [base64Images, setBase64Images] = useState<string[]>([]);
 
-
+    
   useEffect(() => {
-
     const params = {
       "page_size": 100,
       "page_index": 1,
@@ -55,7 +57,8 @@ const Content = ({endpoint}:{endpoint:string|undefined}) => {
   useEffect(()=>{
     setModelParams((prev) =>({
       ...prev,
-    }))
+    }));
+    // setInferenceComponentName(getComponentByEndpointName(endpointIcMaps,endpointName as string))
   },[]);
 
 
@@ -80,6 +83,8 @@ const Content = ({endpoint}:{endpoint:string|undefined}) => {
         setNewChatLoading,
         endpointName,
         setEndpointName,
+        inferenceComponentName,
+        setInferenceComponentName,
         modelName,
         setModelName,
         maxConversations,

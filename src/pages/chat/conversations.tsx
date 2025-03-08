@@ -373,6 +373,7 @@ const ConversationsPanel = () => {
     setConversations,
     setStopFlag,
     endpointName,
+    inferenceComponentName,
     modelName,
     modelParams,
     setNewChatLoading,
@@ -421,7 +422,8 @@ const ConversationsPanel = () => {
         do_sample: true,
         top_p: params.top_p,
         temperature: params.temperature,
-        chat_template: params.chat_template
+        chat_template: params.chat_template,
+        inference_component_name: inferenceComponentName,
       },
       stream: params.use_stream
 

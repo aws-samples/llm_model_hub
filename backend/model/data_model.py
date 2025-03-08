@@ -17,9 +17,18 @@ class JobType(Enum):
     kto = 'kto'
     rm = 'rm'
 
+class ICStatus(Enum):
+    CREATING = "CREATING"
+    INSERVICE = "INSERVICE"
+    FAILED = "FAILED"
+    UPDATING = "UPDATING"
+    NOTFOUND = 'NOTFOUND'
+
 class EndpointStatus(Enum):
     PRECREATING = "PRECREATING"
     CREATING = "CREATING"
+    DEPLOYING = "DEPLOYING"
+    UPDATING = "UPDATING"
     INSERVICE = "INSERVICE"
     FAILED = "FAILED"
     DELETING = "DELETING"
