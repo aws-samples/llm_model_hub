@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Button, Modal, Box, RadioGroup, RadioGroupProps, FormField,
-  Link, Input,
+  Link, Input,Drawer,ExpandableSection,
   Toggle, SpaceBetween, Select, SelectProps
 } from '@cloudscape-design/components';
 import { remotePost } from '../../common/api-gateway';
@@ -50,6 +50,7 @@ const defaultErrors = {
   quantize: null,
   instance_count:null,
 }
+
 
 const HF_QUANT_TYPES = [
   { label: "None", value: "" },
@@ -102,10 +103,21 @@ const ENGINE: RadioGroupProps.RadioButtonDefinition[] = [
   { label: 'Auto', value: 'auto' },
   { label: 'vllm', value: 'vllm' },
   { label: 'sglang', value: 'sglang' },
-  { label: 'lmi-dist', value: 'lmi-dist' },
-  { label: 'trt-llm', value: 'trt-llm' },
-  { label: 'HF accelerate', value: 'scheduler' },
+  // { label: 'lmi-dist', value: 'lmi-dist' },
+  // { label: 'trt-llm', value: 'trt-llm' },
+  // { label: 'HF accelerate', value: 'scheduler' },
 ]
+
+
+const defaultExtraParams = {
+  instance_count:1,
+  min_instance_count:1,
+  max_instance_count:1,
+  target_tps:5,
+  in_cooldown:300,
+  out_cooldown:120,
+  enable_prefix_caching:true
+}
 
 const defaultData = {
   instance_type: 'ml.g5.2xlarge',
@@ -115,7 +127,7 @@ const defaultData = {
   quantize: '',
   cust_repo_type: 'hf',
   cust_repo_addr: '',
-  extra_params:{enable_prefix_caching:true}
+  extra_params:{...defaultExtraParams}
 }
 
 const instanceCalculator = process.env.REACT_APP_CALCULATOR;
@@ -201,7 +213,7 @@ const SetEngineType = ({ data, setData, readOnly }: SelectInstanceTypeProps) => 
 }
 
 const SetInstanceQty = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
-  const [value, setValue] = useState<string>('1');
+  const [value, setValue] = useState<any>(defaultExtraParams.instance_count);
   return (
         <Input
           readOnly={readOnly}
@@ -209,6 +221,76 @@ const SetInstanceQty = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
           onChange={({ detail }) => {
             setValue(detail.value);
             setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,instance_count: detail.value }  }))
+          }}
+        />
+  )
+};
+
+const SetMaxInstanceQty = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
+  const [value, setValue] = useState<any>(defaultExtraParams.max_instance_count);
+  return (
+        <Input
+          readOnly={readOnly}
+          value={value}
+          onChange={({ detail }) => {
+            setValue(detail.value);
+            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,max_instance_count: detail.value }  }))
+          }}
+        />
+  )
+};
+
+const SetMinInstanceQty = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
+  const [value, setValue] = useState<any>(defaultExtraParams.min_instance_count);
+  return (
+        <Input
+          readOnly={readOnly}
+          value={value}
+          onChange={({ detail }) => {
+            setValue(detail.value);
+            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,min_instance_count: detail.value }  }))
+          }}
+        />
+  )
+};
+
+const SetTargetTPS = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
+  const [value, setValue] = useState<any>(defaultExtraParams.target_tps);
+  return (
+        <Input
+          readOnly={readOnly}
+          value={value}
+          onChange={({ detail }) => {
+            setValue(detail.value);
+            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,target_tps: detail.value }  }))
+          }}
+        />
+  )
+};
+
+const SetScaleInCoolDown = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
+  const [value, setValue] = useState<any>(defaultExtraParams.in_cooldown);
+  return (
+        <Input
+          readOnly={readOnly}
+          value={value}
+          onChange={({ detail }) => {
+            setValue(detail.value);
+            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,in_cooldown: detail.value }  }))
+          }}
+        />
+  )
+};
+
+const SetScaleOutCoolDown = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
+  const [value, setValue] = useState<any>(defaultExtraParams.out_cooldown);
+  return (
+        <Input
+          readOnly={readOnly}
+          value={value}
+          onChange={({ detail }) => {
+            setValue(detail.value);
+            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,out_cooldown: detail.value }  }))
           }}
         />
   )
@@ -385,41 +467,6 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
   )
 }
 
-const SetQuantType = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
-  const quant_types = data?.engine === 'scheduler' ?
-    HF_QUANT_TYPES : data?.engine === 'vllm' ?
-      vLLM_QUANT_TYPES : data?.engine === 'trt-llm' ?
-        TRT_QUANT_TYPES : LMI_QUANT_TYPES;
-  const [value, setValue] = useState<string | null>(quant_types[0].value);
-  return (
-    <RadioGroup
-      items={quant_types}
-      readOnly={readOnly}
-      value={value}
-      onChange={({ detail }) => {
-        setValue(detail.value);
-        setData((pre: any) => ({ ...pre, quantize: detail.value }))
-      }}
-    />
-  )
-}
-
-const EnableLora = ({ data, setData, readOnly }: SelectInstanceTypeProps) => {
-  const [checked, setChecked] = useState<boolean>(false);
-  return (
-    <Toggle
-      onChange={({ detail }) => {
-        setChecked(detail.checked);
-        setData((pre: any) => ({ ...pre, enable_lora: detail.checked }))
-      }
-      }
-      checked={checked}
-    >
-      Enable
-    </Toggle>
-  )
-
-}
 
 export const DeployModelModal = ({
   extraActions = null,
@@ -448,6 +495,7 @@ export const DeployModelModal = ({
     const msgid = `msg-${Math.random().toString(8)}`;
     const jobId = selectedItems[0]?.job_id ?? "N/A(Not finetuned)";
     const fromData = { ...data, job_id: jobId }
+    console.log(`deploy model:${JSON.stringify(fromData)}`)
     remotePost(fromData, 'deploy_endpoint').
       then(res => {
         if (res.response.result) {
@@ -525,10 +573,10 @@ export const DeployModelModal = ({
           </SpaceBetween>
         </Box>
       }
-      header="Deploy model as endpoint"
-    ><SpaceBetween size="l">
+      header={t('deploy_endpoint')}
+    ><SpaceBetween size="m">
         <FormField
-          label="Model Name"
+          label={t('model_name')}
           stretch={false}
           description="select a supported Model"
           i18nStrings={{ errorIconAriaLabel: 'Error' }}
@@ -536,29 +584,27 @@ export const DeployModelModal = ({
           <SelectModelName data={data} setData={setData} readOnly={modelNameReadOnly} />
         </FormField>
         <FormField
-          label="(选填)自定义Endpoint Name"
+          label={t('custom_endpoint_name')}
           stretch={false}
         >
           <InputEndpointName data={data} setData={setData} readOnly={false} />
         </FormField>
         <FormField
-          label="自定义模型仓库"
+          label={t('custom_model_repo')}
           stretch={false}
         >
           <InputCustRepo data={data} setData={setData} readOnly={modelNameReadOnly} />
         </FormField>
         <FormField
-          label="自定义模型S3Path"
+          label={t('custom_model_repo_s3')}
           stretch={false}
         >
           <InputS3Path data={data} setData={setData} readOnly={modelNameReadOnly} />
         </FormField>
 
         <FormField
-          label="Instance Type"
-          // description="Select a Instance type to deploy the model."
+          label={t('instance_type')}
           description={<Link href={`${instanceCalculator}`} external>使用机型计算器估算</Link>}
-
           stretch={false}
           errorText={errors.instance_type}
           i18nStrings={{ errorIconAriaLabel: 'Error' }}
@@ -567,20 +613,68 @@ export const DeployModelModal = ({
         </FormField>
 
         <FormField
-          label={t("instance_qty")}
-          description={t("instance_qty_desc")}
+          label={t("initial_instance_qty")}
+          description={t("initial_instance_qty_desc")}
           stretch={false}
           errorText={errors.instance_count}
           i18nStrings={{ errorIconAriaLabel: 'Error' }}
         >
           <SetInstanceQty data={data} setData={setData} readOnly={false} />
         </FormField>
+        <ExpandableSection headerText={t('scalingheader')} defaultExpanded>
+          <FormField
+            label={t("min_instance_qty")}
+            description={t("min_instance_qty_desc")}
+            stretch={false}
+            errorText={errors.instance_count}
+            i18nStrings={{ errorIconAriaLabel: 'Error' }}
+          >
+            <SetMinInstanceQty data={data} setData={setData} readOnly={false} />
+          </FormField>
 
+          <FormField
+            label={t("max_instance_qty")}
+            description={t("max_instance_qty_desc")}
+            stretch={false}
+            errorText={errors.instance_count}
+            i18nStrings={{ errorIconAriaLabel: 'Error' }}
+          >
+            <SetMaxInstanceQty data={data} setData={setData} readOnly={false} />
+          </FormField>
+
+          <FormField
+            label={t("target_tps")}
+            description={t("target_tps_desc")}
+            stretch={false}
+            i18nStrings={{ errorIconAriaLabel: 'Error' }}
+          >
+            <SetTargetTPS data={data} setData={setData} readOnly={false} />
+          </FormField>
+
+          <FormField
+            label={t("scalein_cooldown")}
+            description={t("scalein_cooldown_desc")}
+            stretch={false}
+            i18nStrings={{ errorIconAriaLabel: 'Error' }}
+          >
+            <SetScaleInCoolDown data={data} setData={setData} readOnly={false} />
+          </FormField>
+
+          <FormField
+            label={t("scaleout_cooldown")}
+            description={t("scaleout_cooldown_desc")}
+            stretch={false}
+            i18nStrings={{ errorIconAriaLabel: 'Error' }}
+          >
+            <SetScaleOutCoolDown data={data} setData={setData} readOnly={false} />
+          </FormField>
+
+        </ExpandableSection>
         <FormField
           label="Engine Type"
           stretch={false}
           errorText={errors.engine}
-          description={<Link href='https://docs.djl.ai/docs/serving/serving/docs/lmi/user_guides/vllm_user_guide.html' external>各类引擎支持模型信息</Link>}
+          // description={<Link href='https://docs.djl.ai/docs/serving/serving/docs/lmi/user_guides/vllm_user_guide.html' external>各类引擎支持模型信息</Link>}
           i18nStrings={{ errorIconAriaLabel: 'Error' }}
         >
           <SetEngineType data={data} setData={setData} readOnly={false} />
@@ -589,26 +683,6 @@ export const DeployModelModal = ({
         {data.engine === 'vllm' && 
           <SetExtraParamsInput data={data} setData={setData} readOnly={false} />}
 
-        {/* {data.engine !== 'auto' && <FormField
-            label="Quantize"
-            description="Select Quantize type to deploy the model."
-            stretch={false}
-            errorText={errors.quantize}
-            i18nStrings={{ errorIconAriaLabel: 'Error' }}
-          >
-            <SetQuantType data={data} setData={setData} readOnly={false} />
-          </FormField>} */}
-
-
-
-        {/* <FormField
-            label="Enable Lora Adapter"
-            stretch={false}
-            errorText={errors.enable_lora}
-            i18nStrings={{ errorIconAriaLabel: 'Error' }}
-          >
-            <EnableLora data={data} setData={setData} readOnly={false}/>
-          </FormField> */}
       </SpaceBetween>
     </Modal>
   );

@@ -85,7 +85,6 @@ const rawColumns = [
   {
     id: 'start_time',
     sortingField: 'start_time',
-    // cell: item => formatDateTime(item.job_start_time),
     cell: item => item.job_start_time,
     header: 'Start Time',
     minWidth: 120,
@@ -94,7 +93,6 @@ const rawColumns = [
   {
     id: 'end_time',
     sortingField: 'end_time',
-    // cell: item => formatDateTime(item.job_end_time),
     cell: item => item.job_end_time,
     header: 'End Time',
     minWidth: 120,
@@ -108,23 +106,6 @@ const rawColumns = [
     minWidth: 160,
     isRowHeader: true,
   },
-  // {
-  //   id: 'actions',
-  //   header: 'Actions',
-  //   minWidth: 100,
-  //   cell: item => (
-  //     <ButtonDropdown
-  //       variant="inline-icon"
-  //       ariaLabel={`${item.id} actions`}
-  //       expandToViewport={true}
-  //       items={[
-  //         { id: 'view', text: 'View details' },
-  //         { id: 'edit', text: 'Edit' },
-  //         { id: 'delete', text: 'Delete' },
-  //       ]}
-  //     />
-  //   ),
-  // },
 ];
 
 
@@ -150,7 +131,7 @@ const CONTENT_DISPLAY_OPTIONS = [
   { id: 'status', label: 'Status' },
   { id: 'model_name', label: 'Model Name' },
   { id: 'type', label: 'Type' },
-  { id :'finetune_method', lable: 'Finetune'},
+  { id :'finetune_method', label: 'Finetune'},
   { id: 'name', label: 'Name' },
   { id: 'sm_name', label: 'SM Job Name' },
   { id: 'create_time', label: 'Create Time' },

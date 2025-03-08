@@ -2,7 +2,7 @@ import logging
 
 def setup_logger(name, log_file=None, level=logging.INFO):
     """设置日志器"""
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s')
 
     # 创建处理器：控制台处理器
     console_handler = logging.StreamHandler()

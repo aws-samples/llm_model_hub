@@ -32,7 +32,7 @@ function ServerSideTable({
   setDisplayNotify,
   setNotificationData
 }) {
-  const [preferences, setPreferences] = useLocalStorage('ModelHub-endpoint-table-Preferences', DEFAULT_PREFERENCES);
+  const [preferences, setPreferences] = useLocalStorage('ModelHub-endpoint-2-table-Preferences', DEFAULT_PREFERENCES);
   const [descendingSorting, setDescendingSorting] = useState(false);
   const [currentPageIndex, setCurrentPageIndex] = useState(1);
   const [filteringText, setFilteringText] = useState('');
@@ -43,6 +43,8 @@ function ServerSideTable({
   const [codeVisible,setCodeVisible] = useState(false);
   const [deployVisible, setDeployVisible] = useState(false);
   const [selectedItems, setSelectedItems] = useState([]);
+  const [endpointIcMaps, setEndpointIcMaps] = useLocalStorage('ModelHub-endpoint-ic-mapps', null);
+
   const { pageSize } = preferences;
   const params = {
     pagination: {
@@ -62,6 +64,9 @@ function ServerSideTable({
 
   useEffect(() => {
     setSelectedItems(oldSelected => intersection(items, oldSelected));
+    setEndpointIcMaps(items.map((item)=>({
+      [item.endpoint_name]:JSON.parse(item.extra_config)?.inference_component_name
+    })))
   }, [items]);
 
   const onSortingChange = event => {

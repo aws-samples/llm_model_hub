@@ -175,14 +175,6 @@ const ExpandableSettingPanel = () => {
             selectedAriaLabel="Selected"
           />
         </FormField>
-        {/* <FormField label={t("model_name")}>
-          <Select
-            selectedOption={{label:epselectedOption.tags&&epselectedOption.tags[0],value:epselectedOption.tags&&epselectedOption.tags[1]}}
-            disabled
-            options={[{label:epselectedOption.tags&&epselectedOption.tags[0],value:epselectedOption.tags&&epselectedOption.tags[1]}]}
-            selectedAriaLabel="Selected"
-          />
-        </FormField> */}
         
         <FormField label={t("max_tokens")}>
           <Input
@@ -296,16 +288,12 @@ const ExpandableSettingPanel = () => {
 const ImageUploadComp = ({ setLocalStoredMsgItems,files,setFiles }:
           {setLocalStoredMsgItems:any,files:File[],setFiles:any}) => {
   const { t } = useTranslation();
-  const { setMsgItems, msgItems, setStopFlag, setBase64Images} = useChatData();
+  const { setStopFlag, setBase64Images} = useChatData();
   const [uploadErrtxt, setUploadErr] = useState();
-  const [uploadComplete, setUploadComplete] = useState(false);
   const [helperMsg, setHelperMsg] = useState('');
   const handleImageUpload = (imageFiles: File[]) => {
  
         setStopFlag(false);
-        const msgid = `image-${generateId()}`;
-
-
         const images_base64 = imageFiles.map(async (file) => {
           const reader = new FileReader();
           const base64Data = await new Promise((resolve, reject) => {
@@ -327,28 +315,6 @@ const ImageUploadComp = ({ setLocalStoredMsgItems,files,setFiles }:
           setBase64Images(base64Data);
         });
 
-        // setMsgItems(
-        //   (prev:any) => [
-        //     ...prev,
-        //     {
-        //       id: msgid,
-        //       who: username,
-        //       text: 'images',
-        //       images: imageFiles,
-        //     },
-        //   ] //创建一个新的item
-        // );
-        // // console.log('msgItems:',msgItems);
-        // setLocalStoredMsgItems([
-        //   ...msgItems,
-        //   {
-        //     id: msgid,
-        //     who: username,
-        //     text: 'images',
-        //   },
-        // ]);
-        setUploadComplete(true);
-
   }
 
   return (
@@ -358,7 +324,7 @@ const ImageUploadComp = ({ setLocalStoredMsgItems,files,setFiles }:
           setHelperMsg("");
           setFiles(detail.value);
           setUploadErr(undefined);
-          setUploadComplete(false);
+          // setUploadComplete(false);
           // setImg2txtUrl([]);
           setStopFlag(true);
           handleImageUpload(detail.value);
@@ -387,6 +353,15 @@ const ImageUploadComp = ({ setLocalStoredMsgItems,files,setFiles }:
   )
 }
 
+function getComponentByEndpointName(list: Record<string, string>[], endpointName: string): string | undefined {
+  for (const item of list) {
+    if (endpointName in item) {
+      return item[endpointName];
+    }
+  }
+  return undefined;
+}
+
 
 const PromptPanel = ({ sendMessage }:{sendMessage:({id,messages,params}:MessageDataProp)=>void}) => {
   const { t } = useTranslation();
@@ -406,8 +381,12 @@ const PromptPanel = ({ sendMessage }:{sendMessage:({id,messages,params}:MessageD
     modelName,
     endpointName,
     base64Images,
-    setBase64Images
+    setBase64Images,
+    setInferenceComponentName
   } = useChatData();
+
+  const [endpointIcMaps, setEndpointIcMaps] = useLocalStorage<Record<string, string>[]>('ModelHub-endpoint-ic-mapps', []);
+
 
   const [localStoredParams, setLocalStoredParams] = useLocalStorage<Record<string, any>|null>(
     params_local_storage_key + username,
@@ -448,10 +427,11 @@ const PromptPanel = ({ sendMessage }:{sendMessage:({id,messages,params}:MessageD
 
       feedback:null,
     });
+    setInferenceComponentName(getComponentByEndpointName(endpointIcMaps,endpointName as string))
+
   }, [endpointName]);
 
 
-  // const [autoSuggest, setAutoSuggest] = useState(false);
   const onSubmit = (values:string) => {
     setStopFlag(true);
     const prompt = values.trimEnd();
@@ -471,10 +451,6 @@ const PromptPanel = ({ sendMessage }:{sendMessage:({id,messages,params}:MessageD
       ...msgItems,
       { id: respid, who: username, text: prompt },
     ])
-    // console.log('msgItems:',[
-    //   ...msgItems,
-    //   { id: respid, who: username, text: prompt },
-    // ]);
 
     //add base64 data in message
     const imageMessage = base64Images.map((base64Data:string) => {
@@ -495,7 +471,6 @@ const PromptPanel = ({ sendMessage }:{sendMessage:({id,messages,params}:MessageD
     const params = {...modelParams}
     sendMessage({ id: respid, messages: messages, params: params });
     console.log("modelParams:", params);
-    // console.log("messages:", messages);
     setPromptValue("");
     setFiles([]);
     setBase64Images([]);

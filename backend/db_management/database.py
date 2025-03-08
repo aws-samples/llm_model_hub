@@ -124,13 +124,13 @@ class DatabaseWrapper(BaseModel):
     def update_endpoint_status(self,
                                endpoint_name:str,
                                endpoint_status:EndpointStatus,
-                               extra_config:str = None,
-                               endpoint_delete_time:str = None,
+                            #    extra_config:dict = None,
+                            #    endpoint_delete_time:str = None,
                               ):
         with self.connection_pool.get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(f"UPDATE {EP_TABLE} SET endpoint_status = %s,endpoint_delete_time = %s, extra_config = %s WHERE endpoint_name = %s", 
-                               (endpoint_status.value,endpoint_delete_time,extra_config,endpoint_name))
+                cursor.execute(f"UPDATE {EP_TABLE} SET endpoint_status = %s WHERE endpoint_name = %s", 
+                               (endpoint_status.value,endpoint_name))
                 connection.commit()
     def delete_endpoint(self,  endpoint_name:str,) -> bool:
         with self.connection_pool.get_connection() as connection:
@@ -148,7 +148,7 @@ class DatabaseWrapper(BaseModel):
                                instance_count:int,
                                endpoint_create_time:str,
                                endpoint_delete_time:str,
-                               extra_config:str,
+                               extra_config:dict,
                                engine:str,
                                enable_lora:bool,
                                endpoint_status:EndpointStatus):
@@ -193,6 +193,12 @@ class DatabaseWrapper(BaseModel):
     def get_endpoint(self, endpoint_name:str):
         with self.connection_pool.get_connection() as connection:
             with connection.cursor() as cursor:
+                cursor.execute(f"SELECT * FROM {EP_TABLE} WHERE endpoint_name = %s",(endpoint_name,))
+                return cursor.fetchone()
+            
+    def get_endpoint_engine(self, endpoint_name:str):
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
                 cursor.execute(f"SELECT engine FROM {EP_TABLE} WHERE endpoint_name = %s",(endpoint_name,))
                 return cursor.fetchone()
                 
@@ -219,3 +225,8 @@ class DatabaseWrapper(BaseModel):
         
     def close(self):
         self.connection_pool.close()
+
+if __name__ == "__main__":
+    database = DatabaseWrapper()
+    rec = database.get_endpoint(endpoint_name="Qwen2-5-VL-3B-Instruct-2025-03-06-16-24-sglang-endpoint")
+    print (rec[12])
