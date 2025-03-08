@@ -124,6 +124,8 @@ class TrainingJobExcutor(BaseModel):
         
         with open(base_config) as f:
             doc = yaml.safe_load(f)
+        
+        doc.pop('resume_from_checkpoint',None)
         doc['output_dir'] ='/tmp/finetuned_model'
         doc['per_device_train_batch_size'] =int(job_payload['per_device_train_batch_size'])
         doc['gradient_accumulation_steps'] =int(job_payload['gradient_accumulation_steps'])
