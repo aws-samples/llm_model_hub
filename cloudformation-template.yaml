@@ -7,6 +7,11 @@ Metadata:
       Default: "ModelHubStack"
 
 Parameters:
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: Must be the name of an existing EC2 KeyPair.
+
   InstanceType:
     Type: String
     Default: m5.xlarge
@@ -14,8 +19,8 @@ Parameters:
 
   AMIId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id
-    Description: Ubuntu 22.04 AMI ID
+    Default: /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
+    Description: Ubuntu 24.04 AMI ID
 
   HuggingFaceHubToken:
     Type: String
@@ -45,6 +50,7 @@ Resources:
       ResourceSignal:
         Timeout: PT60M
     Properties:
+      KeyName: !Ref KeyName
       Tags:
         - Key: Name
           Value: ModelHubServer
@@ -63,74 +69,95 @@ Resources:
           !Sub 
             - |
               #!/bin/bash
-              # 设置日志文件
+              # Set up logging
               LOG_FILE="/var/log/user-data.log"
-
-              # 函数：记录日志
-              log() {
-                echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
-              }
-
-              log "Starting UserData script execution"
-
-              # 更新和安装基本软件
-              log "Updating apt and installing git"
-              sudo apt update && sudo apt install -y git || { log "Failed to update apt or install git"; exit 1; }
-              sudo apt install unzip
-              # 检查并安装 AWS CLI
-              if ! command -v aws &> /dev/null; then
-                log "Installing AWS CLI"
-                curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-                unzip awscliv2.zip
-                sudo ./aws/install
-              else
-                log "AWS CLI already installed"
+              exec > >(tee -a "$LOG_FILE") 2>&1
+              
+              echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting UserData script execution"
+              # setup cfn-signal
+              if [ ! -f /usr/local/bin/cfn-signal ]; then
+                echo "Installing cfn-signal for error reporting"
+                apt-get update
+                apt-get install -y python3-pip python3-venv
+                
+                # 使用 Python 虚拟环境安装
+                python3 -m venv /opt/aws/cfn-bootstrap
+                /opt/aws/cfn-bootstrap/bin/pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+                
+                # 创建符号链接到 /usr/local/bin
+                ln -s /opt/aws/cfn-bootstrap/bin/cfn-signal /usr/local/bin/cfn-signal
+                ln -s /opt/aws/cfn-bootstrap/bin/cfn-init /usr/local/bin/cfn-init
+                ln -s /opt/aws/cfn-bootstrap/bin/cfn-get-metadata /usr/local/bin/cfn-get-metadata
+                ln -s /opt/aws/cfn-bootstrap/bin/cfn-hup /usr/local/bin/cfn-hup
               fi
 
-              # 安装 Node.js
-              log "Installing Node.js"
-              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && \
-              sudo apt install -y nodejs || { log "Failed to install Node.js"; exit 1; }
+              chmod +x /usr/local/bin/cfn-signal
 
-              log "Installing yarn"
-              sudo npm install --global yarn || { log "Failed to install yarn"; exit 1; }
+              # Define error handling function
+              function error_exit {
+                echo "ERROR: $1" | tee -a "$LOG_FILE"
+                /usr/local/bin/cfn-signal -e 1 --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
+                exit 1
+              }
 
-              # 克隆仓库
-              log "Cloning repository"
-              sudo su ubuntu
-              cd /home/ubuntu/
-              git clone --recurse-submodule https://github.com/aws-samples/llm_model_hub.git || { log "Failed to clone repository"; exit 1; }
-              cd /home/ubuntu/llm_model_hub
-              yarn install || { log "Failed to run yarn install"; exit 1; }
+              # Update and install basic software
+              echo "Updating apt and installing required packages"
+              sudo apt-get update || error_exit "Failed to update apt"
+              sudo apt-get install -y git unzip || error_exit "Failed to install basic packages"
+              
+              # Check and install AWS CLI
+              if ! command -v aws &> /dev/null; then
+                echo "Installing AWS CLI"
+                curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" || error_exit "Failed to download AWS CLI"
+                unzip awscliv2.zip || error_exit "Failed to unzip AWS CLI"
+                sudo ./aws/install || error_exit "Failed to install AWS CLI"
+              else
+                echo "AWS CLI already installed"
+              fi
 
-              # 安装 pm2
-              log "Installing pm2"
-              sudo yarn global add pm2 || { log "Failed to install pm2"; exit 1; }
+              # Install Node.js
+              echo "Installing Node.js"
+              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - || error_exit "Failed to setup Node.js repository"
+              sudo apt-get install -y nodejs || error_exit "Failed to install Node.js"
 
-              # 等待实例完全启动
-              log "Waiting for instance to fully start"
+              echo "Installing yarn"
+              sudo npm install --global yarn || error_exit "Failed to install yarn"
+
+              # Clone repository
+              echo "Cloning repository"
+              cd /home/ubuntu/ || error_exit "Failed to change to ubuntu home directory"
+              sudo -u ubuntu git clone --recurse-submodule https://github.com/aws-samples/llm_model_hub.git || error_exit "Failed to clone repository"
+              cd /home/ubuntu/llm_model_hub || error_exit "Failed to change to repository directory"
+              sudo -u ubuntu yarn install || error_exit "Failed to run yarn install"
+
+              # Install pm2
+              echo "Installing pm2"
+              sudo yarn global add pm2 || error_exit "Failed to install pm2"
+
+              # Wait for instance to fully start
+              echo "Waiting for instance to fully start"
               sleep 30
 
-              # 获取实例元数据
-              log "Retrieving instance metadata"
-              TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
-              EC2_IP=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/public-ipv4)
-              REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/region)
+              # Get instance metadata
+              echo "Retrieving instance metadata"
+              TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600") || error_exit "Failed to get metadata token"
+              EC2_IP=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/public-ipv4) || error_exit "Failed to get public IP"
+              REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/region) || error_exit "Failed to get region"
 
-              log "Got IP: $EC2_IP and Region: $REGION"
+              echo "Got IP: $EC2_IP and Region: $REGION"
 
-              # 生成随机密钥
-              RANDOM_KEY=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
+              # Generate random key
+              RANDOM_KEY=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1) || error_exit "Failed to generate random key"
               
-              # 写入环境变量文件
-              log "Writing environment variables"
-              echo "REACT_APP_API_ENDPOINT=http://$EC2_IP:8000/v1" > /home/ubuntu/llm_model_hub/.env
-              echo "REACT_APP_API_KEY=$RANDOM_KEY" >> /home/ubuntu/llm_model_hub/.env
-              echo "REACT_APP_CALCULATOR=https://aws-gpu-memory-caculator.streamlit.app/" >> /home/ubuntu/llm_model_hub/.env
+              # Write environment variables
+              echo "Writing environment variables"
+              echo "REACT_APP_API_ENDPOINT=http://$EC2_IP:8000/v1" > /home/ubuntu/llm_model_hub/.env || error_exit "Failed to write frontend env file"
+              echo "REACT_APP_API_KEY=$RANDOM_KEY" >> /home/ubuntu/llm_model_hub/.env || error_exit "Failed to append to frontend env file"
+              echo "REACT_APP_CALCULATOR=https://aws-gpu-memory-caculator.streamlit.app/" >> /home/ubuntu/llm_model_hub/.env || error_exit "Failed to append to frontend env file"
 
-              # 写入后端环境变量
-              log "Writing backend environment variables"
-              cat << EOF > /home/ubuntu/llm_model_hub/backend/.env
+              # Write backend environment variables
+              echo "Writing backend environment variables"
+              cat << EOF > /home/ubuntu/llm_model_hub/backend/.env || error_exit "Failed to write backend env file"
               AK=
               SK=
               role=${SageMakerRoleArn}
@@ -146,78 +173,74 @@ Resources:
               SWANLAB_API_KEY=${SwanlabApiKey}
               EOF
 
-              # 设置权限
-              log "Setting proper permissions"
-              sudo chown -R ubuntu:ubuntu /home/ubuntu/
+              # Set permissions
+              echo "Setting proper permissions"
+              sudo chown -R ubuntu:ubuntu /home/ubuntu/ || error_exit "Failed to set permissions"
 
-              # 生成随机密码并存储
-              RANDOM_PASSWORD=$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1) 
-              aws ssm put-parameter --name "/${AWS::StackName}/RandomPassword" --value "$RANDOM_PASSWORD" --type "SecureString" --overwrite --region ${AWS::Region} || { log "Failed to store random password in SSM"; exit 1; }
+              # Generate random password and store
+              RANDOM_PASSWORD=$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1) || error_exit "Failed to generate random password"
+              aws ssm put-parameter --name "/${AWS::StackName}/RandomPassword" --value "$RANDOM_PASSWORD" --type "SecureString" --overwrite --region ${AWS::Region} || error_exit "Failed to store password in SSM"
 
-              # 运行设置脚本
-              log "Running setup script"
-              cd /home/ubuntu/llm_model_hub/backend
-              sudo -u ubuntu bash 01.setup.sh || { log "Failed to run setup script"; exit 1; }
+              # Run setup script
+              echo "Running setup script"
+              cd /home/ubuntu/llm_model_hub/backend || error_exit "Failed to change to backend directory"
+              sudo -u ubuntu bash 01.setup.sh || error_exit "Failed to run setup script"
               sleep 30
 
-              # 构建vllm镜像
-              log "Building and pushing vllm image"
-              cd /home/ubuntu/llm_model_hub/backend/byoc
-              sudo -u ubuntu bash build_and_push.sh || { log "Failed to build and push vllm image"; exit 1; }
+              # Build vllm image
+              echo "Building and pushing vllm image"
+              cd /home/ubuntu/llm_model_hub/backend/byoc || error_exit "Failed to change to byoc directory"
+              sudo -u ubuntu bash build_and_push.sh || error_exit "Failed to build and push vllm image"
               sleep 5
 
-              # 构建sglang镜像
-              log "Building and pushing sglang image"
-              cd /home/ubuntu/llm_model_hub/backend/byoc
-              sudo -u ubuntu bash build_and_push_sglang.sh || { log "Failed to build and push sglang image"; exit 1; }
+              # Build sglang image
+              echo "Building and pushing sglang image"
+              cd /home/ubuntu/llm_model_hub/backend/byoc || error_exit "Failed to change to byoc directory"
+              sudo -u ubuntu bash build_and_push_sglang.sh || error_exit "Failed to build and push sglang image"
               sleep 5
 
-              # 构建llamafactory镜像
-              log "Building and pushing llamafactory image"
-              cd /home/ubuntu/llm_model_hub/backend/docker
-              sudo -u ubuntu bash build_and_push.sh || { log "Failed to build and push llamafactory image"; exit 1; }
+              # Build llamafactory image
+              echo "Building and pushing llamafactory image"
+              cd /home/ubuntu/llm_model_hub/backend/docker || error_exit "Failed to change to docker directory"
+              sudo -u ubuntu bash build_and_push.sh || error_exit "Failed to build and push llamafactory image"
               sleep 5
 
-              # 上传 dummy tar.gz
-              log "Uploading dummy tar.gz"
-              cd /home/ubuntu/llm_model_hub/backend/byoc
-              sudo -u ubuntu ../../miniconda3/envs/py311/bin/python startup.py || { log "Failed to upload dummy tar.gz"; exit 1; }
+              # Upload dummy tar.gz
+              echo "Uploading dummy tar.gz"
+              cd /home/ubuntu/llm_model_hub/backend/byoc || error_exit "Failed to change to byoc directory"
+              sudo -u ubuntu ../../miniconda3/envs/py311/bin/python startup.py || error_exit "Failed to upload dummy tar.gz"
 
-              # 添加用户到数据库
-              log "Adding user to database"
-              cd /home/ubuntu/llm_model_hub/backend/
-              source ../miniconda3/bin/activate py311
-              conda activate py311
-              python3 users/add_user.py demo_user $RANDOM_PASSWORD default || { log "Failed to add user to database"; exit 1; }
+              # Add user to database
+              echo "Adding user to database"
+              cd /home/ubuntu/llm_model_hub/backend/ || error_exit "Failed to change to backend directory"
+              sudo -u ubuntu bash -c "source ../miniconda3/bin/activate py311 && python3 users/add_user.py demo_user $RANDOM_PASSWORD default" || error_exit "Failed to add user to database"
 
-              # 启动后端
-              log "Starting backend"
-              cd /home/ubuntu/llm_model_hub/backend/
-              sudo -u ubuntu bash 02.start_backend.sh || { log "Failed to start backend"; exit 1; }
+              # Start backend
+              echo "Starting backend"
+              cd /home/ubuntu/llm_model_hub/backend/ || error_exit "Failed to change to backend directory"
+              sudo -u ubuntu bash 02.start_backend.sh || error_exit "Failed to start backend"
               sleep 15
 
-              # 启动前端
-              log "Starting frontend"
-              cd /home/ubuntu/llm_model_hub/
-              sudo -u ubuntu pm2 start pm2run.config.js || { log "Failed to start frontend"; exit 1; }
+              # Start frontend
+              echo "Starting frontend"
+              cd /home/ubuntu/llm_model_hub/ || error_exit "Failed to change to repository directory"
+              sudo -u ubuntu pm2 start pm2run.config.js || error_exit "Failed to start frontend"
 
-              # 安装 cfn-signal
-              log "Installing cfn-signal"
-              sudo pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz || { log "Failed to install cfn-signal"; exit 1; }
-
-              # 发送成功信号
-              log "Sending success signal to CloudFormation"
-              /usr/local/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region} || { log "Failed to send signal to CloudFormation"; exit 1; }
+              # Send success signal
+              echo "Sending success signal to CloudFormation"
+              /usr/local/bin/cfn-signal -e 0 --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region} || error_exit "Failed to send success signal"
 
               echo "RandomPassword=$RANDOM_PASSWORD" >> /etc/environment
-              log "RandomPassword=$RANDOM_PASSWORD"
+              echo "RandomPassword=$RANDOM_PASSWORD"
 
-              log "UserData script execution completed successfully"
+              echo "UserData script execution completed successfully"
             - SageMakerRoleArn: !GetAtt SageMakerExecutionRole.Arn
               HuggingFaceHubToken: !Ref HuggingFaceHubToken
               WandbApiKey: !Ref WandbApiKey
               WandbBaseUrl: !Ref WandbBaseUrl
               SwanlabApiKey: !Ref SwanlabApiKey
+
+
 
   EC2SecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -235,7 +258,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
-          CidrIp: 18.237.140.160/29
+          CidrIp: 0.0.0.0/0
 
   EC2Role:
     Type: AWS::IAM::Role
