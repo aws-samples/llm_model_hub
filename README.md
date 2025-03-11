@@ -5,16 +5,17 @@ Model Hub V2是提供一站式的模型微调，部署，调试的无代码可�
 # 1.Global Region 请选择CloudFormation全自动化部署
 - 进入CloudFormation创建一个stack,选择上传部署文件[cloudformation-template.yaml](./cloudformation-template.yaml)
 ![alt text](./assets/image-cf1.png)
-- 填入一个stack名，例如modelhub, 和HuggingFaceHubToken(可选)
-![alt text](./assets/image-cf2.png)
-- 一直下一步，直到勾选确认框，然后提交
-![alt text](./assets/image-cf3.png)
-- 配置完成后，等待stack创建完成，从Stack output栏找到PublicIP地址，然后访问http://{ip}:3000访问modelhub,默认用户名demo_user
-![alt text](./assets/image-cf6.png)
-- 密码获取：进入AWS System Manager->Parameter Store服务控制台，可以看到多了一个/modelhub/RandomPassword,进入之后打开Show decrypted value开关，获取登陆密码，默认用户名是
-![alt text](./assets/image-cf5.png)
-- ⚠️注意，stack显示部署完成之后，启动的EC2还需要8-10分钟自动运行一些脚本，如果不行，请等待8-10分钟，然后刷新页面
-![alt text](./assets/image-cf4.png)
+- 必填项包括，stack名，例如modelhub，选择一个ec2 key pairs (如果没有请提前去ec2控制台创建一个)
+- 其他根据情况选填，也可以后期在backend/.env中添加，添加完成之后用`pm2 restart all`命令重启生效
+![alt text](./assets/image-cf21.png)
+- 一直下一步，直到勾选确认框，然后提交  
+![alt text](./assets/image-cf3.png)  
+- 配置完成后，等待stack创建完成，从Stack output栏找到PublicIP地址，然后访问http://{ip}:3000访问modelhub,默认用户名demo_user  
+![alt text](./assets/image-cf6.png)  
+- 密码获取：进入AWS System Manager->Parameter Store服务控制台，可以看到多了一个/modelhub/RandomPassword,进入之后打开Show decrypted value开关，获取登陆密码，默认用户名是  
+![alt text](./assets/image-cf5.png)  
+- ⚠️注意，stack显示部署完成之后，启动的EC2还需要8-10分钟自动运行一些脚本，如果不行，请等待8-10分钟，然后刷新页面  
+![alt text](./assets/image-cf4.png)  
 
 # 2. 北京/宁夏 请选择CloudFormation+一键安装脚本部署
 - 中国区由于无法直接用github，所以部署分为两步，首先使用cloudformation创建ec2服务器和role，然后下载项目代码上传至ec2服务器，运行一键安装脚本。
