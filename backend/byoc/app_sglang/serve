@@ -54,6 +54,11 @@ else
 
         command="python3 -m sglang.launch_server --model-path $file_dir --tp $tensor_parallel_size  --dtype $dtype --port $SAGEMAKER_BIND_TO_PORT --host 0.0.0.0 --trust-remote-code"
 
+
+        if [ -n "${CHAT_TEMPLATE}" ]; then
+            command="$command --chat-template=$CHAT_TEMPLATE"
+        fi
+
         eval $command
 
 
@@ -64,6 +69,9 @@ else
 
         command="python3 -m sglang.launch_server --model-path $model_id --tp $tensor_parallel_size  --dtype $dtype --port $SAGEMAKER_BIND_TO_PORT --host 0.0.0.0 --trust-remote-code"
 
+        if [ -n "${CHAT_TEMPLATE}" ]; then
+            command="$command --chat-template=$CHAT_TEMPLATE"
+        fi
         eval $command
     fi
 fi
