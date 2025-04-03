@@ -36,7 +36,6 @@ RUN pip config set global.index-url "$PIP_INDEX" && \
     python -m pip install --upgrade pip && \
     python -m pip install -r requirements.txt && pip install -e ".[metrics,bitsandbytes,deepspeed,liger-kernel,gptq,awq,qwen,modelscope,swanlab]"
     
-RUN pip install "unsloth[cu121-torch240] @ git+https://github.com/unslothai/unsloth.git"
 
 
 # Instal extral dependencies
