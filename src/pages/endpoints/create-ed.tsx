@@ -102,9 +102,9 @@ const ENGINE: RadioGroupProps.RadioButtonDefinition[] = [
   { label: 'Auto', value: 'auto' },
   { label: 'vllm', value: 'vllm' },
   { label: 'sglang', value: 'sglang' },
-  { label: 'lmi-dist', value: 'lmi-dist' },
-  { label: 'trt-llm', value: 'trt-llm' },
-  { label: 'HF accelerate', value: 'scheduler' },
+  // { label: 'lmi-dist', value: 'lmi-dist' },
+  // { label: 'trt-llm', value: 'trt-llm' },
+  // { label: 'HF accelerate', value: 'scheduler' },
 ]
 
 const defaultData = {
