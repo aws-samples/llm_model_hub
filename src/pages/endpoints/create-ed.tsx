@@ -279,6 +279,31 @@ const InputS3Path = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   )
 };
 
+const SetExtramSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
+  const [template, setTemplate] = useState<string>('');
+  return (
+    <SpaceBetween size='xs'>
+      <FormField
+        label="chat-template"
+        description={<Box><Box>"对于多模态模型，需要填写此项，否则只能当作文本模型。</Box>
+          <Link external href={"https://docs.sglang.ai/backend/openai_api_vision.html#Chat-Template"} >有效值参考链接</Link></Box>}
+        stretch={false}
+      >
+        <Input
+          readOnly={readOnly}
+          value={template}
+          placeholder={"qwen2-vl"}
+          onChange={({ detail }) => {
+            setTemplate(detail.value);
+            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,chat_template: detail.value }  }))
+          }}
+        />
+      </FormField>
+    </SpaceBetween>
+  )
+}
+
+
 const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   const [value1, setValue1] = useState<string>('');
   const [value2, setValue2] = useState<string>('');
@@ -589,26 +614,8 @@ export const DeployModelModal = ({
         {data.engine === 'vllm' && 
           <SetExtraParamsInput data={data} setData={setData} readOnly={false} />}
 
-        {/* {data.engine !== 'auto' && <FormField
-            label="Quantize"
-            description="Select Quantize type to deploy the model."
-            stretch={false}
-            errorText={errors.quantize}
-            i18nStrings={{ errorIconAriaLabel: 'Error' }}
-          >
-            <SetQuantType data={data} setData={setData} readOnly={false} />
-          </FormField>} */}
-
-
-
-        {/* <FormField
-            label="Enable Lora Adapter"
-            stretch={false}
-            errorText={errors.enable_lora}
-            i18nStrings={{ errorIconAriaLabel: 'Error' }}
-          >
-            <EnableLora data={data} setData={setData} readOnly={false}/>
-          </FormField> */}
+        {data.engine === 'sglang' && 
+          <SetExtramSglang data={data} setData={setData} readOnly={false} />}
       </SpaceBetween>
     </Modal>
   );
