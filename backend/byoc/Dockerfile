@@ -1,6 +1,8 @@
 ARG VLLM_VERSION
 FROM vllm/vllm-openai:$VLLM_VERSION
 
+RUN pip install git+https://github.com/huggingface/transformers.git
+# RUN pip install transformers==4.48.3
 # 设置工作目录
 WORKDIR /app
 
