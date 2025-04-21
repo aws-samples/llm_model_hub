@@ -16,7 +16,7 @@ from utils.llamafactory.extras.constants import DEFAULT_TEMPLATE,DownloadSource
 import time
 import dotenv
 import os
-from utils.config import boto_sess,role,default_bucket,sagemaker_session, is_efa, \
+from utils.config import boto_sess,role,default_bucket,sagemaker_session, is_efa,get_auto_tensor_parallel_size, \
 LORA_BASE_CONFIG,DEEPSPEED_BASE_CONFIG_MAP,FULL_BASE_CONFIG,DEFAULT_REGION,WANDB_API_KEY, WANDB_BASE_URL, SWANLAB_API_KEY
 
 dotenv.load_dotenv()
@@ -261,7 +261,86 @@ class TrainingJobExcutor(BaseModel):
         return train_args_path,merge_args_path
 
 
-
+    def create_grpo_training(self,
+                            job_payload:Dict[str,Any],
+                            data_keys:List[str],
+                            model_id:str,
+                            use_spot:bool,
+                            max_spot_wait:int,
+                            max_job_run_hour:int,
+                            s3_model_path:str,
+                            instance_type:str,
+                            s3_checkpoint:str = '',
+                            training_input_path:str=None
+                            ):
+        base_model_name = model_id.split('/')[-1]
+        base_job_name = base_model_name.replace('.','-')
+        instance_type = job_payload['instance_type']
+        n_gpus_per_node = get_auto_tensor_parallel_size(instance_type)
+        max_steps = int(job_payload['max_steps'])
+        instance_num = int(job_payload['instance_num'])
+        save_freq = int(job_payload['save_steps'])  
+        project_name = job_payload.get('project_name',"easyr1_grpo")
+        train_files = job_payload['train_files']
+        val_files = job_payload.get('val_files',None)
+        if WANDB_API_KEY:
+            logger = "['console','wandb']"
+        elif SWANLAB_API_KEY:
+            logger = "['console','swanlab']"
+        else:
+            logger = "['console']"
+        
+        configs = {
+            "config":"examples/config.yaml",
+            "data.train_files":train_files,
+            "data.val_files":val_files,
+            "worker.actor.model.model_path":model_id,
+            "worker.actor.model.trust_remote_code":"true",
+            "worker.actor.offload.offload_params":"false",
+            "worker.rollout.tensor_parallel_size":int(job_payload['rollout_tensor_parallel_size']),
+            "trainer.experiment_name":base_job_name, 
+            "trainer.project_name":project_name,
+            "trainer.logger":logger,
+            "trainer.n_gpus_per_node":n_gpus_per_node,
+            "trainer.max_steps":max_steps,
+            "trainer.nnodes":instance_num,
+            "trainer.save_checkpoint_path":"/tmp/checkpoints",
+            "trainer.save_freq":save_freq
+        }
+        
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        uuid = shortuuid.uuid()
+        train_args_path = f's3://{default_bucket}/llm_modelhub/args/train_args_{timestamp}_{uuid}.json'
+        save_json_to_s3(train_args_path, configs)
+        
+        output_s3_path = f's3://{default_bucket}/{base_job_name}/{self.job_id}/'
+        environment = {
+            "s3_data_paths":f"{training_input_path}",
+            "s3_model_path":s3_model_path,
+            "USE_EFA": "1" if is_efa(instance_type) else "0",
+            "HUGGING_FACE_HUB_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
+            "train_args_path":train_args_path,
+            'OUTPUT_MODEL_S3_PATH': output_s3_path, # destination 
+            "REGION": DEFAULT_REGION,            
+        }
+        if SWANLAB_API_KEY:
+            environment['SWANLAB_API_KEY'] = SWANLAB_API_KEY
+        if WANDB_API_KEY:
+            environment["WANDB_API_KEY"] = WANDB_API_KEY
+        
+        self.output_s3_path = output_s3_path
+        self.estimator = Estimator(image_uri=os.environ['training_image'],
+                                    role=role,
+                                    use_spot_instances=use_spot,
+                                    sagemaker_session=sagemaker_session,
+                                    base_job_name=base_job_name,
+                                    environment=environment,
+                                    instance_count=instance_num,
+                                    instance_type=instance_type,
+                                    max_wait= 3600*max_spot_wait if use_spot else None,
+                                    max_run=3600*max_job_run_hour,
+                                    enable_remote_debug=True
+                                    )
         
     def create_training(self,
                         model_id:str,
@@ -295,7 +374,6 @@ class TrainingJobExcutor(BaseModel):
             "train_args_path":sg_config,
             'OUTPUT_MODEL_S3_PATH': output_s3_path, # destination 
             "REGION": DEFAULT_REGION,
-            # "PIP_INDEX":'https://mirrors.aliyun.com/pypi/simple' if DEFAULT_REGION.startswith('cn') else '',
             "USE_MODELSCOPE_HUB": "1" if DEFAULT_REGION.startswith('cn') else '0'
             
         }
@@ -307,23 +385,7 @@ class TrainingJobExcutor(BaseModel):
             environment["WANDB_DISABLED"] = "true"
         # entry_point = 'entry_single_lora.py' if instance_num == 1 else 'entry-multi-nodes.py'
         self.output_s3_path = output_s3_path
-        # self.estimator = PyTorch(entry_point=entry_point,
-        #                             source_dir='./LLaMA-Factory/',
-        #                             role=role,
-        #                             use_spot_instances=use_spot,
-        #                             sagemaker_session=sagemaker_session,
-        #                             base_job_name=base_job_name,
-        #                             environment=environment,
-        #                             framework_version='2.3.0',
-        #                             py_version='py311',
-        #                             script_mode=True,
-        #                             instance_count=instance_num,
-        #                             instance_type=instance_type,
-        #                             max_wait= 3600*max_spot_wait if use_spot else None,
-        #                             enable_remote_debug=True,
-        #                             # keep_alive_period_in_seconds=600,
-        #                             max_run=3600*max_job_run_hour)
-        self.estimator = Estimator(image_uri=os.environ['training_image'],
+        self.estimator = Estimator(image_uri=os.environ['easyr1_training_image'],
                             role=role,
                             use_spot_instances=use_spot,
                             sagemaker_session=sagemaker_session,
@@ -417,6 +479,19 @@ class TrainingJobExcutor(BaseModel):
                                     instance_type=job_payload['instance_type'])
 
             return True,'create job success'
+        elif job_payload['stage'] in ['grpo']:
+            
+            self.create_grpo_training(
+                job_payload = job_payload,
+                data_keys = [],
+                model_id=model_id,
+                use_spot = job_payload.get("use_spot",False),
+                max_spot_wait = int(job_payload.get("max_spot_wait",72)),
+                max_job_run_hour = int(job_payload.get("max_job_run_hour",48)),
+                s3_model_path = s3_model_path,
+                s3_checkpoint = s3_checkpoint
+                
+            )
         else:
             logger.info('not supported yet')
             return False, 'type of job not supported yet'

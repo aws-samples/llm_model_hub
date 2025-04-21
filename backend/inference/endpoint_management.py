@@ -13,7 +13,7 @@ from model.data_model import *
 from db_management.database import DatabaseWrapper
 from datetime import datetime,timedelta
 from training.jobs import sync_get_job_by_id
-from utils.config import boto_sess,role,sagemaker_session,DEFAULT_REGION,SUPPORTED_MODELS_FILE,default_bucket,VLLM_IMAGE,SGLANG_IMAGE,MODEL_ARTIFACT,instance_gpus_map
+from utils.config import boto_sess,role,sagemaker_session,DEFAULT_REGION,SUPPORTED_MODELS_FILE,default_bucket,VLLM_IMAGE,SGLANG_IMAGE,MODEL_ARTIFACT,get_auto_tensor_parallel_size
 from utils.get_factory_config import get_model_path_by_name
 from utils.llamafactory.extras.constants import register_model_group,DownloadSource,SUPPORTED_MODELS
 from sagemaker import image_uris, Model
@@ -167,12 +167,6 @@ def register_cust_model(cust_repo_type:DownloadSource,cust_repo_addr:str):
     with open(SUPPORTED_MODELS_FILE, 'wb') as f:
         pickle.dump(SUPPORTED_MODELS, f)
     
-    # 只有输入了模板才有用，暂时不需要此代码
-    # with open(DEFAULT_TEMPLATE_FILE, 'wb') as f:
-    #     pickle.dump(DEFAULT_TEMPLATE, f)
-
-def get_auto_tensor_parallel_size(instance_type:str) -> int:
-    return instance_gpus_map.get(instance_type, 1)
 
 def deploy_engine(job_id:str,engine:str,instance_type:str,enable_lora:bool,model_name:str,model_path:str,extra_params:Dict[str,Any]) -> Dict[bool,str]:
     if engine in ['auto','vllm']:
