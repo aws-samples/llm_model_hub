@@ -16,6 +16,7 @@ class JobType(Enum):
     dpo = 'dpo'
     kto = 'kto'
     rm = 'rm'
+    grpo = 'grpo'
 
 class EndpointStatus(Enum):
     PRECREATING = "PRECREATING"

@@ -111,3 +111,6 @@ instance_gpus_map={
 
 def is_efa(instance_type):
     return 'ml.p4' in instance_type or 'ml.p5' in instance_type or 'ml.g6e' in instance_type
+
+def get_auto_tensor_parallel_size(instance_type:str) -> int:
+    return instance_gpus_map.get(instance_type, 1)
