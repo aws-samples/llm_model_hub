@@ -1,9 +1,19 @@
 import logging
+import os
+
+log_dir = "logs"
+
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+    print(f"目录 '{log_dir}' 已创建")
+else:
+    print(f"目录 '{log_dir}' 已存在，无需创建")
 
 def setup_logger(name, log_file=None, level=logging.INFO):
     """设置日志器"""
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
+    
+    format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s'
+    formatter = logging.Formatter(format)
     # 创建处理器：控制台处理器
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
@@ -15,7 +25,7 @@ def setup_logger(name, log_file=None, level=logging.INFO):
 
     # 如果指定了日志文件，添加文件处理器
     if log_file:
-        file_handler = logging.FileHandler(log_file)
+        file_handler = logging.FileHandler(f"{log_dir}/{log_file}")
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 

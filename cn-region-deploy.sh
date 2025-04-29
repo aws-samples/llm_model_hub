@@ -106,6 +106,12 @@ cd /home/ubuntu/llm_model_hub/backend/docker
 bash build_and_push.sh || { log "Failed to build and push llamafactory image"; exit 1; }
 sleep 5
 
+# Build easyr1 image
+echo "Building and pushing easyr1 image"
+cd /home/ubuntu/llm_model_hub/backend/docker_easyr1 || error_exit "Failed to change to docker_easyr1 directory"
+sudo -u ubuntu bash build_and_push.sh || error_exit "Failed to build and push docker_easyr1 image"
+sleep 5
+
 #add user in db
 cd /home/ubuntu/llm_model_hub/backend/
 source ../miniconda3/bin/activate py311

@@ -59,43 +59,12 @@ export const LogsPanel = ({jobRunName,jobId,jobStatus}) => {
 
 
     }
-    // const fetchLogs = useCallback(async () => {
-    //     setLoading(true);
-    //     let params = {
-    //         "next_token": nextTokenRef.current,
-    //         'job_id':jobId};
-    //     let stop = false
-    //     while (!stop)
-    //         try {
-    //             const res = await remotePost(params, 'fetch_training_log');
-    //             setLoading(false);
-    //             console.log('logs:',res.next_forward_token);
-    //             stop = (res.next_forward_token === params.next_token)?true:false;
-    //             nextTokenRef.current = res.next_forward_token
-    //             params.next_token = res.next_forward_token;
-    //             if (res.log_events.length ){
-    //                 setLogs((prev) => prev.concat(sortEventsByTimestamp(res.log_events)));
-    //                 setRows(logs.length > defaultRows ?
-    //                     (logs.length > defaultMaxRows ? defaultMaxRows :logs.length) : defaultRows);
-    //             }
-    //         } catch(err){
-    //             setLoading(false);
-    //             stop = true;
-    //             setLogs(prev => [...prev, JSON.stringify(err)])
-    //         }
 
-
-    // }, [nextTokenRef.current]);
 
     useEffect(() => {
         fetchLogs();
         intervalRef.current  = setInterval(fetchLogs, 5000);  // 每5秒刷新一次
-        //SUCCESS或者ERROR时停止刷新
-        // if (newJobStatus !== JOB_STATE.SUCCESS || newJobStatus !== JOB_STATE.ERROR 
-        //     || newJobStatus !== JOB_STATE.STOPPED || newJobStatus !== JOB_STATE.TERMINATED){
-        //     intervalRef.current  = setInterval(fetchLogs, 5000);  // 每5秒刷新一次
-        //     setStop(false)
-        // }
+
 
         //在最终状态时停止
         if ((newJobStatus === JOB_STATE.SUCCESS ||  
@@ -115,18 +84,6 @@ export const LogsPanel = ({jobRunName,jobId,jobStatus}) => {
         event.preventDefault();
         fetchLogs();  // 手动刷新时调用fetchLogs
     };
-
-    // const fetchStatus = useCallback(() => {
-    //     remotePost({"job_id":jobId}, 'get_job_status').then((res) => {
-    //         console.log('status:',res.job_status);
-    //         setNewStatus(res.job_status);
-    //         if (res.job_status !== 'RUNNING'){
-    //             intervalRef && clearInterval(intervalRef.current );  // 清除取log定时器
-    //         }
-    //     }).catch(err => {
-    //         console.log(err);
-    //     })
-    // }, []);
 
     const fetchStatus  = () => {
         remotePost({"job_id":jobId}, 'get_job_status').then((res) => {
