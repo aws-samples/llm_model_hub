@@ -260,11 +260,15 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
         jobinfo = sync_get_job_by_id(job_id)
         if not jobinfo.job_status == JobStatus.SUCCESS:
             return CommonResponse(response_id=job_id,response={"error": "job is not ready to deploy"})
-        # 如果是lora模型，则使用merge之后的路径
-        if jobinfo.job_payload['finetuning_method'] == 'lora':
-            model_path = jobinfo.output_s3_path + 'finetuned_model_merged/'
+        
+        if jobinfo.job_type in [JobType.grpo]:
+            model_path = jobinfo.output_s3_path + 'huggingface/'
         else:
-            model_path = jobinfo.output_s3_path + 'finetuned_model/'
+            # 如果是lora模型，则使用merge之后的路径
+            if jobinfo.job_payload['finetuning_method'] == 'lora':
+                model_path = jobinfo.output_s3_path + 'finetuned_model_merged/'
+            else:
+                model_path = jobinfo.output_s3_path + 'finetuned_model/'
     #如果是使用自定义模型
     elif not cust_repo_addr == '' and model_name == '' :
         model_name = cust_repo_addr

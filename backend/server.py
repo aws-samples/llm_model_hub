@@ -166,7 +166,7 @@ async def handle_fetch_training_log(request:FetchLogRequest):
 
 @app.post("/v1/get_job_status",dependencies=[Depends(check_api_key)])
 async def handle_get_job_status(request:GetJobsRequest):
-    logger.info(request.json())
+    # logger.info(request.json())
     job_status = get_job_status(request.job_id)
     resp = JobStatusResponse(response_id=str(uuid.uuid4()), job_status=JobStatus(job_status))
     return resp
@@ -233,7 +233,7 @@ async def handle_get_endpoint_status(request:EndpointRequest):
 
 @app.post('/v1/list_endpoints',dependencies=[Depends(check_api_key)])
 async def handle_list_endpoints(request:ListEndpointsRequest):
-    logger.info(request)
+    # logger.info(request)
     endpoints,count = list_endpoints(request)
     return ListEndpointsResponse(response_id=str(uuid.uuid4()),endpoints=endpoints,total_count=count)
     
@@ -257,7 +257,7 @@ def stream_generator_byoc(inference_request:InferenceRequest) -> AsyncIterable[b
     
 @app.post('/v1/chat/completions',dependencies=[Depends(check_api_key)])
 async def handle_inference(request:InferenceRequest):
-    logger.info(request)
+    # logger.info(request)
     engine = get_endpoint_engine(request.endpoint_name)
     # logger.info(f"engine:{engine}")
     #engine不是'auto','vllm'，则使用lmi

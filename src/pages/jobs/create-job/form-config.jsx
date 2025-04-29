@@ -117,6 +117,12 @@ export const CURRENT_COMPRESSION_OPTIONS = [
   { label: 'Automatic', value: 'automatic' },
 ];
 
+const formatPromptR1v = `{{ content | trim }}\nA conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning process and answer are enclosed within <think> </think> and <answer> </answer> tags, respectively, i.e., <think> reasoning process here </think><answer> answer here </answer>`
+
+const formatPromptMath = `{{ content | trim }}\nYou FIRST think about the reasoning process as an internal monologue and then provide the final answer. The reasoning process MUST BE enclosed within <think> </think> tags. The final answer MUST BE put in \\boxed{}.`
+
+export const FORMAT_PROMPT_OPTIONS = {math:formatPromptMath,r1v:formatPromptR1v}
+
 export const CODE_EDITOR_THEMES = {
   light: [
     'chrome',
