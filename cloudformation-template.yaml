@@ -205,6 +205,12 @@ Resources:
               sudo -u ubuntu bash build_and_push.sh || error_exit "Failed to build and push llamafactory image"
               sleep 5
 
+              # Build easyr1 image
+              echo "Building and pushing easyr1 image"
+              cd /home/ubuntu/llm_model_hub/backend/docker_easyr1 || error_exit "Failed to change to docker_easyr1 directory"
+              sudo -u ubuntu bash build_and_push.sh || error_exit "Failed to build and push docker_easyr1 image"
+              sleep 5
+
               # Upload dummy tar.gz
               echo "Uploading dummy tar.gz"
               cd /home/ubuntu/llm_model_hub/backend/byoc || error_exit "Failed to change to byoc directory"

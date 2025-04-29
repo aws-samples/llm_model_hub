@@ -32,21 +32,24 @@ def proccessing_job(job_id:str):
     logger.info(f"creating job:{job_id}")
     job = JobStateMachine.create(job_id)
 
-    if not job.transition(JobStatus.CREATING):
-        job.transition(JobStatus.ERROR)
-        logger.info(f"CREATING job failed:{job_id}")
-        return 
-    
-    logger.info(f"running job:{job_id}")
-    if not job.transition(JobStatus.RUNNING):
-        job.transition(JobStatus.ERROR)
-        logger.info(f"RUNNING job failed:{job_id}")
-        return 
+    try:
+        if not job.transition(JobStatus.CREATING):
+            job.transition(JobStatus.ERROR)
+            logger.info(f"CREATING job failed:{job_id}")
+            return 
+        
+        logger.info(f"running job:{job_id}")
+        if not job.transition(JobStatus.RUNNING):
+            job.transition(JobStatus.ERROR)
+            logger.info(f"RUNNING job failed:{job_id}")
+            return 
 
-    job_status = get_job_status(job_id)
-    logger.info(f"finish running job:{job_id} with status:{job_status}")
-    job.transition(job_status)
-    # job.transition(JobStatus.SUCCESS)
+        job_status = get_job_status(job_id)
+        logger.info(f"finish running job:{job_id} with status:{job_status}")
+        job.transition(job_status)
+    except Exception as e:
+        job.transition(JobStatus.ERROR)
+        logger.error(f"RUNNING job failed:{e}")
     return True
 
 def start_processing_engine():

@@ -182,6 +182,7 @@ export const FormWithValidation = ({
           instance_num:data.instance_num,
           s3_data_path:data.s3DataPath,
           dataset_info:data.datasetInfo,
+          dataset_info2:data.datasetInfo2,
           booster_option:data.booster_option,
           deepspeed:data.deepspeed,
           s3_checkpoint:data.s3_checkpoint,
@@ -192,7 +193,21 @@ export const FormWithValidation = ({
           lora_target_modules:data.lora_target_modules,
           pref_beta:data.pref_beta,
           pref_loss:data.pref_loss,
-          pref_ftx:data.pref_ftx
+          pref_ftx:data.pref_ftx,
+          max_steps:data.max_steps,
+          max_prompt_length:data.max_prompt_length,
+          max_response_length:data.max_response_length,
+          save_freq:data.save_freq,
+          val_freq:data.val_freq,
+          limit_images:data.limit_images,
+          rollout_tensor_parallel_size:data.rollout_tensor_parallel_size,
+          reward_function:data.reward_function,
+          customize_reward_function:data.customize_reward_function,
+          format_prompt:data.format_prompt,
+          format_prompt_type:data.format_prompt_type,
+          total_epochs:data.total_epochs
+
+
           // lora_r:data.lora_r,
           // lora_dropout:data.lora_dropout,
           // lora_bias:data.lora_bias,

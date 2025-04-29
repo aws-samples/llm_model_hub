@@ -7,7 +7,6 @@ import json
 import logging
 import asyncio
 from typing import Annotated, Sequence, TypedDict, Dict, Optional,List, Any,TypedDict
-
 from model.data_model import CommonResponse,ListModelNamesResponse,GetFactoryConfigRequest
 from utils.llamafactory.extras.constants import SUPPORTED_MODELS,DEFAULT_TEMPLATE,TRAINING_STAGES,DATA_CONFIG,STAGES_USE_PAIR_DATA,DownloadSource
 DEFAULT_DATA_DIR = 'utils/llamafactory/data'
@@ -19,7 +18,13 @@ class APIException(Exception):
             super().__init__("[{}] {}".format(code, message))
         else:
             super().__init__(message)
-            
+
+EASY_R1_DATASETS = [
+    "hiyouga/math12k@train,hiyouga/math12k@test",
+    "hiyouga/geometry3k@train,hiyouga/geometry3k@test"
+]
+
+    
 def load_dataset_info(dataset_dir: str) -> Dict[str, Dict[str, Any]]:
     r"""
     Loads dataset_info.json.
@@ -37,9 +42,12 @@ def load_dataset_info(dataset_dir: str) -> Dict[str, Dict[str, Any]]:
 
 
 def list_datasets(dataset_dir: str = None, training_stage: str = list(TRAINING_STAGES.keys())[0]):
-    r"""
+    """
     Lists all available datasets in the dataset dir for the training stage.
     """
+    if training_stage == 'grpo':
+        return EASY_R1_DATASETS
+        
     dataset_info = load_dataset_info(dataset_dir if dataset_dir is not None else DEFAULT_DATA_DIR)
     ranking = training_stage in STAGES_USE_PAIR_DATA
     datasets = [k for k, v in dataset_info.items() if v.get("ranking", False) == ranking]
