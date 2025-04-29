@@ -24,7 +24,12 @@ const datasetInfoExample = `{"your_dataset_key1":
     }
 }`
 
-const defaultData = {
+const datasetInfoExample2 = `{
+    "train_file":"your_dataset_name.parquet",
+    "val_file":"your_dataset_name.parquet"
+}`
+
+const defaultDataLF = {
   model_name: null,
   prompt_template: null,
   job_type: 'lora',
@@ -55,12 +60,32 @@ const defaultData = {
   s3_model_path:'',
   use_spot: false,
   max_spot_wait:72,
-  max_job_run_hour:48,
+  max_job_run_hour:72,
   lora_target_modules:'all',
   pref_loss:'sigmoid',
   pref_beta:0.1,
   pref_ftx:0
 };
+
+//For easyr1
+const defaultDataEasyR1 = {
+  max_steps:10000,
+  total_epochs:10,
+  max_prompt_length: 2048,
+  max_response_length: 2048,
+  save_freq: 50,
+  val_freq:50,
+  limit_images:0,
+  rollout_tensor_parallel_size:1,
+  datasetInfo2: datasetInfoExample2,
+  reward_function:'math:compute_score',
+  customize_reward_function:'',
+  format_prompt:null,
+  format_prompt_type:'math'
+}
+
+const defaultData = {...defaultDataLF,...defaultDataEasyR1};
+
 
 
 const CreateJobApp = () => {

@@ -16,7 +16,8 @@ from utils.llamafactory.extras.constants import DEFAULT_TEMPLATE,DownloadSource
 import time
 import dotenv
 import os
-from utils.config import boto_sess,role,default_bucket,sagemaker_session, is_efa, \
+import ast
+from utils.config import boto_sess,role,default_bucket,sagemaker_session, is_efa,get_auto_tensor_parallel_size, \
 LORA_BASE_CONFIG,DEEPSPEED_BASE_CONFIG_MAP,FULL_BASE_CONFIG,DEFAULT_REGION,WANDB_API_KEY, WANDB_BASE_URL, SWANLAB_API_KEY
 
 dotenv.load_dotenv()
@@ -24,11 +25,25 @@ dotenv.load_dotenv()
 logger = setup_logger('training_job.py', log_file='processing_engine.log', level=logging.INFO)
 
 
+def check_syntax_with_ast(code_str):
+    try:
+        ast.parse(code_str)
+        return True, "语法正确"
+    except SyntaxError as e:
+        return False, f"语法错误: 第 {e.lineno} 行, 列 {e.offset}: {e.text}\n{e.msg}"
+    
 def save_json_to_s3(s3_path,data):
     s3_resource = boto_sess.resource('s3')
     bucket_name,key = s3_path.replace('s3://','').split('/',1)
     s3_resource.Object(bucket_name,key).put(Body=json.dumps(data))
     return s3_path
+
+def save_text_to_s3(s3_path,data):
+    s3_resource = boto_sess.resource('s3')
+    bucket_name,key = s3_path.replace('s3://','').split('/',1)
+    s3_resource.Object(bucket_name,key).put(Body=data)
+    return s3_path
+
 def get_all_log_streams(logs_client,log_group_name):
     """
     获取指定日志组中的所有日志流
@@ -261,7 +276,149 @@ class TrainingJobExcutor(BaseModel):
         return train_args_path,merge_args_path
 
 
+    def create_grpo_training(self,
+                            job_payload:Dict[str,Any],
+                            dataset_info_path:str,
+                            data_keys:List[str],
+                            model_id:str,
+                            use_spot:bool,
+                            max_spot_wait:int,
+                            max_job_run_hour:int,
+                            s3_model_path:str,
+                            instance_type:str,
+                            s3_checkpoint:str = '',
+                            training_input_path:str=None
+                            ):
+        base_model_name = model_id.split('/')[-1]
+        base_job_name = base_model_name.replace('.','-')
+        instance_type = job_payload['instance_type']
+        n_gpus_per_node = get_auto_tensor_parallel_size(instance_type)
+        max_steps = int(job_payload.get('max_steps',0))
+        instance_num = int(job_payload['instance_num'])
+        save_freq = int(job_payload.get('save_freq',50))  
+        val_freq = int(job_payload.get('val_freq',save_freq))
+        project_name = job_payload.get('project_name',"easyr1_grpo")
+        train_files = job_payload.get('train_files',None)
+        val_files = job_payload.get('val_files',None)
+        max_prompt_length = int(job_payload.get('max_prompt_length',2048))  
+        max_response_length = int(job_payload.get('max_response_length',2048))  
+        rollout_tensor_parallel_size = int(job_payload.get('rollout_tensor_parallel_size',1))  
+        format_prompt = job_payload.get('format_prompt')
+        total_epochs = int(job_payload.get('total_epochs',1))  
+        if WANDB_API_KEY:
+            train_logger = "['console','wandb']"
+        elif SWANLAB_API_KEY:
+            train_logger = "['console','swanlab']"
+        else:
+            train_logger = "['console']"
+        
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
+        suffix = ''
+        if s3_checkpoint:
+            suffix = s3_checkpoint.split('/')[-1]
+            if not suffix.startswith('global_step'):
+                return False, 's3_checkpoint f{s3_checkpoint} must ends with global_step_'
+            
+        configs = {
+            "config":"examples/config.yaml",
+            "data.max_prompt_length":max_prompt_length,
+            "data.max_response_length":max_response_length,
+            "worker.actor.model.model_path":model_id,
+            "worker.actor.model.trust_remote_code":"true",
+            "worker.actor.offload.offload_params":"false",
+            "worker.rollout.tensor_parallel_size":rollout_tensor_parallel_size,
+            "trainer.experiment_name":f'{base_job_name}_{timestamp}', 
+            "trainer.project_name":project_name,
+            "trainer.logger":train_logger,
+            "trainer.n_gpus_per_node":n_gpus_per_node,
+            "trainer.nnodes":instance_num,
+            "trainer.save_checkpoint_path":"/tmp/checkpoints",
+            "trainer.save_freq":save_freq,
+            "trainer.val_freq":val_freq,
+            "trainer.total_epochs":total_epochs
+        }
+        
+        # 注意：需要跟https://github.com/hiyouga/EasyR1/tree/main/examples/reward_function里的对应
+        reward_function_path = ''
+        if job_payload.get('reward_function') == 'math:compute_score':
+            configs['worker.reward.reward_function'] = './examples/reward_function/math.py:compute_score'
+        elif job_payload.get('reward_function') == 'r1v:computer_score':
+            configs['worker.reward.reward_function'] = './examples/reward_function/r1v.py:compute_score'
+        elif job_payload.get('reward_function') == 'customize':
+            customize_reward_function  = job_payload.get('customize_reward_function')
+            configs['worker.reward.reward_function'] = 'placeholder'
+            if not customize_reward_function:
+                return False, 'Reward function code cannot be empty'
+            
+            # Check code syntax
+            syntax_check,msg = check_syntax_with_ast(customize_reward_function)
+            if not syntax_check:
+                return False, f'Reward function code syntax error,{msg}'
+                
+            # upload code to s3
+            uuid = shortuuid.uuid()
+            reward_function_path = f's3://{default_bucket}/llm_modelhub/reward_function/reward_function_{timestamp}_{uuid}.py'
+            save_text_to_s3(reward_function_path,customize_reward_function)
+        
+        format_prompt_path = ''
+        if format_prompt:
+            # upload code to s3
+            uuid = shortuuid.uuid()
+            format_prompt_path = f's3://{default_bucket}/llm_modelhub/format_prompt/format_prompt_{timestamp}_{uuid}.jinja'
+            save_text_to_s3(format_prompt_path,format_prompt)
+        
+        publick_data = data_keys[0]
+        if publick_data:
+            data_splits = publick_data.split(',')
+            train_files = data_splits[0]
+            val_files = data_splits[1]
+        if max_steps >0 :
+            configs['trainer.max_steps'] = max_steps
+        if train_files:
+            configs['data.train_files'] = train_files
+        if val_files:
+            configs['data.val_files'] = val_files
+            
+        logger.info(f"{configs}")
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        uuid = shortuuid.uuid()
+        train_args_path = f's3://{default_bucket}/llm_modelhub/args/train_args_{timestamp}_{uuid}.json'
+        save_json_to_s3(train_args_path, configs)
+        
+        output_s3_path = f's3://{default_bucket}/{base_job_name}/{self.job_id}/'
+        environment = {
+            "s3_data_paths":f"{training_input_path}",
+            "s3_checkpoint":s3_checkpoint,
+            "s3_model_path":s3_model_path,
+            "reward_function_path":reward_function_path,
+            "format_prompt_path":format_prompt_path,
+            # "USE_EFA": "1" if is_efa(instance_type) else "0", # nccl in ray
+            "HUGGING_FACE_HUB_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
+            "train_args_path":train_args_path,
+            'OUTPUT_MODEL_S3_PATH': output_s3_path, # destination 
+            "REGION": DEFAULT_REGION,            
+            "dataset_info_path":dataset_info_path
+        }
+        if SWANLAB_API_KEY:
+            environment['SWANLAB_API_KEY'] = SWANLAB_API_KEY
+        if WANDB_API_KEY:
+            environment["WANDB_API_KEY"] = WANDB_API_KEY
+        
+        self.output_s3_path = output_s3_path
+        self.estimator = Estimator(image_uri=os.environ['easyr1_training_image'],
+                                    role=role,
+                                    use_spot_instances=use_spot,
+                                    sagemaker_session=sagemaker_session,
+                                    base_job_name=base_job_name,
+                                    environment=environment,
+                                    instance_count=instance_num,
+                                    instance_type=instance_type,
+                                    max_wait= 3600*max_spot_wait if use_spot else None,
+                                    max_run=3600*max_job_run_hour,
+                                    enable_remote_debug=True
+                                    )
+        return True, 'create success'
         
     def create_training(self,
                         model_id:str,
@@ -295,7 +452,6 @@ class TrainingJobExcutor(BaseModel):
             "train_args_path":sg_config,
             'OUTPUT_MODEL_S3_PATH': output_s3_path, # destination 
             "REGION": DEFAULT_REGION,
-            # "PIP_INDEX":'https://mirrors.aliyun.com/pypi/simple' if DEFAULT_REGION.startswith('cn') else '',
             "USE_MODELSCOPE_HUB": "1" if DEFAULT_REGION.startswith('cn') else '0'
             
         }
@@ -307,22 +463,6 @@ class TrainingJobExcutor(BaseModel):
             environment["WANDB_DISABLED"] = "true"
         # entry_point = 'entry_single_lora.py' if instance_num == 1 else 'entry-multi-nodes.py'
         self.output_s3_path = output_s3_path
-        # self.estimator = PyTorch(entry_point=entry_point,
-        #                             source_dir='./LLaMA-Factory/',
-        #                             role=role,
-        #                             use_spot_instances=use_spot,
-        #                             sagemaker_session=sagemaker_session,
-        #                             base_job_name=base_job_name,
-        #                             environment=environment,
-        #                             framework_version='2.3.0',
-        #                             py_version='py311',
-        #                             script_mode=True,
-        #                             instance_count=instance_num,
-        #                             instance_type=instance_type,
-        #                             max_wait= 3600*max_spot_wait if use_spot else None,
-        #                             enable_remote_debug=True,
-        #                             # keep_alive_period_in_seconds=600,
-        #                             max_run=3600*max_job_run_hour)
         self.estimator = Estimator(image_uri=os.environ['training_image'],
                             role=role,
                             use_spot_instances=use_spot,
@@ -342,33 +482,52 @@ class TrainingJobExcutor(BaseModel):
         jobinfo=sync_get_job_by_id(self.job_id)
         logger.info(f"jobinfo of {self.job_id}:{jobinfo}")
         job_payload = jobinfo.job_payload
-        
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        uuid = shortuuid.uuid()
         
         logger.info(f"job_payload:{job_payload}")
         
         s3_data_path=job_payload.get('s3_data_path','')
 
         dataset_info = {}
+        dataset_info2_path = ''
         s3_datakeys=[]
+        data_keys = job_payload.get('dataset',[])+s3_datakeys
         # 如果指定了s3路径
         if s3_data_path:
-            dataset_info_str = job_payload.get('dataset_info')
+            # For LLamaFactory
+            dataset_info_str = job_payload.get('dataset_info','')
             dataset_info = json.loads(dataset_info_str)
             s3_datakeys = list(dataset_info.keys()) if dataset_info else []
+            
+            # Optional for easyr1
+            dataset_info_str2 = job_payload.get('dataset_info2','')
+            if dataset_info_str2:
+                dataset_info2 = json.loads(dataset_info_str2)
+                # Save dataset for easyr1
+                if dataset_info2:
+                    dataset_info2_path = f's3://{default_bucket}/llm_modelhub/dataset_info_easyr1/dataset_info_{timestamp}_{uuid}.json'
+                    save_json_to_s3(dataset_info2_path, dataset_info2)
             
             # 去掉末尾的反斜杠，因为training script 里会添加
             s3_data_path = s3_data_path[:-1] if s3_data_path[-1] == '/' else s3_data_path
         
-        data_keys = job_payload.get('dataset',[])+s3_datakeys
+        #validate checkpoint地址
+        s3_checkpoint = job_payload['s3_checkpoint']
+        if s3_checkpoint:
+            if not is_valid_s3_uri(s3_checkpoint):
+                logger.warning(f"s3_checkpoint path is invalid:{s3_checkpoint}")
+                s3_checkpoint = ''
+            # 去掉末尾/
+            else:
+                s3_checkpoint = s3_checkpoint[:-1] if s3_checkpoint.endswith('/') else s3_checkpoint
+
 
         # add to dataset_info
         dataset_info = prepare_dataset_info(dataset_info)
         # upload to s3
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        uuid = shortuuid.uuid()
         dataset_info_path = f's3://{default_bucket}/llm_modelhub/dataset_info/dataset_info_{timestamp}_{uuid}.json'
         save_json_to_s3(dataset_info_path, dataset_info)
-
         
         #model_id参数
         repo = DownloadSource.MODELSCOPE if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
@@ -376,6 +535,13 @@ class TrainingJobExcutor(BaseModel):
         # 判断是否使用repo/model格式
         model_id=get_model_path_by_name(job_payload['model_name'],repo) if len(job_payload['model_name'].split('/')) < 2 else job_payload['model_name']
         logger.info(f"model_id:{model_id},repo type:{repo}")
+        
+        #validate s3_model_path
+        s3_model_path = job_payload['s3_model_path']
+        if s3_model_path:
+            if not is_valid_s3_uri(s3_model_path):
+                logger.error(f"s3_model_path is invalid:{s3_model_path}")
+                s3_model_path = ''
         
         if job_payload['stage'] in ['sft','dpo','kto','pt']:
             sg_config,sg_lora_merge_config= self.create_training_args(
@@ -387,19 +553,7 @@ class TrainingJobExcutor(BaseModel):
             
             # Lora和没有设置量化时，merge lora
             merge_lora = '1' if job_payload['finetuning_method'] == 'lora' and job_payload['quantization_bit'] == 'none' else '0'
-            
-            #validate checkpoint地址
-            s3_checkpoint = job_payload['s3_checkpoint']
-            if s3_checkpoint:
-                if not is_valid_s3_uri(s3_checkpoint):
-                    logger.error(f"s3_checkpoint path is invalid:{s3_checkpoint}")
-                    s3_checkpoint = ''
-            #validate s3_model_path
-            s3_model_path = job_payload['s3_model_path']
-            if s3_model_path:
-                if not is_valid_s3_uri(s3_model_path):
-                    logger.error(f"s3_model_path is invalid:{s3_model_path}")
-                    s3_model_path = ''
+
                     
             print('use_spot:',job_payload.get("use_spot",False))
             self.create_training(sg_config=sg_config,
@@ -417,6 +571,22 @@ class TrainingJobExcutor(BaseModel):
                                     instance_type=job_payload['instance_type'])
 
             return True,'create job success'
+        elif job_payload['stage'] in ['grpo']:
+            
+            ret,msg = self.create_grpo_training(
+                job_payload = job_payload,
+                dataset_info_path=dataset_info2_path,
+                data_keys = data_keys,
+                model_id=model_id,
+                use_spot = job_payload.get("use_spot",False),
+                max_spot_wait = int(job_payload.get("max_spot_wait",72)),
+                max_job_run_hour = int(job_payload.get("max_job_run_hour",48)),
+                training_input_path= s3_data_path,
+                s3_model_path = s3_model_path,
+                s3_checkpoint = s3_checkpoint,
+                instance_type=job_payload['instance_type']
+            )
+            return ret,msg 
         else:
             logger.info('not supported yet')
             return False, 'type of job not supported yet'

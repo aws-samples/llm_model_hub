@@ -56,12 +56,12 @@ aws ecr set-repository-policy \
 # Add variables for build arguments pytorch-training:2.5.1-gpu-py311-cu124-ubuntu22.04-sagemaker
 # https://github.com/aws/deep-learning-containers/blob/master/available_images.md
 if [[ $region =~ ^cn ]]; then
-    BASE_IMAGE="727897471807.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.4.0-gpu-py311"
+    BASE_IMAGE="727897471807.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.6.0-gpu-py312-cu126-ubuntu22.04-sagemaker"
     PIP_INDEX="https://mirrors.aliyun.com/pypi/simple"
-    sed -i '/^RUN pip install "unsloth[cu121-torch240]/d' /home/ubuntu/llm_model_hub/backend/docker/Dockerfile
+    sed -i '/^RUN pip install "unsloth[cu126-torch260]/d' /home/ubuntu/llm_model_hub/backend/docker/Dockerfile
 
 else
-    BASE_IMAGE="763104351884.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.4.0-gpu-py311"
+    BASE_IMAGE="763104351884.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.6.0-gpu-py312-cu126-ubuntu22.04-sagemaker"
     PIP_INDEX="https://pypi.org/simple"
 fi
 

@@ -12,5 +12,5 @@ pandas
 wandb
 # nltk
 # swanlab
-flash_attn==2.6.3
+flash_attn==2.7.3
 unsloth

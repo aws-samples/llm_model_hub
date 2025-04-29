@@ -38,6 +38,7 @@ export const S3Selector = ({outputPath,objectsIsItemDisabled,setOutputPath}) => 
     const onFetchObjects = async (bucketName, pathPrefix) => {
         // console.log(`bucketName:${bucketName},pathPrefix:${pathPrefix}`)
         try{
+            // const pathPrefixNew = pathPrefix.endsWith('/') ? pathPrefix : pathPrefix + '/';
             const resp = await remotePost({"output_s3_path":bucketName+pathPrefix}, 'list_s3_path');
             const objects = await resp.objects;
             // console.log('objects:',objects);
@@ -53,9 +54,10 @@ export const S3Selector = ({outputPath,objectsIsItemDisabled,setOutputPath}) => 
             <S3ResourceSelector
                 onChange={({ detail }) =>{
                     const uri = detail.resource.uri.replace('s3://s3://','s3://')
+                    const uri_new = uri.endsWith('/') ? uri : uri + '/';
                     // setResource(detail.resource);
-                    setResource({uri:uri});
-                    setOutputPath&&setOutputPath(uri);
+                    setResource({uri:uri_new});
+                    setOutputPath&&setOutputPath(uri_new);
                     
                     }
                 }

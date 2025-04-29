@@ -31,10 +31,11 @@ COPY LLaMA-Factory/ /opt/ml/code/
 
 # Set the working directory
 WORKDIR /opt/ml/code/
+RUN pip install "unsloth[cu126-torch260]"
 RUN pip config set global.index-url "$PIP_INDEX" && \
     pip config set global.extra-index-url "$PIP_INDEX" && \
     python -m pip install --upgrade pip && \
-    python -m pip install -r requirements.txt && pip install -e ".[metrics,bitsandbytes,deepspeed,liger-kernel,gptq,awq,qwen,modelscope,swanlab]"
+    python -m pip install -r requirements.txt && pip install -e ".[metrics,bitsandbytes,deepspeed,liger-kernel,awq,qwen,modelscope,swanlab]"
     
 
 
