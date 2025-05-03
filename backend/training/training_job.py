@@ -492,7 +492,6 @@ class TrainingJobExcutor(BaseModel):
         dataset_info = {}
         dataset_info2_path = ''
         s3_datakeys=[]
-        data_keys = job_payload.get('dataset',[])+s3_datakeys
         # 如果指定了s3路径
         if s3_data_path:
             # For LLamaFactory
@@ -512,6 +511,7 @@ class TrainingJobExcutor(BaseModel):
             # 去掉末尾的反斜杠，因为training script 里会添加
             s3_data_path = s3_data_path[:-1] if s3_data_path[-1] == '/' else s3_data_path
         
+        data_keys = job_payload.get('dataset',[])+s3_datakeys
         #validate checkpoint地址
         s3_checkpoint = job_payload['s3_checkpoint']
         if s3_checkpoint:
