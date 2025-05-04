@@ -261,7 +261,7 @@ async def handle_inference(request:InferenceRequest):
     engine = get_endpoint_engine(request.endpoint_name)
     # logger.info(f"engine:{engine}")
     #engine不是'auto','vllm'，则使用lmi
-    if  engine in ['auto','vllm'] :
+    if  engine in ['auto','vllm','sglang'] :
         if not request.stream:
             response = inference_byoc(request.endpoint_name,request.model_name,request.messages,request.params,False)
             id = request.id if request.id else str(uuid.uuid4())
