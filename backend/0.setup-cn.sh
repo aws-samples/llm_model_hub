@@ -10,7 +10,7 @@ conda create -n py311 python=3.11 -y
 conda activate py311
 
 # 定义要添加的内容
-PIP_INDEX="https://mirrors.aliyun.com/pypi/simple"
+PIP_INDEX="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
 
 pip config set global.index-url "$PIP_INDEX" &&     pip config set global.extra-index-url "$PIP_INDEX" 
 # 安装 requirements
