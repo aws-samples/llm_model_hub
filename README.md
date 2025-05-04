@@ -178,3 +178,14 @@ bash build_and_push.sh
 pm2 restart all
 ```
 4. 更新完成
+
+# 访问内置的db查看用户名等信息？
+```bash
+docker exec -it hub-mysql mysql -ullmdata -pllmdata
+```
+进入mysql cli之后：  
+```
+use llm;
+show tables;
+select * from USER_TABLE;
+```

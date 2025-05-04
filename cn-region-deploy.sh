@@ -112,16 +112,17 @@ cd /home/ubuntu/llm_model_hub/backend/docker_easyr1 || error_exit "Failed to cha
 sudo -u ubuntu bash build_and_push.sh || error_exit "Failed to build and push docker_easyr1 image"
 sleep 5
 
+#upload dummy tar.gz
+echo "upload dummy tar.gz"
+cd /home/ubuntu/llm_model_hub/backend/byoc
+../../miniconda3/envs/py311/bin/python startup.py 
+
 #add user in db
+echo "add user in db"
 cd /home/ubuntu/llm_model_hub/backend/
 source ../miniconda3/bin/activate py311
 conda activate py311
 python3 users/add_user.py demo_user $RANDOM_PASSWORD default
-
-
-#upload dummy tar.gz
-cd /home/ubuntu/llm_model_hub/backend/byoc
-../../miniconda3/envs/py311/bin/python startup.py 
 
 #start backend
 cd /home/ubuntu/llm_model_hub/backend/
