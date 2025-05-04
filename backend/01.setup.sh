@@ -9,6 +9,7 @@ conda create -n py311 python=3.11 -y
 conda activate py311
 
 # 安装 requirements
+# sudo apt install -y python3-numpy
 echo "install requirements....."
 pip install -r requirements.txt
 
