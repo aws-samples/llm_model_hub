@@ -353,7 +353,7 @@ def deploy_endpoint_ms(job_id:str,engine:str,instance_type:str,quantize:str,enab
             "S3_MODEL_PATH":model_path,
             "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
             "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type))),
-            "CHAT_TEMPLATE": extra_params.get('chat_template',"0")
+            "CHAT_TEMPLATE": extra_params.get('chat_template',"")
         }
     else:
         return False,f"Not supported: {engine}"
