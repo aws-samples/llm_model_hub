@@ -435,12 +435,12 @@ const SelectTrainingPrecision = ({ data, setData, readOnly, refs }) => {
 
 const SelectFormatPromptType= ({ data, setData, readOnly, refs }) => {
   const [selectOption, setSelectOption] = useState({ label: 'math', value: 'math' });
-  const [promptContent, setPromptContent] = useState(FORMAT_PROMPT_OPTIONS['math'] );
+  // const [promptContent, setPromptContent] = useState(FORMAT_PROMPT_OPTIONS['math'] );
   useEffect(() => {
     if (data.job_payload) {
       setSelectOption({ label: data.job_payload.format_prompt_type, value: data.job_payload.format_prompt_type });
       setData({ format_prompt_type: data.job_payload.format_prompt_type });
-  
+      
     }
   }, [data.job_payload])
   return (
@@ -451,8 +451,11 @@ const SelectFormatPromptType= ({ data, setData, readOnly, refs }) => {
       onChange={({ detail }) => {
         setSelectOption(detail.selectedOption);
         setData({ format_prompt_type: detail.selectedOption.value });
-        setData({ format_prompt: FORMAT_PROMPT_OPTIONS[detail.selectedOption.value] });
-        setPromptContent(FORMAT_PROMPT_OPTIONS[detail.selectedOption.value]);
+        if (detail.selectedOption.value !== 'customize'){
+          setData({ format_prompt: FORMAT_PROMPT_OPTIONS[detail.selectedOption.value] });
+        }else{
+          setData({ format_prompt: data.format_prompt});
+        }
       }}
       options={[
         { label: 'math', value: 'math' },
@@ -465,10 +468,10 @@ const SelectFormatPromptType= ({ data, setData, readOnly, refs }) => {
     <Textarea 
       readOnly={readOnly}
       rows = {5}
-      value={readOnly ? data.job_payload?.format_prompt : promptContent}
+      value={readOnly ? data.job_payload?.format_prompt : data.format_prompt}
       onChange={(event) => {
         setData({format_prompt:event.detail.value});
-        setPromptContent(event.detail.value);
+        // setPromptContent(event.detail.value);
       }}
       />
  </SpaceBetween>

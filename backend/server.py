@@ -159,7 +159,7 @@ async def handle_create_job(request: CreateJobsRequest):
     
 @app.post("/v1/fetch_training_log",dependencies=[Depends(check_api_key)])
 async def handle_fetch_training_log(request:FetchLogRequest):
-    logger.info(request.json())
+    # logger.info(request.json())
     resp = await fetch_training_log(request)
     return resp
 
@@ -227,7 +227,7 @@ async def handle_delete_endpoint(request:EndpointRequest):
 
 @app.post('/v1/get_endpoint_status',dependencies=[Depends(check_api_key)])
 async def handle_get_endpoint_status(request:EndpointRequest):
-    logger.info(request)
+    # logger.info(request)
     status = get_endpoint_status(endpoint_name=request.endpoint_name)
     return CommonResponse(response_id=str(uuid.uuid4()),response={"status": status.value})
 
