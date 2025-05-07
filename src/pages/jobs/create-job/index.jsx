@@ -4,7 +4,7 @@ import React, { useRef, useState } from 'react';
 // import { createRoot } from 'react-dom/client';
 import { CustomAppLayout, Navigation, Notifications } from '../../commons/common-components';
 import { Breadcrumbs, createjobBreadcrumbs } from '../../commons/breadcrumbs'
-
+import {FORMAT_PROMPT_OPTIONS} from './form-config';
 import { FormWithValidation } from './components/form';
 // import ToolsContent from './components/tools-content';
 import '../../../styles/form.scss';
@@ -80,7 +80,7 @@ const defaultDataEasyR1 = {
   datasetInfo2: datasetInfoExample2,
   reward_function:'math:compute_score',
   customize_reward_function:'',
-  format_prompt:null,
+  format_prompt:FORMAT_PROMPT_OPTIONS['math'],
   format_prompt_type:'math'
 }
 

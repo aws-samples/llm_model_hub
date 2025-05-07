@@ -338,6 +338,7 @@ class TrainingJobExcutor(BaseModel):
             "trainer.val_freq":val_freq,
             "trainer.total_epochs":total_epochs
         }
+        logger.info(configs)
         
         # 注意：需要跟https://github.com/hiyouga/EasyR1/tree/main/examples/reward_function里的对应
         reward_function_path = ''
@@ -349,11 +350,13 @@ class TrainingJobExcutor(BaseModel):
             customize_reward_function  = job_payload.get('customize_reward_function')
             configs['worker.reward.reward_function'] = 'placeholder'
             if not customize_reward_function:
+                logger.error('Reward function code cannot be empty')
                 return False, 'Reward function code cannot be empty'
             
             # Check code syntax
             syntax_check,msg = check_syntax_with_ast(customize_reward_function)
             if not syntax_check:
+                logger.error( f'Reward function code syntax error,{msg}')
                 return False, f'Reward function code syntax error,{msg}'
                 
             # upload code to s3
@@ -368,9 +371,11 @@ class TrainingJobExcutor(BaseModel):
             format_prompt_path = f's3://{default_bucket}/llm_modelhub/format_prompt/format_prompt_{timestamp}_{uuid}.jinja'
             save_text_to_s3(format_prompt_path,format_prompt)
         
-        publick_data = data_keys[0]
-        if publick_data:
-            data_splits = publick_data.split(',')
+        logger.info(f"data_keys:{data_keys}")
+       
+        if data_keys:
+            public_data = data_keys[0]
+            data_splits = public_data.split(',')
             train_files = data_splits[0]
             val_files = data_splits[1]
         if max_steps >0 :
@@ -540,7 +545,7 @@ class TrainingJobExcutor(BaseModel):
         s3_model_path = job_payload['s3_model_path']
         if s3_model_path:
             if not is_valid_s3_uri(s3_model_path):
-                logger.error(f"s3_model_path is invalid:{s3_model_path}")
+                logger.warning(f"s3_model_path is invalid:{s3_model_path}")
                 s3_model_path = ''
         
         if job_payload['stage'] in ['sft','dpo','kto','pt']:
@@ -576,7 +581,7 @@ class TrainingJobExcutor(BaseModel):
             ret,msg = self.create_grpo_training(
                 job_payload = job_payload,
                 dataset_info_path=dataset_info2_path,
-                data_keys = data_keys,
+                data_keys = job_payload.get('dataset',[]),
                 model_id=model_id,
                 use_spot = job_payload.get("use_spot",False),
                 max_spot_wait = int(job_payload.get("max_spot_wait",72)),
