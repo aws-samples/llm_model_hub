@@ -478,7 +478,9 @@ class TrainingJobExcutor(BaseModel):
                             instance_type=instance_type,
                             max_wait= 3600*max_spot_wait if use_spot else None,
                             max_run=3600*max_job_run_hour,
-                            enable_remote_debug=True
+                            enable_remote_debug=True,
+                            # checkpoint_local_path='/tmp/finetuned_model',
+                            # checkpoint_s3_uri=output_s3_path[:-1]
                             )
         
         

@@ -28,7 +28,8 @@ const rawColumns = [
     cell: item => (
       <StatusIndicator type={item.job_status === 'SUCCESS' ? 'success' : 
         item.job_status === 'ERROR' ? "error" : 
-        item.job_status === 'STOPPED' ? "stopped" : "in-progress"
+        item.job_status === 'STOPPED' ? "stopped" :
+        item.job_status === 'RUNNING' ? "loading" : "in-progress"
       }>{item.job_status}</StatusIndicator>
     ),
     minWidth: 120,
