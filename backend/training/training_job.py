@@ -309,6 +309,8 @@ class TrainingJobExcutor(BaseModel):
         offload_optimizer = 'true' if job_payload.get('offload_optimizer') else 'false'
         rollout_batch_size = int(job_payload.get('rollout_batch_size',512))
         global_batch_size = int(job_payload.get('global_batch_size',128))
+        rollout_num = int(job_payload.get("rollout_num",5))
+        val_temperature = float(job_payload.get('val_temperature',0.5))
         if WANDB_API_KEY:
             train_logger = "['console','wandb']"
         elif SWANLAB_API_KEY:
@@ -335,6 +337,8 @@ class TrainingJobExcutor(BaseModel):
             "worker.actor.offload.offload_params":offload_params,
             "worker.actor.offload.offload_optimizer":offload_optimizer,
             "worker.rollout.tensor_parallel_size":rollout_tensor_parallel_size,
+            "worker.rollout.n":rollout_num,
+            "worker.rollout.val_override_config.temperature":val_temperature,
             "trainer.experiment_name":f'{base_job_name}_{timestamp}', 
             "trainer.project_name":project_name,
             "trainer.logger":train_logger,
