@@ -305,6 +305,10 @@ class TrainingJobExcutor(BaseModel):
         rollout_tensor_parallel_size = int(job_payload.get('rollout_tensor_parallel_size',1))  
         format_prompt = job_payload.get('format_prompt')
         total_epochs = int(job_payload.get('total_epochs',1))  
+        offload_params ='true' if job_payload.get('offload_params') else 'false'
+        offload_optimizer = 'true' if job_payload.get('offload_optimizer') else 'false'
+        rollout_batch_size = int(job_payload.get('rollout_batch_size',512))
+        global_batch_size = int(job_payload.get('global_batch_size',128))
         if WANDB_API_KEY:
             train_logger = "['console','wandb']"
         elif SWANLAB_API_KEY:
@@ -324,9 +328,12 @@ class TrainingJobExcutor(BaseModel):
             "config":"examples/config.yaml",
             "data.max_prompt_length":max_prompt_length,
             "data.max_response_length":max_response_length,
+            "data.rollout_batch_size":rollout_batch_size,
             "worker.actor.model.model_path":model_id,
+            "worker.actor.model.global_batch_size":global_batch_size,
             "worker.actor.model.trust_remote_code":"true",
-            "worker.actor.offload.offload_params":"false",
+            "worker.actor.offload.offload_params":offload_params,
+            "worker.actor.offload.offload_optimizer":offload_optimizer,
             "worker.rollout.tensor_parallel_size":rollout_tensor_parallel_size,
             "trainer.experiment_name":f'{base_job_name}_{timestamp}', 
             "trainer.project_name":project_name,
