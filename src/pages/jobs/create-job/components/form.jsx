@@ -205,7 +205,13 @@ export const FormWithValidation = ({
           customize_reward_function:data.customize_reward_function,
           format_prompt:data.format_prompt,
           format_prompt_type:data.format_prompt_type,
-          total_epochs:data.total_epochs
+          total_epochs:data.total_epochs,
+          global_batch_size:data.global_batch_size,
+          rollout_batch_size:data.rollout_batch_size,
+          offload_optimizer:data.offload_optimizer,
+          offload_params:data.offload_params,
+          
+
 
 
           // lora_r:data.lora_r,

@@ -81,7 +81,11 @@ const defaultDataEasyR1 = {
   reward_function:'math:compute_score',
   customize_reward_function:'',
   format_prompt:FORMAT_PROMPT_OPTIONS['math'],
-  format_prompt_type:'math'
+  format_prompt_type:'math',
+  rollout_batch_size:512,
+  global_batch_size:128,
+  offload_optimizer:false,
+  offload_params:false,
 }
 
 const defaultData = {...defaultDataLF,...defaultDataEasyR1};
