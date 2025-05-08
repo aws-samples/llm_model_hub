@@ -69,12 +69,12 @@ const defaultDataLF = {
 
 //For easyr1
 const defaultDataEasyR1 = {
-  max_steps:10000,
+  max_steps:100,
   total_epochs:10,
   max_prompt_length: 2048,
   max_response_length: 2048,
-  save_freq: 50,
-  val_freq:50,
+  save_freq: 2,
+  val_freq:2,
   limit_images:0,
   rollout_tensor_parallel_size:1,
   datasetInfo2: datasetInfoExample2,
