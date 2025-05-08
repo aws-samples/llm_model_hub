@@ -86,6 +86,8 @@ const defaultDataEasyR1 = {
   global_batch_size:128,
   offload_optimizer:false,
   offload_params:false,
+  rollout_num:5,
+  val_temperature:0.1
 }
 
 const defaultData = {...defaultDataLF,...defaultDataEasyR1};

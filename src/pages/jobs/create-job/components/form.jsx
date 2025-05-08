@@ -210,6 +210,8 @@ export const FormWithValidation = ({
           rollout_batch_size:data.rollout_batch_size,
           offload_optimizer:data.offload_optimizer,
           offload_params:data.offload_params,
+          rollout_num:data.rollout_num,
+          val_temperature:data.val_temperature
           
 
 

@@ -703,7 +703,29 @@ const EasyR1JobSetting = ({ validation,
                   onChange={({ detail: { value } }) => onChange('val_freq', value)}
                 />
               </FormField>
-                
+                  </Grid>
+                  <Grid gridDefinition={[{ colspan: { "default": 4, xxs: 4 } }, { colspan: { "default": 4, xxs: 4 } },
+                ]}>
+                  <FormField
+                    label="Global batch size"
+                    description="用于更新policy model的batch大小"
+                    stretch={false}
+                  >
+                    <Input readOnly={readOnly}
+                      value={readOnly ? data.job_payload?.global_batch_size : data.global_batch_size}
+                      onChange={({ detail: { value } }) => onChange('global_batch_size', value)}
+                    />
+                  </FormField>
+                  <FormField
+                    label="Validation temperature"
+                    description="用于推理验证集时模型采样温度"
+                    stretch={false}
+                  >
+                    <Input readOnly={readOnly}
+                      value={readOnly ? data.job_payload?.val_temperature : data.val_temperature}
+                      onChange={({ detail: { value } }) => onChange('val_temperature', value)}
+                    />
+                  </FormField>
                   </Grid>
             </SpaceBetween>
 
@@ -749,15 +771,15 @@ const EasyR1JobSetting = ({ validation,
                 />
               </FormField>
               <FormField
-                label="Global batch size"
-                description="用于更新policy model的batch大小"
-                stretch={false}
-              >
-                <Input readOnly={readOnly}
-                  value={readOnly ? data.job_payload?.global_batch_size : data.global_batch_size}
-                  onChange={({ detail: { value } }) => onChange('global_batch_size', value)}
-                />
-              </FormField>
+                    label="Rollout number"
+                    description="每条prompt rollout采样条数"
+                    stretch={false}
+                  >
+                    <Input readOnly={readOnly}
+                      value={readOnly ? data.job_payload?.rollout_num : data.rollout_num}
+                      onChange={({ detail: { value } }) => onChange('rollout_num', value)}
+                    />
+                  </FormField>
               </Grid>
               <Grid gridDefinition={[{ colspan: { "default": 4, xxs: 4 } }, { colspan: { "default": 4, xxs: 4 } },
                   ]}>
