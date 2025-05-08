@@ -12,6 +12,9 @@ import ray
 import logging
 import shlex
 import threading
+import re
+import tempfile
+
 
 os.environ["RAY_BACKEND_LOG_LEVEL"] = "debug"
 # Force Python to run in unbuffered mode
@@ -31,6 +34,80 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+def get_latest_checkpoint(output_s3_path,num_machines, ckpt_type='llamafactory'):
+    """
+    检查S3路径下是否有checkpoint-xx/ 或 global_step_xx/子目录，如果有多个，则返回step数最大的完整路径。
+    会检查checkpoint目录中是否存在sync_completed_xx.flag文件，其中xx是从0到num_machines-1的数字，
+    只有当所有这些标记文件都存在时，才认为该checkpoint是完整的。
+    
+    Args:
+        output_s3_path (str): S3路径，格式为's3://bucket_name/path/to/directory/'
+        num_machines: 总共的计算节点数量
+        ckpt_type (str): checkpoint类型，'llamafactory'或'easyr1'
+    
+    Returns:
+        str: 有效的checkpoint完整路径，如果没有找到任何有效checkpoint，则返回None
+    """
+    # 解析S3 URL
+    parsed_url = urlparse(output_s3_path)
+    bucket_name = parsed_url.netloc
+    prefix = parsed_url.path.lstrip('/')
+    
+    # 确保prefix以斜杠结尾
+    if not prefix.endswith('/'):
+        prefix += '/'
+    
+    # 初始化S3客户端
+    s3_client = boto3.client('s3')
+    
+    # 列出指定路径下的所有"目录"
+    checkpoints = []
+    paginator = s3_client.get_paginator('list_objects_v2')
+    for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix, Delimiter='/'):
+        if 'CommonPrefixes' in page:
+            for obj in page['CommonPrefixes']:
+                key = obj['Prefix']
+                # 提取目录名（最后一个斜杠前的部分）
+                dirname = key.rstrip('/').split('/')[-1]
+                match = None
+                if ckpt_type == 'llamafactory':
+                    match = re.match(r'checkpoint-(\d+)$', dirname)
+                elif ckpt_type == 'easyr1':
+                    match = re.match(r'global_step_(\d+)$', dirname) 
+                
+                if match:
+                    step = int(match.group(1))
+                    checkpoints.append((step, key))
+    
+    # 如果没有找到任何checkpoint
+    if not checkpoints:
+        return None
+    
+    # 按步数降序排序
+    checkpoints.sort(key=lambda x: x[0], reverse=True)
+    
+    # 检查checkpoints中是否包含所有必要的标记文件
+    for step, checkpoint_key in checkpoints:
+        # 检查该checkpoint目录中是否存在所有必要的sync_completed_xx.flag文件
+        all_flags_exist = True
+        for rank in range(num_machines):
+            flag_key = f"{checkpoint_key}sync_completed_{rank}.flag"
+            try:
+                # 尝试获取flag文件的元数据，如果文件存在则不会抛出异常
+                s3_client.head_object(Bucket=bucket_name, Key=flag_key)
+            except Exception:
+                # 文件不存在，标记为不完整
+                all_flags_exist = False
+                break
+                
+        if all_flags_exist:
+            # 如果所有标记文件都存在，返回该checkpoint路径
+            return f's3://{bucket_name}/{checkpoint_key}'
+    
+    # 如果所有checkpoint都没有完整的标记文件，返回None
+    return None
+
 
 
 @ray.remote
@@ -194,32 +271,51 @@ def flush_checkpoint_dir():
         for folder in checkpoints:
             # 同步到 S3 路径
             os.system(f'./s5cmd sync /tmp/checkpoints/{folder} {os.environ["OUTPUT_MODEL_S3_PATH"]}')
+            # 创建同步完成标记文件
+            with tempfile.NamedTemporaryFile(prefix="sync_completed_", suffix=".flag", delete=False) as tmp_file:
+                tmp_file_path = tmp_file.name
+                # 写入同步时间
+                tmp_file.write(f"Sync completed at {time.strftime('%Y-%m-%d %H:%M:%S')}".encode())
+            
+            # 上传标记文件到S3 - 正确设置目标路径
+            flag_s3_path = f"{os.environ['OUTPUT_MODEL_S3_PATH']}/{folder}/sync_completed_{os.environ['NODE_INDEX']}.flag"
+            os.system(f'./s5cmd cp {tmp_file_path} {flag_s3_path}')
+            
+            # 删除临时文件
+            os.remove(tmp_file_path)
             logger.info(f'Sync checkpoint completed: {folder} ')
 
-                
-                
+
 def monitor_and_sync():
     """
     监控检查点的同步。
     此函数通过检查 /tmp/checkpoints/ 目录，并检查是否有新的检查点。
-    如果有，则同步到 S3 路径。
+    如果有，则同步到 S3 路径，并在同步完成后创建一个标记文件。
     """
     while True:
         # 检查 /tmp/checkpoints/ 目录
         if os.path.exists('/tmp/checkpoints/'):
             checkpoints = sorted([folder for folder in os.listdir('/tmp/checkpoints/') if folder.startswith('global_step')])
             for folder in checkpoints:
-                # 同步到 S3 路径
+                # 同步到 S3 路径 - 保持原始同步命令不变
+                logger.info(f'Syncing checkpoint: {folder} to S3...')
                 os.system(f'./s5cmd sync /tmp/checkpoints/{folder} {os.environ["OUTPUT_MODEL_S3_PATH"]}')
-                logger.info(f'Sync checkpoint completed: {folder} ')
-            # 删除历史的checkpoints
-            # EasyR1 会只保留最近的n个checkpoint
-            # if checkpoints:
-            #     for folder in checkpoints[:-1]:
-            #         # 删除checkkpoint文件
-            #         os.system(f'rm -rf /tmp/checkpoints/{folder}')
-            #         logger.info(f'Delete checkpoint:{folder} ')
-        time.sleep(10) 
+                
+                # 创建同步完成标记文件
+                with tempfile.NamedTemporaryFile(prefix="sync_completed_", suffix=".flag", delete=False) as tmp_file:
+                    tmp_file_path = tmp_file.name
+                    # 写入同步时间
+                    tmp_file.write(f"Sync completed at {time.strftime('%Y-%m-%d %H:%M:%S')}".encode())
+                
+                # 上传标记文件到S3 - 正确设置目标路径
+                flag_s3_path = f"{os.environ['OUTPUT_MODEL_S3_PATH']}/{folder}/sync_completed_{os.environ['NODE_INDEX']}.flag"
+                os.system(f'./s5cmd cp {tmp_file_path} {flag_s3_path}')
+                
+                # 删除临时文件
+                os.remove(tmp_file_path)
+                
+                logger.info(f'Sync checkpoint completed: {folder} with completion flag')
+        time.sleep(10)
         
 
         
@@ -303,6 +399,10 @@ if __name__ == "__main__":
         
     
     os.system("chmod +x ./s5cmd")
+    
+    output_s3_path = os.environ["OUTPUT_MODEL_S3_PATH"]
+    #检查是否有checkpoint文件存在,用于spot训练中断后恢复
+    new_s3_checkpoint = get_latest_checkpoint(output_s3_path,num_machines,ckpt_type='easyr1')
 
     if s3_data_paths and datainfo:
         paths = s3_data_paths.split(',')
@@ -320,8 +420,8 @@ if __name__ == "__main__":
             
         
 
-    #s3 uri for checkpoint 
-    s3_checkpoint = os.environ.get('s3_checkpoint')
+    #优先从new_s3_checkpoint恢复训练
+    s3_checkpoint = new_s3_checkpoint if new_s3_checkpoint else os.environ.get('s3_checkpoint') 
     if s3_checkpoint:
         s3_checkpoint = s3_checkpoint[:-1] if s3_checkpoint.endswith('/') else s3_checkpoint
         suffix = s3_checkpoint.split('/')[-1]
