@@ -46,7 +46,9 @@ export const  INSTANCE_TYPES =[
   { label: 'ml.g6e.48xlarge', value: 'ml.g6e.48xlarge' },
   { label: 'ml.p4d.24xlarge', value: 'ml.p4d.24xlarge' },
   { label: 'ml.p4de.24xlarge', value: 'ml.p4de.24xlarge' },
-  { label: 'ml.p5.48xlarge', value: 'ml.p5.48xlarge' }
+  { label: 'ml.p5.48xlarge', value: 'ml.p5.48xlarge' },
+  { label: 'ml.p5e.48xlarge', value: 'ml.p5e.48xlarge' },
+  { label: 'ml.p5en.48xlarge', value: 'ml.p5en.48xlarge' }
 ]
 
 
