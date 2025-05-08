@@ -330,7 +330,7 @@ class TrainingJobExcutor(BaseModel):
             "data.max_response_length":max_response_length,
             "data.rollout_batch_size":rollout_batch_size,
             "worker.actor.model.model_path":model_id,
-            "worker.actor.model.global_batch_size":global_batch_size,
+            "worker.actor.global_batch_size":global_batch_size,
             "worker.actor.model.trust_remote_code":"true",
             "worker.actor.offload.offload_params":offload_params,
             "worker.actor.offload.offload_optimizer":offload_optimizer,
