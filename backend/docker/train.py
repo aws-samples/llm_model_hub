@@ -243,7 +243,7 @@ def start_monitoring():
     此函数通过创建一个进程来启动检查点的监控，并在退出前打印一条消息。
     """
     global monitoring_process
-    monitoring_process = Process(target=monitor_and_sync)
+    monitoring_process = Process(target=monitor_and_sync,daemon=True)
     monitoring_process.start()
     logger.info('Checkpoint monitoring process started.')
 
@@ -362,9 +362,9 @@ if __name__ == "__main__":
     exit_code = os.system(train_command)
     if exit_code != 0:
         logger.info(f"Train failed with exit code: {exit_code}")
-        if host_rank == 0:
-            # 停止checkpoint监控
-            stop_monitoring()
+        # if host_rank == 0:
+        # 停止checkpoint监控
+        stop_monitoring()
         sys.exit(1)
 
     # if host_rank == 0:
@@ -376,7 +376,7 @@ if __name__ == "__main__":
         if s3_model_path:
             merge_args = update_arg_value(merge_args,"model_name_or_path","/tmp/model_path/")
         logger.info(f'-----start merge lora-------')
-        merge_command = f'CUDA_VISIBLE_DEVICES=0 llamafactory-cli export {merge_args}'
+        merge_command = f'llamafactory-cli export {merge_args}'
         run_command(merge_command)
 
         logger.info(f'-----end merge lora-------')
