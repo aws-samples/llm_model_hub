@@ -326,7 +326,7 @@ def start_monitoring():
     """
     global monitoring_process
     if not monitoring_process:
-        monitoring_process = Process(target=monitor_and_sync)
+        monitoring_process = Process(target=monitor_and_sync,daemon=True)
         monitoring_process.start()
         logger.info('Checkpoint monitoring process started.')
 
