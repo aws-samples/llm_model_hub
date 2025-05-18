@@ -136,7 +136,7 @@ def get_endpoint_status(endpoint_name:str) ->EndpointStatus:
         logger.error(e)
         return EndpointStatus.NOTFOUND
         
-def delete_endpoint(endpoint_name:str) ->bool:
+def delete_endpoint(endpoint_name:str) -> Dict[bool,str]:
     client = boto_sess.client('sagemaker')
     try:
         # database.update_endpoint_status(
@@ -144,14 +144,14 @@ def delete_endpoint(endpoint_name:str) ->bool:
         #         endpoint_status=EndpointStatus.TERMINATED,
         #         endpoint_delete_time= datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         #     )
-        database.delete_endpoint(endpoint_name=endpoint_name)
         client.delete_endpoint(EndpointName=endpoint_name)
         client.delete_endpoint_config(EndpointConfigName=endpoint_name)
         client.delete_model(ModelName=endpoint_name)
-        return True
+        database.delete_endpoint(endpoint_name=endpoint_name)
+        return True,'Delete endpoint success'
     except Exception as e:
         logger.error(e)
-        return True
+        return False, f"Delete failed: {str(e)}"
 
 def register_cust_model(cust_repo_type:DownloadSource,cust_repo_addr:str):
     model_name = cust_repo_addr.split('/')[1]
