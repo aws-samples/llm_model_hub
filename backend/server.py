@@ -222,8 +222,8 @@ async def handle_deploy_endpoint(request:DeployModelRequest):
 async def handle_delete_endpoint(request:EndpointRequest):
     logger.info(request)
     endpoint_name = request.endpoint_name
-    result = delete_endpoint(endpoint_name)
-    return CommonResponse(response_id=str(uuid.uuid4()),response={"result": result})
+    result,msg = delete_endpoint(endpoint_name)
+    return CommonResponse(response_id=str(uuid.uuid4()),response={"result": result,"msg":msg}) 
 
 @app.post('/v1/get_endpoint_status',dependencies=[Depends(check_api_key)])
 async def handle_get_endpoint_status(request:EndpointRequest):

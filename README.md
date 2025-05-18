@@ -192,14 +192,11 @@ select * from USER_TABLE;
 
 
 # 示例代码免责声明
+本软件按"原样"提供，不提供任何形式的明示或暗示保证，包括但不限于对适销性、特定用途适用性和非侵权性的保证。在任何情况下，无论是在合同诉讼、侵权行为或其他方面，作者或版权持有人均不对任何索赔、损害或其他责任负责，这些索赔、损害或其他责任源于本软件或与本软件的使用或其他交易有关。
 
-本代码仅作为示例提供，不适用于生产环境。它旨在说明概念并为您自己的实现提供起点。  
-
-使用本代码，即表示您确认并同意：  
-
-- 本代码按"原样"提供，不附带任何形式的明示或暗示保证。
-- 您对在Amazon SageMaker或任何其他环境中运行的代码承担全部责任。
-- 您全权负责测试、验证并确保代码满足您的特定需求。
-- 我们不保证此代码适用于所有用例或环境。
-- 此示例类似于您在Stack Overflow等平台上可能找到的示例 - 有助于学习，但在部署前需要您的专业判断。
-- 对于因使用此示例代码而导致的任何直接、间接、偶然、特殊或后果性损害，Amazon及其附属公司概不负责
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
