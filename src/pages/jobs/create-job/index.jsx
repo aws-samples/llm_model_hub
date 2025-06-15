@@ -69,19 +69,25 @@ const defaultDataLF = {
 
 //For easyr1
 const defaultDataEasyR1 = {
-  max_steps:10000,
+  max_steps:100,
   total_epochs:10,
   max_prompt_length: 2048,
   max_response_length: 2048,
-  save_freq: 50,
-  val_freq:50,
+  save_freq: 2,
+  val_freq:2,
   limit_images:0,
   rollout_tensor_parallel_size:1,
   datasetInfo2: datasetInfoExample2,
   reward_function:'math:compute_score',
   customize_reward_function:'',
   format_prompt:FORMAT_PROMPT_OPTIONS['math'],
-  format_prompt_type:'math'
+  format_prompt_type:'math',
+  rollout_batch_size:512,
+  global_batch_size:128,
+  offload_optimizer:false,
+  offload_params:false,
+  rollout_num:5,
+  val_temperature:0.1
 }
 
 const defaultData = {...defaultDataLF,...defaultDataEasyR1};

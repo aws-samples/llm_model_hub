@@ -703,7 +703,29 @@ const EasyR1JobSetting = ({ validation,
                   onChange={({ detail: { value } }) => onChange('val_freq', value)}
                 />
               </FormField>
-                
+                  </Grid>
+                  <Grid gridDefinition={[{ colspan: { "default": 4, xxs: 4 } }, { colspan: { "default": 4, xxs: 4 } },
+                ]}>
+                  <FormField
+                    label="Global batch size"
+                    description="用于更新policy model的batch大小"
+                    stretch={false}
+                  >
+                    <Input readOnly={readOnly}
+                      value={readOnly ? data.job_payload?.global_batch_size : data.global_batch_size}
+                      onChange={({ detail: { value } }) => onChange('global_batch_size', value)}
+                    />
+                  </FormField>
+                  <FormField
+                    label="Validation temperature"
+                    description="用于推理验证集时模型采样温度"
+                    stretch={false}
+                  >
+                    <Input readOnly={readOnly}
+                      value={readOnly ? data.job_payload?.val_temperature : data.val_temperature}
+                      onChange={({ detail: { value } }) => onChange('val_temperature', value)}
+                    />
+                  </FormField>
                   </Grid>
             </SpaceBetween>
 
@@ -715,8 +737,7 @@ const EasyR1JobSetting = ({ validation,
               <SpaceBetween size="l">
               <Grid gridDefinition={[{ colspan: { "default": 4, xxs: 4 } }, { colspan: { "default": 4, xxs: 4 } },
                   ]}>
-                
-                <FormField
+              <FormField
                 label="Rollout tensor parallel size"
                 description="tensor parallel size for rollout stage"
                 stretch={false}
@@ -737,6 +758,58 @@ const EasyR1JobSetting = ({ validation,
                 />
               </FormField>
               </Grid>
+              <Grid gridDefinition={[{ colspan: { "default": 4, xxs: 4 } }, { colspan: { "default": 4, xxs: 4 } },
+                  ]}>
+              <FormField
+                label="Rollout batch size"
+                description="一次Rollout的batch大小，建议与Global batch size保持4:1或者2:1"
+                stretch={false}
+              >
+                <Input readOnly={readOnly}
+                  value={readOnly ? data.job_payload?.rollout_batch_size : data.rollout_batch_size}
+                  onChange={({ detail: { value } }) => onChange('rollout_batch_size', value)}
+                />
+              </FormField>
+              <FormField
+                    label="Rollout number"
+                    description="每条prompt rollout采样条数"
+                    stretch={false}
+                  >
+                    <Input readOnly={readOnly}
+                      value={readOnly ? data.job_payload?.rollout_num : data.rollout_num}
+                      onChange={({ detail: { value } }) => onChange('rollout_num', value)}
+                    />
+                  </FormField>
+              </Grid>
+              <Grid gridDefinition={[{ colspan: { "default": 4, xxs: 4 } }, { colspan: { "default": 4, xxs: 4 } },
+                  ]}>
+                <FormField
+                  label="Offload params"
+                  description="GPU显存不够时开启，在rollout时，卸载权重到cpu内存，会减少GPU显存消耗，但是影响速度，需要更多cpu内存"
+                  stretch={false}
+                >
+                  <Toggle
+                    readOnly={readOnly}
+                    checked={readOnly ? data.job_payload?.offload_params : data.offload_params}
+                    onChange={({ detail: { checked } }) => onChange('offload_params', checked)}
+                  >
+                    {t("enable")}
+                  </Toggle>
+                </FormField>
+                <FormField
+                  label="Offload optimizer"
+                  description="GPU显存不够时开启，在rollout时，卸载优化器参数到cpu内存，会减少GPU显存消耗，但是影响速度，需要更多cpu内存"
+                  stretch={false}
+                >
+                  <Toggle
+                    readOnly={readOnly}
+                    checked={readOnly ? data.job_payload?.offload_optimizer : data.offload_optimizer}
+                    onChange={({ detail: { checked } }) => onChange('offload_optimizer', checked)}
+                  >
+                    {t("enable")}
+                  </Toggle>
+                  </FormField>
+              </Grid>  
               
               <FormField
                 label={t('reward_score_function')}
@@ -837,14 +910,14 @@ const LFJobSetting = ({ validation,
         <FormField
           label={t('model_name')}
           stretch={false}
-          description="Select Model"
+          description="选择模型"
           errorText={errors.model_name}
           i18nStrings={{ errorIconAriaLabel: 'Error' }}
         >
           <SelectModelName data={data} setData={setData} readOnly={readOnly} refs={refs} />
         </FormField>
         <FormField
-          label="Use Existing Model Weight (Optional)"
+          label="使用已有的模型权重进行训练 (Optional)"
           stretch={false}
           description="使用已有的模型文件进行训练"
           errorText={errors.s3_model_path}
@@ -857,7 +930,7 @@ const LFJobSetting = ({ validation,
             outputPath={readOnly ? data.job_payload?.s3_model_path : data.s3_model_path} />
         </FormField>
         <FormField
-          label="Use Existing Checkpoint (Optional)"
+          label="使用已有的Checkpoint (Optional)"
           stretch={false}
           description="使用已有的checkpoint文件继续训练（⚠️：如果是Lora训练，选择Lora模型checkpoint）"
           errorText={errors.s3_checkpoint}
@@ -870,8 +943,8 @@ const LFJobSetting = ({ validation,
             outputPath={readOnly ? data.job_payload?.s3_checkpoint : data.s3_checkpoint} />
         </FormField>
         <FormField
-          label="Prompte Template"
-          description="select a Prompt Template to format the dataset"
+          label="选择Chat Template"
+          description="select a Chat Template to format the dataset"
           stretch={false}
           errorText={errors.prompt_template}
           i18nStrings={{ errorIconAriaLabel: 'Error' }}
