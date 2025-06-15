@@ -37,6 +37,7 @@ sudo tee "$DOCKER_CONFIG" > /dev/null <<EOT
 { 
   "registry-mirrors" : 
     [ 
+        "https://mirror-docker.bosicloud.com",
         "https://docker.registry.cyou",
         "https://docker-cf.registry.cyou",
         "https://dockerpull.com",
@@ -50,7 +51,8 @@ sudo tee "$DOCKER_CONFIG" > /dev/null <<EOT
         "https://dhub.kubesre.xyz",
         "https://docker.hlyun.org",
         "https://docker.m.daocloud.io"
-    ] 
+    ] ,
+    "insecure-registries":["mirror-docker.bosicloud.com"]
 }
 EOT
 echo "Docker configuration added to $DOCKER_CONFIG"

@@ -64,7 +64,7 @@ export const DeleteModelModal = ({
                   ...item,
                   {
                     type: "error",
-                    content: `Delete Endpoint :${endpoint_name} Failed`,
+                    content: `Delete Endpoint :${endpoint_name} Failed, ${res.response.msg}`,
                     dismissible: true,
                     dismissLabel: "Dismiss message",
                     onDismiss: () =>
