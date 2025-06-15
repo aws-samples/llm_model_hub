@@ -349,7 +349,6 @@ if __name__ == "__main__":
         train_args = update_arg_value(train_args,"model_name_or_path","/tmp/model_path/")
         logger.info(f"s3 model_name_or_path {s3_model_path}")
 
-    # if host_rank == 0:
     # 启动checkpoint监控进程，ckpt分布在各个节点保存
     start_monitoring()
 
@@ -357,17 +356,15 @@ if __name__ == "__main__":
     if num_machines > 1: 
         train_command = f"FORCE_TORCHRUN=1  NNODES={num_machines} NODE_RANK={host_rank} MASTER_ADDR={master_addr} MASTER_PORT=29500 llamafactory-cli train {train_args}"
     else:
-        train_command = f"CUDA_VISIBLE_DEVICES={DEVICES} llamafactory-cli train {train_args}"
+        train_command = f"CUDA_VISIBLE_DEVICES={DEVICES} FORCE_TORCHRUN=1 llamafactory-cli train {train_args}"
 
     exit_code = os.system(train_command)
     if exit_code != 0:
         logger.info(f"Train failed with exit code: {exit_code}")
-        # if host_rank == 0:
         # 停止checkpoint监控
         stop_monitoring()
         sys.exit(1)
 
-    # if host_rank == 0:
     # 停止checkpoint监控
     stop_monitoring()
         
