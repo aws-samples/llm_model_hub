@@ -276,7 +276,7 @@ class TrainingJobExcutor(BaseModel):
         return train_args_path,merge_args_path
 
 
-    def create_grpo_training(self,
+    def create_easyr1_training(self,
                             job_payload:Dict[str,Any],
                             dataset_info_path:str,
                             data_keys:List[str],
@@ -311,6 +311,10 @@ class TrainingJobExcutor(BaseModel):
         global_batch_size = int(job_payload.get('global_batch_size',128))
         rollout_num = int(job_payload.get("rollout_num",5))
         val_temperature = float(job_payload.get('val_temperature',0.5))
+        mini_rollout_batch_size = int(job_payload.get('mini_rollout_batch_size',128))
+        clip_ratio_low = float(job_payload.get('clip_ratio_low',0.2))
+        clip_ratio_high = float(job_payload.get('clip_ratio_high',0.28))
+        stage = job_payload['stage']
         if WANDB_API_KEY:
             train_logger = "['console','wandb']"
         elif SWANLAB_API_KEY:
@@ -331,6 +335,7 @@ class TrainingJobExcutor(BaseModel):
             "data.max_prompt_length":max_prompt_length,
             "data.max_response_length":max_response_length,
             "data.rollout_batch_size":rollout_batch_size,
+            "data.mini_rollout_batch_size":mini_rollout_batch_size,
             "worker.actor.model.model_path":model_id,
             "worker.actor.global_batch_size":global_batch_size,
             "worker.actor.model.trust_remote_code":"true",
@@ -349,6 +354,12 @@ class TrainingJobExcutor(BaseModel):
             "trainer.val_freq":val_freq,
             "trainer.total_epochs":total_epochs
         }
+        
+        if stage == 'dapo':
+            configs['worker.actor.clip_ratio_high'] = clip_ratio_high
+            configs['worker.actor.clip_ratio_low'] = clip_ratio_low
+            configs['algorithm.disable_kl'] = True
+            configs['algorithm.online_filtering'] = True
         logger.info(configs)
         
         # 注意：需要跟https://github.com/hiyouga/EasyR1/tree/main/examples/reward_function里的对应
@@ -357,6 +368,8 @@ class TrainingJobExcutor(BaseModel):
             configs['worker.reward.reward_function'] = './examples/reward_function/math.py:compute_score'
         elif job_payload.get('reward_function') == 'r1v:computer_score':
             configs['worker.reward.reward_function'] = './examples/reward_function/r1v.py:compute_score'
+            # 要使用reward_type=sequential
+            configs['worker.reward.reward_type']  = 'sequential'
         elif job_payload.get('reward_function') == 'customize':
             customize_reward_function  = job_payload.get('customize_reward_function')
             configs['worker.reward.reward_function'] = 'placeholder'
@@ -589,9 +602,9 @@ class TrainingJobExcutor(BaseModel):
                                     instance_type=job_payload['instance_type'])
 
             return True,'create job success'
-        elif job_payload['stage'] in ['grpo']:
+        elif job_payload['stage'] in ['grpo','dapo']:
             
-            ret,msg = self.create_grpo_training(
+            ret,msg = self.create_easyr1_training(
                 job_payload = job_payload,
                 dataset_info_path=dataset_info2_path,
                 data_keys = job_payload.get('dataset',[]),
