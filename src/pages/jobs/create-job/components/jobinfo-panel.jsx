@@ -779,8 +779,44 @@ const EasyR1JobSetting = ({ validation,
                       value={readOnly ? data.job_payload?.rollout_num : data.rollout_num}
                       onChange={({ detail: { value } }) => onChange('rollout_num', value)}
                     />
-                  </FormField>
+              </FormField>
               </Grid>
+              <Grid gridDefinition={[{ colspan: { "default": 4, xxs: 4 } }, { colspan: { "default": 4, xxs: 4 } },
+                  ]}>
+              <FormField
+                    label="Mini Rollout batch size"
+                    description="把rollout batch再切分成小的batch"
+                    stretch={false}
+                  >
+                    <Input readOnly={readOnly}
+                      value={readOnly ? data.job_payload?.mini_rollout_batch_size : data.mini_rollout_batch_size}
+                      onChange={({ detail: { value } }) => onChange('mini_rollout_batch_size', value)}
+                    />
+              </FormField>
+              <FormField
+                    label="Clip ratio low"
+                    description="DAPO时使用"
+                    stretch={false}
+                  >
+                    <Input readOnly={readOnly}
+                      value={readOnly ? data.job_payload?.clip_ratio_low : data.clip_ratio_low}
+                      onChange={({ detail: { value } }) => onChange('clip_ratio_low', value)}
+                    />
+              </FormField>
+              </Grid>
+              <Grid gridDefinition={[{ colspan: { "default": 4, xxs: 4 } }, { colspan: { "default": 4, xxs: 4 } },
+                  ]}>
+              <FormField
+                    label="Clip ratio high"
+                    description="DAPO时使用"
+                    stretch={false}
+                  >
+                    <Input readOnly={readOnly}
+                      value={readOnly ? data.job_payload?.clip_ratio_high : data.clip_ratio_high}
+                      onChange={({ detail: { value } }) => onChange('clip_ratio_high', value)}
+                    />
+              </FormField>     
+               </Grid>
               <Grid gridDefinition={[{ colspan: { "default": 4, xxs: 4 } }, { colspan: { "default": 4, xxs: 4 } },
                   ]}>
                 <FormField
@@ -1288,7 +1324,7 @@ export default function DistributionPanel({
         </SpaceBetween>
       </Container>
 
-      {data.stage === 'grpo' ?
+      {data.stage === 'grpo'|| data.stage === 'dapo' ?
         <EasyR1JobSetting onChange={onChange} validation={validation} readOnly={readOnly} data={data} errors={errors} setData={setData} refs={refs} />
         :
         <LFJobSetting onChange={onChange} validation={validation} readOnly={readOnly} data={data} errors={errors} setData={setData} refs={refs} />

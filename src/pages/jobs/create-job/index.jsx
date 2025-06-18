@@ -87,7 +87,11 @@ const defaultDataEasyR1 = {
   offload_optimizer:false,
   offload_params:false,
   rollout_num:5,
-  val_temperature:0.1
+  val_temperature:0.1,
+  clip_ratio_low:0.2,
+  clip_ratio_high:0.28,
+  mini_rollout_batch_size:128,
+
 }
 
 const defaultData = {...defaultDataLF,...defaultDataEasyR1};

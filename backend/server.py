@@ -115,7 +115,7 @@ async def handel_login(request:LoginRequest):
 
 @app.post("/v1/list_jobs",dependencies=[Depends(check_api_key)])
 async def handel_list_jobs(request:ListJobsRequest):
-    logger.info(request.json())
+    # logger.info(request.json())
     resp = await list_jobs(request)
     return resp
 
