@@ -59,6 +59,7 @@ export const TRAINING_STAGES = [
   { label: 'DPO', value: 'dpo' },
   { label: 'KTO', value: 'kto' },
   { label: 'GRPO', value: 'grpo' },
+  { label: 'DAPO', value: 'dapo' },
 
 ]
 export const OPTMIZERS =[
