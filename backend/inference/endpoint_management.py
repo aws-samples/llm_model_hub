@@ -261,7 +261,7 @@ def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,en
         if not jobinfo.job_status == JobStatus.SUCCESS:
             return CommonResponse(response_id=job_id,response={"error": "job is not ready to deploy"})
         
-        if jobinfo.job_type in [JobType.grpo]:
+        if jobinfo.job_type in [JobType.grpo,JobType.dapo]:
             model_path = jobinfo.output_s3_path + 'huggingface/'
         else:
             # 如果是lora模型，则使用merge之后的路径
