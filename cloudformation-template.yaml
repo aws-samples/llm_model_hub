@@ -48,7 +48,7 @@ Resources:
     Type: AWS::EC2::Instance
     CreationPolicy:
       ResourceSignal:
-        Timeout: PT60M
+        Timeout: PT90M
     Properties:
       KeyName: !Ref KeyName
       Tags:

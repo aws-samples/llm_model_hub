@@ -219,7 +219,7 @@ i18n
             val_freq:'Validate freq',
             total_epochs:'Total epochs',
             training_plan:'Training Plan Arn',
-            use_training_plan:"Use training plan to save cost"
+            use_training_plan:"Input arn of training plan (type:training job)"
         }
       },
       zh:{
@@ -426,7 +426,7 @@ i18n
             val_freq:'验证频率',
             total_epochs:'总轮数',
             training_plan:'训练计划arn',
-            use_training_plan:"使用训练计划节省开支"
+            use_training_plan:"填入training plan arn（training job类型）"
 
         }
       }
