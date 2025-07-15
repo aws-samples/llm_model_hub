@@ -217,7 +217,9 @@ i18n
             job_name:'Job name',
             train_stage:'Train stage',
             val_freq:'Validate freq',
-            total_epochs:'Total epochs'
+            total_epochs:'Total epochs',
+            training_plan:'Training Plan Arn',
+            use_training_plan:"Use training plan to save cost"
         }
       },
       zh:{
@@ -422,7 +424,9 @@ i18n
             job_name:'任务名称',
             train_stage:'任务类型',
             val_freq:'验证频率',
-            total_epochs:'总轮数'
+            total_epochs:'总轮数',
+            training_plan:'训练计划arn',
+            use_training_plan:"使用训练计划节省开支"
 
         }
       }

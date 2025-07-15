@@ -901,6 +901,17 @@ const EasyR1JobSetting = ({ validation,
                   />
                 </FormField>
                 <FormField
+                  label={t("training_plan")}
+                  description={t("use_training_plan")}
+                  stretch={false}
+                >
+                  <Input readOnly={readOnly}
+                    value={readOnly ? data.job_payload.training_plan : data.training_plan}
+                    ref={refs.training_plan}
+                    onChange={({ detail: { value } }) => onChange('training_plan', value)}
+                  />
+                </FormField>
+                <FormField
                   label={t("use_spot")}
                   description={t("use_spot_desc")}
                   stretch={false}
@@ -1140,6 +1151,17 @@ const LFJobSetting = ({ validation,
             onChange={({ detail: { value } }) => onChange('instance_num', value)}
           />
         </FormField>
+          <FormField
+              label={t("training_plan")}
+              description={t("use_training_plan")}
+              stretch={false}
+            >
+              <Input readOnly={readOnly}
+                value={readOnly ? data.job_payload.training_plan : data.training_plan}
+                ref={refs.training_plan}
+                onChange={({ detail: { value } }) => onChange('training_plan', value)}
+              />
+            </FormField>
         <FormField
           label={t("use_spot")}
           description={t("use_spot_desc")}
