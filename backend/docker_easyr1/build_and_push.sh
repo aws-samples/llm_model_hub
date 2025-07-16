@@ -21,8 +21,8 @@ fi
 # Get the account number associated with the current IAM credentials
 account=$(aws sts  get-caller-identity --query Account --output text)
 
-VERSION=latest
-BASE_IMAGE=hiyouga/verl:ngc-th2.6.0-cu126-vllm0.8.3-flashinfer0.2.2-cxx11abi0
+VERSION=0.3.1
+BASE_IMAGE=hiyouga/verl:ngc-th2.7.0-cu12.6-vllm0.9.1
 inference_image=sagemaker/easyr1
 inference_fullname=${account}.dkr.ecr.${region}.amazonaws.${suffix}/${inference_image}:${VERSION}
 

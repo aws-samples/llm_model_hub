@@ -214,7 +214,8 @@ export const FormWithValidation = ({
           val_temperature:data.val_temperature,
           mini_rollout_batch_size:data.mini_rollout_batch_size,
           clip_ratio_high:data.clip_ratio_high,
-          clip_ratio_low:data.clip_ratio_low
+          clip_ratio_low:data.clip_ratio_low,
+          training_plan:data.training_plan,
           
 
 

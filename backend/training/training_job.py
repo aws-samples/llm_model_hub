@@ -314,6 +314,7 @@ class TrainingJobExcutor(BaseModel):
         mini_rollout_batch_size = int(job_payload.get('mini_rollout_batch_size',128))
         clip_ratio_low = float(job_payload.get('clip_ratio_low',0.2))
         clip_ratio_high = float(job_payload.get('clip_ratio_high',0.28))
+        training_plan = job_payload.get('training_plan', None) 
         stage = job_payload['stage']
         if WANDB_API_KEY:
             train_logger = "['console','wandb']"
@@ -445,11 +446,13 @@ class TrainingJobExcutor(BaseModel):
                                     instance_type=instance_type,
                                     max_wait= 3600*max_spot_wait if use_spot else None,
                                     max_run=3600*max_job_run_hour,
-                                    enable_remote_debug=True
+                                    enable_remote_debug=True,
+                                    training_plan=training_plan,
                                     )
         return True, 'create success'
         
     def create_training(self,
+                        job_payload:dict,
                         model_id:str,
                         dataset_info_path:str,
                         sg_config:str,
@@ -463,7 +466,7 @@ class TrainingJobExcutor(BaseModel):
                         s3_model_path:str,
                         merge_lora:str = '1',
                         training_input_path:str=None):
-
+        training_plan = job_payload.get('training_plan', None) 
         base_model_name = model_id.split('/')[-1]
         base_job_name = base_model_name.replace('.','-')
         
@@ -503,8 +506,7 @@ class TrainingJobExcutor(BaseModel):
                             max_wait= 3600*max_spot_wait if use_spot else None,
                             max_run=3600*max_job_run_hour,
                             enable_remote_debug=True,
-                            # checkpoint_local_path='/tmp/finetuned_model',
-                            # checkpoint_s3_uri=output_s3_path[:-1]
+                            training_plan=training_plan
                             )
         
         
@@ -587,19 +589,20 @@ class TrainingJobExcutor(BaseModel):
 
                     
             print('use_spot:',job_payload.get("use_spot",False))
-            self.create_training(sg_config=sg_config,
-                                    dataset_info_path=dataset_info_path,
-                                    use_spot = job_payload.get("use_spot",False),
-                                    max_spot_wait = int(job_payload.get("max_spot_wait",72)),
-                                    max_job_run_hour = int(job_payload.get("max_job_run_hour",48)),
-                                    instance_num = int(job_payload['instance_num']),
-                                    model_id=model_id,
-                                    sg_lora_merge_config=sg_lora_merge_config,
-                                    training_input_path= s3_data_path,
-                                    merge_lora=merge_lora,
-                                    s3_checkpoint=s3_checkpoint,
-                                    s3_model_path=s3_model_path,
-                                    instance_type=job_payload['instance_type'])
+            self.create_training(job_payload = job_payload,
+                                 sg_config=sg_config,
+                                dataset_info_path=dataset_info_path,
+                                use_spot = job_payload.get("use_spot",False),
+                                max_spot_wait = int(job_payload.get("max_spot_wait",72)),
+                                max_job_run_hour = int(job_payload.get("max_job_run_hour",48)),
+                                instance_num = int(job_payload['instance_num']),
+                                model_id=model_id,
+                                sg_lora_merge_config=sg_lora_merge_config,
+                                training_input_path= s3_data_path,
+                                merge_lora=merge_lora,
+                                s3_checkpoint=s3_checkpoint,
+                                s3_model_path=s3_model_path,
+                                instance_type=job_payload['instance_type'])
 
             return True,'create job success'
         elif job_payload['stage'] in ['grpo','dapo']:

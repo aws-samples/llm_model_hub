@@ -64,7 +64,8 @@ const defaultDataLF = {
   lora_target_modules:'all',
   pref_loss:'sigmoid',
   pref_beta:0.1,
-  pref_ftx:0
+  pref_ftx:0,
+  training_plan:''
 };
 
 //For easyr1
