@@ -339,27 +339,6 @@ export interface MessageDataProp {
   params: Record<string, any>
 }
 
-function extractJsonFromString(str: string) {
-  if (str === 'data  [DONE]') return `[DONE]`
-  // 使用正则表达式匹配 JSON 部分
-  const match = str.match(/\{.*\}/);
-
-  if (match) {
-    try {
-      // 尝试解析匹配到的 JSON 字符串
-      const jsonObj = JSON.parse(match[0]);
-      return jsonObj;
-    } catch (error) {
-      console.log("Error parsing JSON:", str);
-      return `[DONE]`;
-    }
-  } else {
-    // console.log("No JSON found in the string");
-    return `[DONE]`;
-  }
-}
-
-
 const ConversationsPanel = () => {
   const { t } = useTranslation();
   const didUnmount = useRef(false);
@@ -388,8 +367,6 @@ const ConversationsPanel = () => {
     params_local_storage_key + '-msgitems-' + endpointName,
     []
   );
-
-  // const [msgItems, setMsgItems] = useState<any>(localStoredMsgItems);
 
   useEffect(() => {
     // console.log("Updated msgItems:", msgItems);
@@ -440,19 +417,19 @@ const ConversationsPanel = () => {
           let jsonBuffer = '';
 
           // 改进: 更可靠的JSON完整性检查
-      function isValidJsonChunk(str:string) {
-        try {
-          // 1. 检查基本结构
-          if (!str.startsWith('{') || !str.endsWith('}')) {
-            return false;
+          function isValidJsonChunk(str:string) {
+            try {
+              // 1. 检查基本结构
+              if (!str.startsWith('{') || !str.endsWith('}')) {
+                return false;
+              }
+              // 3. 如果找到完整的JSON，尝试解析
+                JSON.parse(str); // 验证是否为有效JSON
+                return true;
+            } catch (e) {
+              return false;
+            }
           }
-          // 3. 如果找到完整的JSON，尝试解析
-            JSON.parse(str); // 验证是否为有效JSON
-            return true;
-        } catch (e) {
-          return false;
-        }
-      }
 
           while (true) {
             const { done, value } = await reader.read();
@@ -491,27 +468,12 @@ const ConversationsPanel = () => {
                     jsonBuffer = '';
                   } catch (e) {
                     console.log("Error parsing JSON:", jsonBuffer);
-                    // 可选：保留部分buffer以处理跨chunk的JSON
-                    // jsonBuffer = jsonBuffer.substring(jsonBuffer.lastIndexOf('{')); 
                     jsonBuffer = '';
                   }
                 }
                 // 如果不是有效的JSON，继续累积
               }
             }
-            // 处理完整的数据块
-            // while (buffer.includes('\n\n')) {
-            //   const index = buffer.indexOf('\n\n');
-            //   const chunk = buffer.slice(0, index);
-            //   buffer = buffer.slice(index + 2);
-            //   // console.log('chunk',chunk);
-            //   // 处理完整的行
-            //   const chunk_obj = extractJsonFromString(chunk)
-            //   // console.log('chunk_obj',chunk_obj);
-            //   if (chunk_obj !== '[DONE]' && chunk_obj?.choices[0].delta?.role) continue  //ship first message chunk
-            //   onStreamMessageCallback({ resp: chunk_obj, isNew: isNew })
-            //   isNew = false
-            // }
           }
 
           setLoading(false);
@@ -565,7 +527,7 @@ const ConversationsPanel = () => {
 
     } else {
 
-      const chunk = resp.choices[0].delta.content ?? '';
+      const chunk = resp.choices[0].delta.content ?? resp.choices[0].delta.reasoning_content ?? '';
       // console.log(chunk)
       streamOutput.current = streamOutput.current + chunk;
       if (isNew) {
@@ -598,7 +560,7 @@ const ConversationsPanel = () => {
     setStopFlag(false);
     console.log("onMessageCallback msgItems:",msgItems)
     //创建一个新的item
-    streamOutput.current = resp.choices[0].message.content;
+    streamOutput.current = resp.choices[0].message.content ?? resp.choices[0].message.reasoning_content;
     setMsgItems((prev: MsgItemProps[]) => [
       ...prev,
       {
