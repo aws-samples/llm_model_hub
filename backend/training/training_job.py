@@ -314,7 +314,7 @@ class TrainingJobExcutor(BaseModel):
         mini_rollout_batch_size = int(job_payload.get('mini_rollout_batch_size',128))
         clip_ratio_low = float(job_payload.get('clip_ratio_low',0.2))
         clip_ratio_high = float(job_payload.get('clip_ratio_high',0.28))
-        training_plan = job_payload.get('training_plan', None) 
+        training_plan = job_payload.get('training_plan') 
         stage = job_payload['stage']
         if WANDB_API_KEY:
             train_logger = "['console','wandb']"
@@ -447,7 +447,7 @@ class TrainingJobExcutor(BaseModel):
                                     max_wait= 3600*max_spot_wait if use_spot else None,
                                     max_run=3600*max_job_run_hour,
                                     enable_remote_debug=True,
-                                    training_plan=training_plan,
+                                    training_plan=training_plan if training_plan else None,
                                     )
         return True, 'create success'
         
@@ -506,7 +506,7 @@ class TrainingJobExcutor(BaseModel):
                             max_wait= 3600*max_spot_wait if use_spot else None,
                             max_run=3600*max_job_run_hour,
                             enable_remote_debug=True,
-                            training_plan=training_plan
+                            training_plan=training_plan if training_plan else None
                             )
         
         

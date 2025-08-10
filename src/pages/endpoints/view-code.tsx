@@ -27,11 +27,13 @@ import boto3
 endpoint_name = "<endpoint>"
 region_name = 'us-east-1'
 runtime = boto3.client('runtime.sagemaker',region_name=region_name)
+
+#******** 示例1 非流式 ************
 payload = {
     "messages": [
     {
         "role": "user",
-        "content": "who are you"
+        "content": "Hi, who are you"
     }
     ],
     "max_tokens": 1024,
@@ -39,7 +41,6 @@ payload = {
     "model":"any"
 }
 
-# 非流式
 response = runtime.invoke_endpoint(
     EndpointName=endpoint_name,
     ContentType='application/json',
@@ -49,6 +50,7 @@ response = runtime.invoke_endpoint(
 print(json.loads(response['Body'].read())["choices"][0]["message"]["content"])
 
 
+#******** 示例2 流式 ************
 payload = {
     "messages": [
     {
@@ -56,12 +58,11 @@ payload = {
         "content": "Write a quick sort in python"
     }
     ],
-    "max_tokens": 1024,
+    "max_tokens": 4096,
     "stream": True,
     "model":"any"
 }
 
-# 流式
 response = runtime.invoke_endpoint_with_response_stream(
     EndpointName=endpoint_name,
     ContentType='application/json',
@@ -77,6 +78,102 @@ for t in response['Body']:
             data = json.loads(match.group(1).strip())
             last_idx = match.span()[1]
             print(data["choices"][0]["delta"]["content"], end="",flush=True)
+        except (json.JSONDecodeError, KeyError, IndexError) as e:
+            pass
+    buffer = buffer[last_idx:]
+
+#******** 示例3 流式 reasoning ************
+payload = {
+    "messages": [
+    {
+        "role": "user",
+        "content": """已知函数f(x)=ln(x/(2-x))+ax+b(x-1)³
+(1) 若b=0，且f'(x)≥0，求a的最小值
+(2) 证明:曲线y=f(x)是中心对称图形
+(3) 若f(x)>-2，当且仅当1<x<2，求b的取值范围"""
+    }
+    ],
+    "max_tokens": 8000,
+    "stream": True,
+    "model":"any",
+    "reasoning_effort":"high"
+}
+response = runtime.invoke_endpoint_with_response_stream(
+    EndpointName=endpoint_name,
+    ContentType='application/json',
+    Body=json.dumps(payload)
+)
+
+buffer = ""
+for t in response['Body']:
+    buffer += t["PayloadPart"]["Bytes"].decode()
+    last_idx = 0
+    for match in re.finditer(r'^data:\s*(.+?)(\n\n)', buffer):
+        try:
+            data = json.loads(match.group(1).strip())
+            last_idx = match.span()[1]
+            if data["choices"][0]["delta"].get("content"):
+                print(data["choices"][0]["delta"]["content"], end="",flush=True)
+            if data["choices"][0]["delta"].get("reasoning_content"):
+                print(data["choices"][0]["delta"]["reasoning_content"], end="",flush=True)
+            if data["choices"][0]["delta"].get("tool_calls"):
+                print(data["choices"][0]["delta"]["tool_calls"], end="",flush=True)
+        except (json.JSONDecodeError, KeyError, IndexError) as e:
+            pass
+    buffer = buffer[last_idx:]
+
+
+#******** 示例4 流式 tool use ************
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get current weather in a given city",
+            "parameters": {
+                "type": "object",
+                "properties": {"city": {"type": "string"}},
+                "required": ["city"]
+            },
+        },
+    }
+]
+
+payload = {
+    "messages": [
+    {
+        "role": "user",
+        "content": """get weather of beijing"""
+    }
+    ],
+    "max_tokens": 8000,
+    "temperature":0.5,
+    "stream": True,
+    "model":"any",
+    "reasoning_effort":"low",
+    "tools":tools
+}
+
+response = runtime.invoke_endpoint_with_response_stream(
+    EndpointName=endpoint_name,
+    ContentType='application/json',
+    Body=json.dumps(payload)
+)
+
+buffer = ""
+for t in response['Body']:
+    buffer += t["PayloadPart"]["Bytes"].decode()
+    last_idx = 0
+    for match in re.finditer(r'^data:\s*(.+?)(\n\n)', buffer):
+        try:
+            data = json.loads(match.group(1).strip())
+            last_idx = match.span()[1]
+            if data["choices"][0]["delta"].get("content"):
+                print(data["choices"][0]["delta"]["content"], end="",flush=True)
+            if data["choices"][0]["delta"].get("reasoning_content"):
+                print(data["choices"][0]["delta"]["reasoning_content"], end="",flush=True)
+            if data["choices"][0]["delta"].get("tool_calls"):
+                print(data["choices"][0]["delta"]["tool_calls"], end="",flush=True)
         except (json.JSONDecodeError, KeyError, IndexError) as e:
             pass
     buffer = buffer[last_idx:]

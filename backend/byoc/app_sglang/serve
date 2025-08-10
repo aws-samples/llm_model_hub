@@ -59,6 +59,10 @@ else
             command="$command --chat-template=$CHAT_TEMPLATE"
         fi
 
+        if [ -n "${TOOL_CALL_PARSER}" ]; then
+            command="$command --tool-call-parser=$TOOL_CALL_PARSER"
+        fi
+
         eval $command
 
 
@@ -72,6 +76,11 @@ else
         if [ -n "${CHAT_TEMPLATE}" ]; then
             command="$command --chat-template=$CHAT_TEMPLATE"
         fi
+
+        if [ -n "${TOOL_CALL_PARSER}" ]; then
+            command="$command --tool-call-parser=$TOOL_CALL_PARSER"
+        fi
+        
         eval $command
     fi
 fi

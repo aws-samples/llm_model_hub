@@ -85,6 +85,10 @@ else
             if [ -n "${LIMIT_MM_PER_PROMPT}" ]; then
                 command="$command --limit-mm-per-prompt $LIMIT_MM_PER_PROMPT"
             fi
+
+            if [ -n "${TOOL_CALL_PARSER}" ]; then
+                command="$command --enable-auto-tool-choice --tool-call-parser $TOOL_CALL_PARSER"
+            fi
             
             eval $command
  
@@ -106,6 +110,10 @@ else
             #if LIMIT_MM_PER_RPOMPT is not None then append to command
             if [ -n "${LIMIT_MM_PER_PROMPT}" ]; then
                 command="$command --limit-mm-per-prompt $LIMIT_MM_PER_PROMPT"
+            fi
+
+            if [ -n "${TOOL_CALL_PARSER}" ]; then
+                command="$command --enable-auto-tool-choice --tool-call-parser $TOOL_CALL_PARSER"
             fi
             
             eval $command

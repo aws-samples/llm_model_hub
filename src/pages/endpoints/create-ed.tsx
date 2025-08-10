@@ -279,8 +279,9 @@ const InputS3Path = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   )
 };
 
-const SetExtramSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
+const SetExtraSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   const [template, setTemplate] = useState<string>('');
+  const [toolCallParser, setToolCallParser] = useState<string>('');
   return (
     <SpaceBetween size='xs'>
       <FormField
@@ -299,6 +300,22 @@ const SetExtramSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
           }}
         />
       </FormField>
+        <FormField
+        label="tool-call-parser"
+        description={<Box><Box>"如果使用tool use能力，需要填写此项。</Box>
+          <Link external href={"https://docs.sglang.ai/backend/server_arguments.html"} >有效值参考链接</Link></Box>}
+        stretch={false}
+      >
+        <Input
+          readOnly={readOnly}
+          value={toolCallParser}
+          placeholder={"qwen25"}
+          onChange={({ detail }) => {
+            setToolCallParser(detail.value);
+            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,tool_call_parser: detail.value }  }))
+          }}
+        />
+      </FormField>
     </SpaceBetween>
   )
 }
@@ -312,8 +329,8 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
   const [value3, setValue3] = useState<boolean>(true);
   const [value4, setValue4] = useState<boolean>(false);
   const [value5, setValue5] = useState<string>('');
-
-
+  const [toolCallParser, setToolCallParser] = useState<string>('');
+  const [template, setTemplate] = useState<string>('');
   return (
     <SpaceBetween size='xs'>
       <FormField
@@ -341,6 +358,38 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
           onChange={({ detail }) => {
             setValue2(detail.value);
             setData((pre: any) => ({ ...pre,  extra_params:{...pre.extra_params,tensor_paralle_size: detail.value } }))
+          }}
+        />
+      </FormField>
+      {/* <FormField
+        label="chat-template"
+        description={<Box><Box>"对于多模态模型，需要填写此项，否则只能当作文本模型。</Box>
+          <Link external href={"https://docs.sglang.ai/backend/openai_api_vision.html#Chat-Template"} >有效值参考链接</Link></Box>}
+        stretch={false}
+      >
+        <Input
+          readOnly={readOnly}
+          value={template}
+          placeholder={"qwen2-vl"}
+          onChange={({ detail }) => {
+            setTemplate(detail.value);
+            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,chat_template: detail.value }  }))
+          }}
+        />
+      </FormField> */}
+        <FormField
+        label="tool-call-parser"
+        description={<Box><Box>如果使用tool use能力，需要填写此项。</Box>
+          <Link external href={"https://docs.vllm.ai/en/latest/features/tool_calling.html#xlam-models-xlam"} >有效值参考链接</Link></Box>}
+        stretch={false}
+      >
+        <Input
+          readOnly={readOnly}
+          value={toolCallParser}
+          placeholder={"hermes"}
+          onChange={({ detail }) => {
+            setToolCallParser(detail.value);
+            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,tool_call_parser: detail.value }  }))
           }}
         />
       </FormField>
@@ -615,7 +664,7 @@ export const DeployModelModal = ({
           <SetExtraParamsInput data={data} setData={setData} readOnly={false} />}
 
         {data.engine === 'sglang' && 
-          <SetExtramSglang data={data} setData={setData} readOnly={false} />}
+          <SetExtraSglang data={data} setData={setData} readOnly={false} />}
       </SpaceBetween>
     </Modal>
   );

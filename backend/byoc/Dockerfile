@@ -1,8 +1,6 @@
 ARG VLLM_VERSION
 FROM vllm/vllm-openai:$VLLM_VERSION
 
-# RUN pip install git+https://github.com/huggingface/transformers.git
-# RUN pip install transformers==4.48.3
 # 设置工作目录
 WORKDIR /app
 
@@ -13,6 +11,10 @@ COPY app/ /app
 COPY requirements.txt /app
 RUN pip install -r requirements.txt  
 
+# install flash attention 3
+# RUN git clone https://github.com/Dao-AILab/flash-attention.git && \
+#     cd flash-attention/hopper && \
+#     python3 setup.py install
 # 修改restapi
 RUN \
 export PYTHON_SITEPACKAGES=`python3 -c "import site; print(site.getsitepackages()[0])"`; \
@@ -24,7 +26,7 @@ sed -i '/async def _check_model/,/:$/!b;/:$/a\
 ' ${PYTHON_SITEPACKAGES}/vllm/entrypoints/openai/serving_engine.py; \
 sed -i '/def _maybe_get_adapters/,/:$/!b;/:$/a\
 \        if 1 == 1:\n\
-\            return None, None\n\
+\            return None\n\
 ' ${PYTHON_SITEPACKAGES}/vllm/entrypoints/openai/serving_engine.py; \
 sed -i '/elif config_format == ConfigFormat.MISTRAL:/i\
 \        hf_rope_scaling = getattr(config, "rope_scaling", None)\n\

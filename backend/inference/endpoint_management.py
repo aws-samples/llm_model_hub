@@ -136,7 +136,7 @@ def get_endpoint_status(endpoint_name:str) ->EndpointStatus:
         logger.error(e)
         return EndpointStatus.NOTFOUND
         
-def delete_endpoint(endpoint_name:str) -> Dict[bool,str]:
+def delete_endpoint(endpoint_name:str) -> tuple[bool,str]:
     client = boto_sess.client('sagemaker')
     try:
         # database.update_endpoint_status(
@@ -168,7 +168,7 @@ def register_cust_model(cust_repo_type:DownloadSource,cust_repo_addr:str):
         pickle.dump(SUPPORTED_MODELS, f)
     
 
-def deploy_engine(job_id:str,engine:str,instance_type:str,enable_lora:bool,model_name:str,model_path:str,extra_params:Dict[str,Any]) -> Dict[bool,str]:
+def deploy_engine(job_id:str,engine:str,instance_type:str,enable_lora:bool,model_name:str,model_path:str,extra_params:Dict[str,Any]) -> tuple[bool,str]:
     if engine in ['auto','vllm']:
         lmi_image_uri = VLLM_IMAGE
         dtype = 'half' if instance_type.startswith('ml.g4dn') else 'auto' # g4dn does not support bf16, need to use fp16
@@ -183,7 +183,8 @@ def deploy_engine(job_id:str,engine:str,instance_type:str,enable_lora:bool,model
             "ENABLE_PREFIX_CACHING": "1" if extra_params.get('enable_prefix_caching') else "0",
             "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type))),
             "MAX_NUM_SEQS": extra_params.get('max_num_seqs','256'),
-            "ENFORCE_EAGER": "1" if extra_params.get('enforce_eager') else "0"
+            "ENFORCE_EAGER": "1" if extra_params.get('enforce_eager') else "0",
+            "TOOL_CALL_PARSER": extra_params.get("tool_call_parser","")
         }
         if DEFAULT_REGION.startswith('cn'):
             env['VLLM_USE_MODELSCOPE']='1'
@@ -195,7 +196,8 @@ def deploy_engine(job_id:str,engine:str,instance_type:str,enable_lora:bool,model
             "S3_MODEL_PATH":model_path,
             "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
             "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type))),
-            "CHAT_TEMPLATE": extra_params.get('chat_template',"")
+            "CHAT_TEMPLATE": extra_params.get('chat_template',""),
+            "TOOL_CALL_PARSER": extra_params.get("tool_call_parser","")
         }
     
     else:
@@ -250,7 +252,7 @@ def deploy_engine(job_id:str,engine:str,instance_type:str,enable_lora:bool,model
         print(e)
         return False,str(e)
     
-def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str,extra_params:Dict[str,Any]) -> Dict[bool,str]:
+def deploy_endpoint_byoc(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str,extra_params:Dict[str,Any]) -> tuple[bool,str]:
     repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
     #统一处理成repo/modelname格式
     model_name=get_model_path_by_name(model_name,repo_type) if model_name and len(model_name.split('/')) < 2 else model_name
@@ -319,7 +321,7 @@ def deploy_endpoint_background(job_id:str,engine:str,instance_type:str,quantize:
                                  extra_params=extra_params
                                 )
 
-def deploy_endpoint_ms(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str,extra_params:Dict[str,Any]) -> Dict[bool,str]:
+def deploy_endpoint_ms(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str,extra_params:Dict[str,Any]) -> tuple[bool,str]:
     pure_model_name = model_name.split('/')[1]
     create_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     if not extra_params.get("endpoint_name"):
@@ -345,6 +347,7 @@ def deploy_endpoint_ms(job_id:str,engine:str,instance_type:str,quantize:str,enab
             "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type))),
             "MAX_NUM_SEQS": extra_params.get('max_num_seqs','256'),
             "ENFORCE_EAGER": "1" if extra_params.get('enforce_eager') else "0",
+            "TOOL_CALL_PARSER": extra_params.get("tool_call_parser","")
         }   
     elif engine in ['sglang']:
         lmi_image_uri = SGLANG_IMAGE
@@ -353,7 +356,8 @@ def deploy_endpoint_ms(job_id:str,engine:str,instance_type:str,quantize:str,enab
             "S3_MODEL_PATH":model_path,
             "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
             "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type))),
-            "CHAT_TEMPLATE": extra_params.get('chat_template',"")
+            "CHAT_TEMPLATE": extra_params.get('chat_template',""),
+            "TOOL_CALL_PARSER": extra_params.get("tool_call_parser","")
         }
     else:
         return False,f"Not supported: {engine}"
@@ -407,7 +411,7 @@ def deploy_endpoint_ms(job_id:str,engine:str,instance_type:str,quantize:str,enab
     return True,endpoint_name
 
 # 如果使用lmi-dist，trtllm engine则使用这个函数
-def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str,extra_params:Dict[str,Any]) -> Dict[bool,str]:
+def deploy_endpoint(job_id:str,engine:str,instance_type:str,quantize:str,enable_lora:bool,model_name:str,cust_repo_type:str,cust_repo_addr:str,extra_params:Dict[str,Any]):
      #统一处理成repo/modelname格式
     repo_type = DownloadSource.MODELSCOPE  if DEFAULT_REGION.startswith('cn') else DownloadSource.DEFAULT
     model_name=get_model_path_by_name(model_name,repo_type) if model_name and len(model_name.split('/')) < 2 else model_name
