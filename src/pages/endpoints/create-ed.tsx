@@ -286,7 +286,7 @@ const SetExtraSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
     <SpaceBetween size='xs'>
       <FormField
         label="chat-template"
-        description={<Box><Box>"对于多模态模型，需要填写此项，否则只能当作文本模型。</Box>
+        description={<Box><Box>对于多模态模型，需要填写此项，否则只能当作文本模型。</Box>
           <Link external href={"https://docs.sglang.ai/backend/openai_api_vision.html#Chat-Template"} >有效值参考链接</Link></Box>}
         stretch={false}
       >
@@ -302,7 +302,7 @@ const SetExtraSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
       </FormField>
         <FormField
         label="tool-call-parser"
-        description={<Box><Box>"如果使用tool use能力，需要填写此项。</Box>
+        description={<Box><Box>如果使用tool use能力，需要填写此项。</Box>
           <Link external href={"https://docs.sglang.ai/backend/server_arguments.html"} >有效值参考链接</Link></Box>}
         stretch={false}
       >
@@ -459,42 +459,6 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
   )
 }
 
-const SetQuantType = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
-  const quant_types = data?.engine === 'scheduler' ?
-    HF_QUANT_TYPES : data?.engine === 'vllm' ?
-      vLLM_QUANT_TYPES : data?.engine === 'trt-llm' ?
-        TRT_QUANT_TYPES : LMI_QUANT_TYPES;
-  const [value, setValue] = useState<string | null>(quant_types[0].value);
-  return (
-    <RadioGroup
-      items={quant_types}
-      readOnly={readOnly}
-      value={value}
-      onChange={({ detail }) => {
-        setValue(detail.value);
-        setData((pre: any) => ({ ...pre, quantize: detail.value }))
-      }}
-    />
-  )
-}
-
-const EnableLora = ({ data, setData, readOnly }: SelectInstanceTypeProps) => {
-  const [checked, setChecked] = useState<boolean>(false);
-  return (
-    <Toggle
-      onChange={({ detail }) => {
-        setChecked(detail.checked);
-        setData((pre: any) => ({ ...pre, enable_lora: detail.checked }))
-      }
-      }
-      checked={checked}
-    >
-      Enable
-    </Toggle>
-  )
-
-}
-
 export const DeployModelModal = ({
   extraActions = null,
   selectedItems,
@@ -631,7 +595,7 @@ export const DeployModelModal = ({
         <FormField
           label="Instance Type"
           // description="Select a Instance type to deploy the model."
-          description={<Link href={`${instanceCalculator}`} external>使用机型计算器估算</Link>}
+          // description={<Link href={`${instanceCalculator}`} external>使用机型计算器估算</Link>}
 
           stretch={false}
           errorText={errors.instance_type}
