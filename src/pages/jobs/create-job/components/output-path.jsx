@@ -54,10 +54,10 @@ export const S3Selector = ({outputPath,objectsIsItemDisabled,setOutputPath}) => 
             <S3ResourceSelector
                 onChange={({ detail }) =>{
                     const uri = detail.resource.uri.replace('s3://s3://','s3://')
-                    const uri_new = uri.endsWith('/') ? uri : uri + '/';
+                    // const uri_new = uri.endsWith('/') ? uri : uri + '/';
                     // setResource(detail.resource);
-                    setResource({uri:uri_new});
-                    setOutputPath&&setOutputPath(uri_new);
+                    setResource({uri:uri});
+                    setOutputPath&&setOutputPath(uri);
                     
                     }
                 }
