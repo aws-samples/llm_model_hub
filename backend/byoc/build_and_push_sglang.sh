@@ -36,10 +36,16 @@ fi
 # Get the login command from ECR and execute it directly
 aws  ecr get-login-password --region $region | docker login --username AWS --password-stdin $account.dkr.ecr.$region.amazonaws.${suffix}
 
+# Substitute the AWS account ID into the ECR policy
+sed "s/\${AWS_ACCOUNT_ID}/${account}/g" ecr-policy.json > ecr-policy-temp.json
+
 aws ecr set-repository-policy \
     --repository-name "${inference_image}" \
-    --policy-text "file://ecr-policy.json" \
+    --policy-text "file://ecr-policy-temp.json" \
     --region ${region}
+
+# Clean up temporary policy file
+rm -f ecr-policy-temp.json
 
 # Build the docker image locally with the image name and then push it to ECR
 # with the full name.

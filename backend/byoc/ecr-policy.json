@@ -2,13 +2,15 @@
     "Version": "2008-10-17",
     "Statement": [
       {
-        "Sid": "new statement",
+        "Sid": "RestrictedAccountAccess",
         "Effect": "Allow",
-        "Principal": "*",
+        "Principal": {
+          "AWS": "arn:aws:iam::${AWS_ACCOUNT_ID}:root"
+        },
         "Action": [
-          "ecr: CompleteLayerUpload",
-          "ecr: InitiateLayerUpload",
-          "ecr: ListImages",
+          "ecr:CompleteLayerUpload",
+          "ecr:InitiateLayerUpload",
+          "ecr:ListImages",
           "ecr:BatchCheckLayerAvailability",
           "ecr:BatchGetImage",
           "ecr:DescribeImages",
