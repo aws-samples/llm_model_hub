@@ -280,10 +280,41 @@ const InputS3Path = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
 };
 
 const SetExtraSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
+  const [contextLen, setContextLen] = useState<string>('');
+  const [memFrac, setMemFrac] = useState<string>('');
   const [template, setTemplate] = useState<string>('');
   const [toolCallParser, setToolCallParser] = useState<string>('');
   return (
     <SpaceBetween size='xs'>
+        <FormField
+        label="mem-fraction-static"
+        description={"默认使用0.7，以适应小机型，如果推理过程中没有OOM，可以设置成0.9"}
+        stretch={false}
+      >
+        <Input
+          readOnly={readOnly}
+          value={memFrac}
+          placeholder={"0.7"}
+          onChange={({ detail }) => {
+            setMemFrac(detail.value);
+            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,mem_fraction_static: detail.value }  }))
+          }}
+        />
+      </FormField>
+      <FormField
+        label="max-model-len"
+        description="模型上下文最大长度，默认值12288"
+        stretch={false}
+      >
+        <Input
+          readOnly={readOnly}
+          value={contextLen}
+          onChange={({ detail }) => {
+            setContextLen(detail.value);
+            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,context_length: detail.value }  }))
+          }}
+        />
+      </FormField>
       <FormField
         label="chat-template"
         description={<Box><Box>对于多模态模型，需要填写此项，否则只能当作文本模型。</Box>

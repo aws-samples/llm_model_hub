@@ -20,8 +20,8 @@ if [ -z "$model_dir" ]; then
 else
     # Set the model_path
     model_path="$model_dir"
-    max_model_len=$(expr $MAX_MODEL_LEN + 0)
-    max_num_seqs=$(expr $MAX_NUM_SEQS + 0)
+    # max_model_len=$(expr $MAX_MODEL_LEN + 0)
+    # max_num_seqs=$(expr $MAX_NUM_SEQS + 0)
     tensor_parallel_size=$(expr ${TENSOR_PARALLEL_SIZE:-1} + 0)
     dtype=${DTYPE:-auto}
     echo "Found model directory" $model_dir
@@ -52,8 +52,7 @@ else
         # Set model_id to base_dir for local loading
         echo "Using model: $file_dir"
 
-        command="python3 -m sglang.launch_server --model-path $file_dir --tp $tensor_parallel_size  --dtype $dtype --port $SAGEMAKER_BIND_TO_PORT --host 0.0.0.0 --trust-remote-code"
-
+        command="python3 -m sglang.launch_server --model-path $file_dir --tp $tensor_parallel_size --dtype $dtype --port $SAGEMAKER_BIND_TO_PORT --host 0.0.0.0 --trust-remote-code"
 
         if [ -n "${CHAT_TEMPLATE}" ]; then
             command="$command --chat-template=$CHAT_TEMPLATE"
@@ -61,6 +60,16 @@ else
 
         if [ -n "${TOOL_CALL_PARSER}" ]; then
             command="$command --tool-call-parser=$TOOL_CALL_PARSER"
+        fi
+
+        if [ -n "${CONTEXT_LENGTH}" ]; then
+            max_model_len=$(expr $CONTEXT_LENGTH + 0)
+            command="$command --context-length=$max_model_len"
+        fi
+
+        if [ -n "${MEM_FRACTION}" ]; then
+            mem_fraction_static=$(awk "BEGIN {print $MEM_FRACTION + 0.0}")
+            command="$command --mem-fraction-static=$mem_fraction_static"
         fi
 
         eval $command
@@ -71,7 +80,7 @@ else
         # model_id=$(cat "$model_dir/model_id")
         echo "using: $model_id"
 
-        command="python3 -m sglang.launch_server --model-path $model_id --tp $tensor_parallel_size  --dtype $dtype --port $SAGEMAKER_BIND_TO_PORT --host 0.0.0.0 --trust-remote-code"
+        command="python3 -m sglang.launch_server --model-path $model_id --tp $tensor_parallel_size --dtype $dtype --port $SAGEMAKER_BIND_TO_PORT --host 0.0.0.0 --trust-remote-code"
 
         if [ -n "${CHAT_TEMPLATE}" ]; then
             command="$command --chat-template=$CHAT_TEMPLATE"
@@ -79,6 +88,16 @@ else
 
         if [ -n "${TOOL_CALL_PARSER}" ]; then
             command="$command --tool-call-parser=$TOOL_CALL_PARSER"
+        fi
+
+        if [ -n "${CONTEXT_LENGTH}" ]; then
+            max_model_len=$(expr $CONTEXT_LENGTH + 0)
+            command="$command --context-length=$max_model_len"
+        fi
+
+        if [ -n "${MEM_FRACTION}" ]; then
+            mem_fraction_static=$(awk "BEGIN {print $MEM_FRACTION + 0.0}")
+            command="$command --mem-fraction-static=$mem_fraction_static"
         fi
         
         eval $command

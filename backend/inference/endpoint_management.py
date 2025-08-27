@@ -197,7 +197,9 @@ def deploy_engine(job_id:str,engine:str,instance_type:str,enable_lora:bool,model
             "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
             "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type))),
             "CHAT_TEMPLATE": extra_params.get('chat_template',""),
-            "TOOL_CALL_PARSER": extra_params.get("tool_call_parser","")
+            "TOOL_CALL_PARSER": extra_params.get("tool_call_parser",""),
+            "MEM_FRACTION":extra_params.get("mem_fraction_static","0.7"),
+            "CONTEXT_LENGTH":extra_params.get("context_length",""),
         }
     
     else:
@@ -357,7 +359,9 @@ def deploy_endpoint_ms(job_id:str,engine:str,instance_type:str,quantize:str,enab
             "HF_TOKEN":os.environ.get('HUGGING_FACE_HUB_TOKEN'),
             "TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size',str(get_auto_tensor_parallel_size(instance_type))),
             "CHAT_TEMPLATE": extra_params.get('chat_template',""),
-            "TOOL_CALL_PARSER": extra_params.get("tool_call_parser","")
+            "TOOL_CALL_PARSER": extra_params.get("tool_call_parser",""),
+            "MEM_FRACTION":extra_params.get("mem_fraction_static","0.7"),
+            "CONTEXT_LENGTH":extra_params.get("context_length",""),
         }
     else:
         return False,f"Not supported: {engine}"
