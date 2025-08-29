@@ -12,6 +12,7 @@ TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
 # Get the current region and write it to the backend .env file
 region=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/region)
 # region=$(aws configure get region)
+
 suffix="com"
 
 if [[ $region =~ ^cn ]]; then
@@ -20,6 +21,8 @@ fi
 
 # Get the account number associated with the current IAM credentials
 account=$(aws sts  get-caller-identity --query Account --output text)
+partition=$(aws sts get-caller-identity --query 'Arn' --output text | cut -d: -f2)
+
 
 VERSION=0.9.3
 inference_image=sagemaker/llamafactory
@@ -47,6 +50,7 @@ fi
 
 # Substitute the AWS account ID into the ECR policy
 sed "s/\${AWS_ACCOUNT_ID}/${account}/g" ecr-policy.json > ecr-policy-temp.json
+sed -i "s/\${AWS_PARTITION}/${partition}/g" ecr-policy-temp.json
 
 aws ecr set-repository-policy \
     --repository-name "${inference_image}" \

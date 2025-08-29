@@ -54,6 +54,9 @@ TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
 EC2_IP=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/public-ipv4)
 # Get the current region and write it to the backend .env file
 REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/region)
+# Get the current partition 
+AWS_PARTITION=$(aws sts get-caller-identity --query 'Arn' --output text | cut -d: -f2)
+
 
 echo "Get IP:$EC2_IP and Region:$REGION " >> "$LOG_FILE"
 # Generate a random string key
@@ -70,6 +73,7 @@ echo "AK=" >> /home/ubuntu/llm_model_hub/backend/.env
 echo "SK=" >> /home/ubuntu/llm_model_hub/backend/.env
 echo "role=${SageMakerRoleArn}" >> /home/ubuntu/llm_model_hub/backend/.env
 echo "region=$REGION" >> /home/ubuntu/llm_model_hub/backend/.env
+echo "partition=$AWS_PARTITION" >> /home/ubuntu/llm_model_hub/backend/.env
 echo "db_host=127.0.0.1" >> /home/ubuntu/llm_model_hub/backend/.env
 echo "db_name=llm" >> /home/ubuntu/llm_model_hub/backend/.env
 echo "db_user=llmdata" >> /home/ubuntu/llm_model_hub/backend/.env
