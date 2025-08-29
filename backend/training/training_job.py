@@ -242,6 +242,8 @@ class TrainingJobExcutor(BaseModel):
         deepspeed_config = DEEPSPEED_BASE_CONFIG_MAP.get(job_payload["deepspeed"])
         if deepspeed_config:
             doc['deepspeed'] = deepspeed_config
+        else:
+            doc.pop('deepspeed',None)
 
         #using bitandbytes to quantize 
         if job_payload['quantization_bit'] in ['4','8']:

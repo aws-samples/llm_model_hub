@@ -12,6 +12,6 @@ pandas
 wandb
 # nltk
 # swanlab
-flash_attn==2.7.3
-unsloth
+flash_attn==2.7.4.post1
+# unsloth
 # transformers @git+https://github.com/huggingface/transformers@v4.51.3-Qwen2.5-Omni-preview

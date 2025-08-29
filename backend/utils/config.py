@@ -48,8 +48,13 @@ MYSQL_CONFIG = {
 JOB_TABLE = "JOB_TABLE"
 EP_TABLE = 'EP_TABLE'
 USER_TABLE= 'USER_TABLE'
-DEEPSPEED_BASE_CONFIG_MAP = { "stage_2":'examples/deepspeed/ds_z2_config.json',
-                             "stage_3":'examples/deepspeed/ds_z3_config.json'}
+DEEPSPEED_BASE_CONFIG_MAP = {
+                            "stage_0":'examples/deepspeed/ds_z0_config.json', 
+                             "stage_2":'examples/deepspeed/ds_z2_config.json',
+                             "stage_2_offload":'examples/deepspeed/ds_z2_offload_config.json',
+                             "stage_3":'examples/deepspeed/ds_z3_config.json',
+                             "stage_3_offload":'examples/deepspeed/ds_z3_offload_config.json',
+                             }
 WANDB_API_KEY  = os.environ.get('WANDB_API_KEY','')
 WANDB_BASE_URL = os.environ.get('WANDB_BASE_URL','')
 SWANLAB_API_KEY = os.environ.get('SWANLAB_API_KEY','')

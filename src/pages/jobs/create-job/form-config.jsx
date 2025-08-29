@@ -70,9 +70,11 @@ export const OPTMIZERS =[
 
 export const DEEPSPEED =[
   { label: 'None', value: 'none' },
-  // { label: 'Stage 1', value: 'stage_1' ,description:'Only optimizer states is partitioned'},
-  { label: 'Stage 2', value: 'stage_2', description:'optimizer states + gradients are partitioned' },
-  { label: 'Stage 3', value: 'stage_3' ,description:'Stage 2 + weights are partitioned'  }
+  { label: 'Stage 0', value: 'stage_0' ,description:'similar to PyTorch DDP, but with DeepSpeed\'additional optimization features.'},
+  { label: 'Stage 2', value: 'stage_2', description:'Stage Zero 2: optimizer states + gradients are partitioned' },
+  // { label: 'Stage 2 offload', value: 'stage_2_offload', description:'Zero Stage 2 with CPU offload' },
+  { label: 'Stage 3', value: 'stage_3' ,description:'Stage Zero 2 + weights are partitioned'  },
+  // { label: 'Stage 3 offload', value: 'stage_3_offload', description:'Zero Stage 3 with CPU offload' },
 ]
 
 export const QUANT_OPTIONS = [
