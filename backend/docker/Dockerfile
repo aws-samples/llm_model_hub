@@ -36,9 +36,9 @@ RUN pip config set global.index-url "$PIP_INDEX" && \
     pip config set global.extra-index-url "$PIP_INDEX" && \
     python -m pip install --upgrade pip && \
     python -m pip install -r requirements.txt && pip install -e ".[metrics,bitsandbytes,deepspeed,liger-kernel,awq,qwen,modelscope,swanlab]"
-    
-
-
+# remove the requirements.txt in docker to prevent reinstallation
+RUN rm requirements.txt setup.py
+ENV DISABLE_VERSION_CHECK=1
 # Instal extral dependencies
 RUN python -m pip install -r requirements_deps.txt 
 RUN pip uninstall -y intel-extension-for-pytorch

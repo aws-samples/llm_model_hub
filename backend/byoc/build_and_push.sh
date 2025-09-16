@@ -21,7 +21,7 @@ fi
 # Get the account number associated with the current IAM credentials
 account=$(aws sts  get-caller-identity --query Account --output text)
 
-VLLM_VERSION=v0.10.1.1
+VLLM_VERSION=v0.10.2
 inference_image=sagemaker_endpoint/vllm
 inference_fullname=${account}.dkr.ecr.${region}.amazonaws.${suffix}/${inference_image}:${VLLM_VERSION}
 

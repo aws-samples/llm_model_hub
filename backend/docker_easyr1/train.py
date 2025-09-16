@@ -347,6 +347,9 @@ def stop_and_exit(code):
     sys.exit(code)
     
 if __name__ == "__main__":
+    # setup cache dir for hf
+    os.environ['HF_HOME'] = '/tmp/.cache/huggingface'
+    os.environ['MODELSCOPE_CACHE'] = '/tmp/.cache/modelscope'
     regin_name = os.environ['REGION']
     hosts = json.loads(os.environ['SM_HOSTS'])
     current_host = os.environ['SM_CURRENT_HOST']

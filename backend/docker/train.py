@@ -258,7 +258,10 @@ def stop_monitoring():
 
 
 if __name__ == "__main__":
-
+    # setup cache dir for hf
+    os.environ['HF_HOME'] = '/tmp/.cache/huggingface'
+    os.environ['MODELSCOPE_CACHE'] = '/tmp/.cache/modelscope'
+    
     regin_name = os.environ['REGION'] 
     train_args_json = load_s3_json(os.environ['train_args_path'],regin_name)
     merge_args_json = load_s3_json(os.environ['merge_args_path'],regin_name)

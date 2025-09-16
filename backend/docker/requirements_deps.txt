@@ -13,5 +13,6 @@ wandb
 # nltk
 # swanlab
 flash_attn==2.7.4.post1
+accelerate>=1.10.1
 # unsloth
-# transformers @git+https://github.com/huggingface/transformers@v4.51.3-Qwen2.5-Omni-preview
+transformers @git+https://github.com/huggingface/transformers.git@5af248b3e3bf854e884c53f05b17ed1e0ca2ed24

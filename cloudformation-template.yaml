@@ -187,29 +187,96 @@ Resources:
               sudo -u ubuntu bash 01.setup.sh || error_exit "Failed to run setup script"
               sleep 30
 
-              # Build vllm image
-              echo "Building and pushing vllm image"
-              cd /home/ubuntu/llm_model_hub/backend/byoc || error_exit "Failed to change to byoc directory"
-              sudo -u ubuntu bash build_and_push.sh || error_exit "Failed to build and push vllm image"
-              sleep 5
-
-              # Build sglang image
-              echo "Building and pushing sglang image"
-              cd /home/ubuntu/llm_model_hub/backend/byoc || error_exit "Failed to change to byoc directory"
-              sudo -u ubuntu bash build_and_push_sglang.sh || error_exit "Failed to build and push sglang image"
-              sleep 5
-
-              # Build llamafactory image
-              echo "Building and pushing llamafactory image"
-              cd /home/ubuntu/llm_model_hub/backend/docker || error_exit "Failed to change to docker directory"
-              sudo -u ubuntu bash build_and_push.sh || error_exit "Failed to build and push llamafactory image"
-              sleep 5
-
-              # Build easyr1 image
-              echo "Building and pushing easyr1 image"
-              cd /home/ubuntu/llm_model_hub/backend/docker_easyr1 || error_exit "Failed to change to docker_easyr1 directory"
-              sudo -u ubuntu bash build_and_push.sh || error_exit "Failed to build and push docker_easyr1 image"
-              sleep 5
+              # Start parallel builds for all Docker images
+              echo "Starting parallel builds for all Docker images"
+              
+              # Create log files for each build
+              VLLM_LOG="/tmp/vllm_build.log"
+              SGLANG_LOG="/tmp/sglang_build.log"
+              LLAMAFACTORY_LOG="/tmp/llamafactory_build.log"
+              EASYR1_LOG="/tmp/easyr1_build.log"
+              
+              # Start builds in parallel
+              echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting vllm image build"
+              (cd /home/ubuntu/llm_model_hub/backend/byoc && sudo -u ubuntu bash build_and_push.sh > "$VLLM_LOG" 2>&1) &
+              VLLM_PID=$!
+              
+              echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting sglang image build"
+              (cd /home/ubuntu/llm_model_hub/backend/byoc && sudo -u ubuntu bash build_and_push_sglang.sh > "$SGLANG_LOG" 2>&1) &
+              SGLANG_PID=$!
+              
+              echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting llamafactory image build"
+              (cd /home/ubuntu/llm_model_hub/backend/docker && sudo -u ubuntu bash build_and_push.sh > "$LLAMAFACTORY_LOG" 2>&1) &
+              LLAMAFACTORY_PID=$!
+              
+              echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting easyr1 image build"
+              (cd /home/ubuntu/llm_model_hub/backend/docker_easyr1 && sudo -u ubuntu bash build_and_push.sh > "$EASYR1_LOG" 2>&1) &
+              EASYR1_PID=$!
+              
+              # Wait for all builds to complete and collect exit codes
+              echo "$(date '+%Y-%m-%d %H:%M:%S') - Waiting for all builds to complete..."
+              BUILD_FAILED=0
+              
+              # Wait for each process and store exit codes
+              echo "$(date '+%Y-%m-%d %H:%M:%S') - Waiting for vllm build..."
+              wait $VLLM_PID
+              VLLM_EXIT=$?
+              
+              echo "$(date '+%Y-%m-%d %H:%M:%S') - Waiting for sglang build..."
+              wait $SGLANG_PID
+              SGLANG_EXIT=$?
+              
+              echo "$(date '+%Y-%m-%d %H:%M:%S') - Waiting for llamafactory build..."
+              wait $LLAMAFACTORY_PID
+              LLAMAFACTORY_EXIT=$?
+              
+              echo "$(date '+%Y-%m-%d %H:%M:%S') - Waiting for easyr1 build..."
+              wait $EASYR1_PID
+              EASYR1_EXIT=$?
+              
+              # Check results for each build
+              if [ $VLLM_EXIT -eq 0 ]; then
+                echo "$(date '+%Y-%m-%d %H:%M:%S') - vllm build completed successfully"
+              else
+                echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: vllm build failed (exit code: $VLLM_EXIT)"
+                echo "Last 20 lines of vllm build log:"
+                tail -20 "$VLLM_LOG" || echo "Could not read log file"
+                BUILD_FAILED=1
+              fi
+              
+              if [ $SGLANG_EXIT -eq 0 ]; then
+                echo "$(date '+%Y-%m-%d %H:%M:%S') - sglang build completed successfully"
+              else
+                echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: sglang build failed (exit code: $SGLANG_EXIT)"
+                echo "Last 20 lines of sglang build log:"
+                tail -20 "$SGLANG_LOG" || echo "Could not read log file"
+                BUILD_FAILED=1
+              fi
+              
+              if [ $LLAMAFACTORY_EXIT -eq 0 ]; then
+                echo "$(date '+%Y-%m-%d %H:%M:%S') - llamafactory build completed successfully"
+              else
+                echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: llamafactory build failed (exit code: $LLAMAFACTORY_EXIT)"
+                echo "Last 20 lines of llamafactory build log:"
+                tail -20 "$LLAMAFACTORY_LOG" || echo "Could not read log file"
+                BUILD_FAILED=1
+              fi
+              
+              if [ $EASYR1_EXIT -eq 0 ]; then
+                echo "$(date '+%Y-%m-%d %H:%M:%S') - easyr1 build completed successfully"
+              else
+                echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: easyr1 build failed (exit code: $EASYR1_EXIT)"
+                echo "Last 20 lines of easyr1 build log:"
+                tail -20 "$EASYR1_LOG" || echo "Could not read log file"
+                BUILD_FAILED=1
+              fi
+              
+              # Check if any build failed
+              if [ $BUILD_FAILED -eq 1 ]; then
+                error_exit "One or more Docker image builds failed. Check the logs above for details."
+              fi
+              
+              echo "$(date '+%Y-%m-%d %H:%M:%S') - All Docker image builds completed successfully"
 
               # Upload dummy tar.gz
               echo "Uploading dummy tar.gz"

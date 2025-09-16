@@ -36,7 +36,8 @@ RUN pip config set global.index-url "$PIP_INDEX" && \
     pip install -e . && \
     pip install -r requirements_deps.txt 
     
-
+# remove the requirements.txt in docker to prevent reinstallation
+RUN rm requirements.txt setup.py
 
 
 # 定义环境变量
