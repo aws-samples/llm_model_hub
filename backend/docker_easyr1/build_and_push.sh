@@ -21,6 +21,13 @@ fi
 # Get the account number associated with the current IAM credentials
 account=$(aws sts  get-caller-identity --query Account --output text)
 
+# Determine the AWS partition based on region
+if [[ $region =~ ^cn ]]; then
+    partition="aws-cn"
+else
+    partition="aws"
+fi
+
 VERSION=0.3.1
 BASE_IMAGE=hiyouga/verl:ngc-th2.7.0-cu12.6-vllm0.9.1
 inference_image=sagemaker/easyr1
@@ -48,6 +55,7 @@ fi
 
 # Substitute the AWS account ID into the ECR policy
 sed "s/\${AWS_ACCOUNT_ID}/${account}/g" ecr-policy.json > ecr-policy-temp.json
+sed -i "s/\${AWS_PARTITION}/${partition}/g" ecr-policy-temp.json
 
 aws ecr set-repository-policy \
     --repository-name "${inference_image}" \
