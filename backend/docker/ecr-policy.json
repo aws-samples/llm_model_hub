@@ -5,7 +5,7 @@
         "Sid": "RestrictedAccountAccess",
         "Effect": "Allow",
         "Principal": {
-          "AWS": "arn:${AWS_PARTITION}::iam::${AWS_ACCOUNT_ID}:root"
+          "AWS": "arn:${AWS_PARTITION}:iam::${AWS_ACCOUNT_ID}:root"
         },
         "Action": [
           "ecr:CompleteLayerUpload",
