@@ -20,6 +20,7 @@ fi
 
 # Get the account number associated with the current IAM credentials
 account=$(aws sts  get-caller-identity --query Account --output text)
+partition=$(aws sts get-caller-identity --query 'Arn' --output text | cut -d: -f2)
 
 SGL_VERSION=v0.5.3rc0-cu126
 inference_image=sagemaker_endpoint/sglang
@@ -38,6 +39,8 @@ aws  ecr get-login-password --region $region | docker login --username AWS --pas
 
 # Substitute the AWS account ID into the ECR policy
 sed "s/\${AWS_ACCOUNT_ID}/${account}/g" ecr-policy.json > ecr-policy-temp.json
+sed -i "s/\${AWS_PARTITION}/${partition}/g" ecr-policy-temp.json
+
 
 aws ecr set-repository-policy \
     --repository-name "${inference_image}" \

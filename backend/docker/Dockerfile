@@ -40,6 +40,9 @@ RUN pip config set global.index-url "$PIP_INDEX" && \
 RUN rm requirements.txt setup.py
 ENV DISABLE_VERSION_CHECK=1
 # Instal extral dependencies
+# Install flash_attn separately with torch already available
+RUN python -m pip install --no-build-isolation flash-attn==2.7.4.post1
+# Install remaining dependencies (excluding flash_attn which is already installed)
 RUN python -m pip install -r requirements_deps.txt 
 RUN pip uninstall -y intel-extension-for-pytorch
 
