@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y \
 # Make PIP_INDEX available after FROM
 ARG PIP_INDEX
 # Install sagemaker-training toolkit that contains the common functionality necessary to create a container compatible with SageMaker and the Python SDK.
-RUN pip3 install sagemaker-training boto3
+# RUN pip3 install sagemaker-training boto3
 
 
 
@@ -33,15 +33,16 @@ WORKDIR /opt/ml/code/
 RUN pip config set global.index-url "$PIP_INDEX" && \
     pip config set global.extra-index-url "$PIP_INDEX" && \
     python -m pip install --upgrade pip && \
+    pip install boto3 &&\
     pip install -e . && \
     pip install -r requirements_deps.txt 
-    
+RUN pip install sagemaker-training>=5.0.0
 # remove the requirements.txt in docker to prevent reinstallation
 RUN rm requirements.txt setup.py
 
 
 # 定义环境变量
-ENV PATH="/opt/ml/code:${PATH}"
+ENV PATH "/opt/ml/code:${PATH}"
 
 WORKDIR /
 # Defines train.py as script entrypoint

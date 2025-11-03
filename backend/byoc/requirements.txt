@@ -1,4 +1,4 @@
 mistral_common >= 1.4.1
 # transformers >= 4.55.0
-transformers @git+https://github.com/huggingface/transformers.git@main
+# transformers @git+https://github.com/huggingface/transformers.git@main
 # transformers @git+https://github.com/huggingface/transformers@v4.51.3-Qwen2.5-Omni-preview

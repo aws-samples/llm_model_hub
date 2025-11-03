@@ -35,7 +35,7 @@ class DatabaseWrapper(BaseModel):
             with self.connection_pool.get_connection() as connection:
                 with connection.cursor() as cursor:
                     cursor.execute(
-                        f"INSERT INTO {JOB_TABLE} (job_id, job_name, job_run_name, output_s3_path, job_type, job_status, job_create_time, job_start_time, job_end_time, job_payload, ts) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", 
+                        f"INSERT INTO {JOB_TABLE} (job_id, job_name, job_run_name, output_s3_path, job_type, job_status, job_create_time, job_start_time, job_end_time, job_payload, ts, error_message) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                         (job_detail.job_id,
                          job_detail.job_name,
                          job_detail.job_run_name,
@@ -43,10 +43,11 @@ class DatabaseWrapper(BaseModel):
                          job_detail.job_type.value,
                          job_detail.job_status.value,
                          job_detail.job_create_time,
-                         job_detail.job_start_time, 
+                         job_detail.job_start_time,
                          job_detail.job_end_time,
                          json.dumps(job_detail.job_payload, ensure_ascii=False),
-                         job_detail.ts)
+                         job_detail.ts,
+                         job_detail.error_message)  # Add error_message field
                     )
                     connection.commit()
         except Exception as e:
@@ -117,9 +118,42 @@ class DatabaseWrapper(BaseModel):
     def set_job_status(self, job_id: str, status: JobStatus):
         with self.connection_pool.get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(f"UPDATE {JOB_TABLE} SET job_status = %s WHERE job_id = %s", 
+                cursor.execute(f"UPDATE {JOB_TABLE} SET job_status = %s WHERE job_id = %s",
                                (status.value, job_id))
                 connection.commit()
+
+    def update_job_error(self, job_id: str, error_message: str, status: JobStatus = JobStatus.ERROR):
+        """
+        Update job with error message and set status to ERROR
+
+        Args:
+            job_id: Job ID
+            error_message: Detailed error message
+            status: Job status (default: ERROR)
+        """
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"UPDATE {JOB_TABLE} SET job_status = %s, error_message = %s, job_end_time = %s WHERE job_id = %s",
+                    (status.value, error_message, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), job_id)
+                )
+                connection.commit()
+
+    def get_job_error(self, job_id: str) -> Optional[str]:
+        """
+        Get error message for a job
+
+        Args:
+            job_id: Job ID
+
+        Returns:
+            Error message string or None if no error
+        """
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(f"SELECT error_message FROM {JOB_TABLE} WHERE job_id = %s", (job_id,))
+                result = cursor.fetchone()
+                return result[0] if result and result[0] else None
                 
     def update_endpoint_status(self,
                                endpoint_name:str,

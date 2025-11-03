@@ -28,28 +28,53 @@ def get_submitted_jobs():
     results = database.get_jobs_by_status(JobStatus.SUBMITTED)
     return [ret[0] for ret in results]
 
-def proccessing_job(job_id:str):    
+def proccessing_job(job_id:str):
     logger.info(f"creating job:{job_id}")
     job = JobStateMachine.create(job_id)
 
     try:
+        # Phase 1: Creating
         if not job.transition(JobStatus.CREATING):
+            error_msg = f"CREATING job failed for {job_id}"
+            if not job.error_message:
+                job.error_message = error_msg
+            logger.error(f"{error_msg}. Error: {job.error_message}")
             job.transition(JobStatus.ERROR)
-            logger.info(f"CREATING job failed:{job_id}")
-            return 
-        
+            return
+
+        # Phase 2: Running
         logger.info(f"running job:{job_id}")
         if not job.transition(JobStatus.RUNNING):
+            error_msg = f"RUNNING job failed for {job_id}"
+            if not job.error_message:
+                job.error_message = error_msg
+            logger.error(f"{error_msg}. Error: {job.error_message}")
             job.transition(JobStatus.ERROR)
-            logger.info(f"RUNNING job failed:{job_id}")
-            return 
+            return
 
+        # Phase 3: Check final status
         job_status = get_job_status(job_id)
         logger.info(f"finish running job:{job_id} with status:{job_status}")
         job.transition(job_status)
+
     except Exception as e:
-        job.transition(JobStatus.ERROR)
-        logger.error(f"RUNNING job failed:{e}")
+        # Capture detailed error information
+        import traceback
+        error_detail = (
+            f"Unexpected error in processing job {job_id}:\n"
+            f"Error Type: {type(e).__name__}\n"
+            f"Error Message: {str(e)}\n\n"
+            f"Full Traceback:\n{traceback.format_exc()}"
+        )
+        job.error_message = error_detail
+        logger.error(f"RUNNING job failed: {error_detail}")
+
+        # Try to save error to database
+        try:
+            job.transition(JobStatus.ERROR)
+        except Exception as db_error:
+            logger.error(f"Failed to save error status to database: {db_error}")
+
     return True
 
 def start_processing_engine():

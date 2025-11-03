@@ -32,6 +32,7 @@ class JobStateMachine(BaseModel):
     handlers : Dict[JobStatus,Any] = None
     database : Any = None
     train_job_exe : TrainingJobExcutor = None
+    error_message: Optional[str] = None  # Store error message for later use
     
     
     @classmethod
@@ -58,12 +59,17 @@ class JobStateMachine(BaseModel):
         logger.info(f"Job {self.job_id} running.")
         self.database.update_job_start_time(self.job_id, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         if self.train_job_exe is None:
-            logger.error(f"Job {self.job_id} has no training job executor.")
+            error_msg = f"Job {self.job_id} has no training job executor."
+            logger.error(error_msg)
+            self.error_message = error_msg
             return False
         try:
             self.train_job_exe.run()
         except Exception as e:
-            logger.error(f"Job {self.job_id} failed to run: {e}")
+            import traceback
+            error_detail = f"Job {self.job_id} failed to run: {str(e)}"
+            logger.error(error_detail)
+            self.error_message = error_detail
             return False
         return True
 
@@ -81,7 +87,13 @@ class JobStateMachine(BaseModel):
 
     def error_handler(self) ->bool:
         logger.info(f"Job {self.job_id} error.")
-        self.database.update_job_end_time(self.job_id,datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        # Save error message to database if available
+        if self.error_message:
+            self.database.update_job_error(self.job_id, self.error_message)
+            logger.error(f"Job {self.job_id} error saved to database: {self.error_message[:500]}...")
+        else:
+            # Fallback if no error message was set
+            self.database.update_job_end_time(self.job_id, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         return True
 
     def stop_handler(self) ->bool:

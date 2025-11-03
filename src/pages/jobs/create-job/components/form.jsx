@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
 import React, { useState, useEffect, useRef } from 'react';
-import { Button, Form, Header, SpaceBetween, Toggle } from '@cloudscape-design/components';
+import { Button, Form, Header, SpaceBetween, Toggle, Flashbar, ExpandableSection, Modal, Box, Alert, Input, FormField } from '@cloudscape-design/components';
 import validateField from '../form-validation-config';
 import DistributionsPanel from './jobinfo-panel';
 import { remotePost } from '../../../../common/api-gateway';
@@ -87,8 +87,8 @@ const fieldsToValidate = [
   // 's3BucketSelectedOption',
 ];
 
-export const FormWithValidation = ({ 
-  loadHelpPanelContent, 
+export const FormWithValidation = ({
+  loadHelpPanelContent,
   header,
   loading,
   setLoading,
@@ -101,6 +101,9 @@ export const FormWithValidation = ({
 }) => {
   const [formErrorText, setFormErrorText] = useState(null);
   const [errors, _setErrors] = useState(defaultErrors);
+  const [stopModalVisible, setStopModalVisible] = useState(false);
+  const [stopLoading, setStopLoading] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
 
   const setErrors = (updateObj = {}) => _setErrors(prevErrors => ({ ...prevErrors, ...updateObj }));
   const setData = (updateObj = {}) => _setData(prevData => ({ ...prevData, ...updateObj }));
@@ -297,22 +300,214 @@ export const FormWithValidation = ({
     }
   };
 
+  const handleStopAndDelete = () => {
+    setStopLoading(true);
+    const msgid = `msg-${Math.random().toString(8)}`;
+    const formData = { job_id: data.job_id };
+
+    remotePost(formData, 'stop_and_delete_job')
+      .then(res => {
+        setStopLoading(false);
+        setStopModalVisible(false);
+        setConfirmText(''); // Reset confirmation text
+
+        if (res.response.code === 'SUCCESS') {
+          setNotificationItems((item) => [
+            ...item,
+            {
+              type: "success",
+              content: res.response.message || `Job ${data.job_id} stopped and deleted successfully`,
+              dismissible: true,
+              dismissLabel: "Dismiss message",
+              onDismiss: () =>
+                setNotificationItems((items) =>
+                  items.filter((item) => item.id !== msgid)
+                ),
+              id: msgid,
+            },
+          ]);
+          // Navigate back to jobs list
+          navigate('/jobs');
+        } else {
+          setNotificationItems((item) => [
+            ...item,
+            {
+              type: "error",
+              content: res.response.message || `Failed to stop and delete job`,
+              dismissible: true,
+              dismissLabel: "Dismiss message",
+              onDismiss: () =>
+                setNotificationItems((items) =>
+                  items.filter((item) => item.id !== msgid)
+                ),
+              id: msgid,
+            },
+          ]);
+        }
+      })
+      .catch(err => {
+        setStopLoading(false);
+        setStopModalVisible(false);
+        setConfirmText(''); // Reset confirmation text
+        setNotificationItems((item) => [
+          ...item,
+          {
+            type: "error",
+            content: `Failed to stop and delete job: ${err.message || 'Unknown error'}`,
+            dismissible: true,
+            dismissLabel: "Dismiss message",
+            onDismiss: () =>
+              setNotificationItems((items) =>
+                items.filter((item) => item.id !== msgid)
+              ),
+            id: msgid,
+          },
+        ]);
+      });
+  };
+
+  // Check if job can be stopped
+  const canStopJob = () => {
+    const stoppableStatuses = ['SUBMITTED', 'CREATING', 'RUNNING', 'PENDING'];
+    return readOnly && data?.job_status && stoppableStatuses.includes(data.job_status);
+  };
+
   return (
     <BaseForm
       header={<Header
         variant="h1"
-        actions={readOnly&&<Button variant="normal" onClick={(event)=>{
-            event.preventDefault();
-            setReadOnly(false);
-          }}>
-          {t('copy_to_new')}
-          </Button>}
-        
+        actions={readOnly && (
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="normal" onClick={(event)=>{
+              event.preventDefault();
+              setReadOnly(false);
+            }}>
+              {t('copy_to_new')}
+            </Button>
+            {canStopJob() && (
+              <Button
+                variant="primary"
+                onClick={(event) => {
+                  event.preventDefault();
+                  setStopModalVisible(true);
+                }}
+              >
+                {t('Stop & Delete')}
+              </Button>
+            )}
+          </SpaceBetween>
+        )}
+
       >
         {t('job_detail')}
       </Header>}
       content={
         <SpaceBetween size="l">
+          {/* Display error message if job status is ERROR and error_message exists */}
+          {readOnly && data?.job_status === 'ERROR' && data?.error_message && (
+            <Flashbar
+              items={[
+                {
+                  type: "error",
+                  dismissible: false,
+                  header: "Job Execution Failed",
+                  content: (
+                    <ExpandableSection
+                      headerText="View detailed error information"
+                      variant="footer"
+                    >
+                      <pre style={{
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        // backgroundColor: '#fff',
+                        padding: '12px',
+                        borderRadius: '4px',
+                        // border: '1px solid #d5dbdb',
+                        maxHeight: '400px',
+                        overflow: 'auto',
+                        fontSize: '12px',
+                        fontFamily: 'Monaco, Menlo, "Courier New", monospace',
+                        margin: 0
+                      }}>
+                        {data.error_message}
+                      </pre>
+
+                      {/* {data.error_message} */}
+                    </ExpandableSection>
+                  ),
+                  id: "error-message"
+                }
+              ]}
+            />
+          )}
+
+          {/* Stop & Delete confirmation modal */}
+          <Modal
+            onDismiss={() => {
+              setStopModalVisible(false);
+              setConfirmText('');
+            }}
+            visible={stopModalVisible}
+            footer={
+              <Box float="right">
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button
+                    variant="link"
+                    onClick={() => {
+                      setStopModalVisible(false);
+                      setConfirmText('');
+                    }}
+                  >
+                    {t('cancel')}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={handleStopAndDelete}
+                    loading={stopLoading}
+                    disabled={confirmText !== 'confirm'}
+                  >
+                    {t('Confirm')}
+                  </Button>
+                </SpaceBetween>
+              </Box>
+            }
+            header={t('Stop and Delete Job')}
+          >
+            <SpaceBetween size="m">
+              <Alert type="warning">
+                <strong>{t('Warning:')}</strong> {t('停止后无法恢复')} {t('This action cannot be undone.')}
+              </Alert>
+
+              <Box>
+                <Box variant="p">
+                  {t('Are you sure you want to stop and delete this job?')}
+                </Box>
+              </Box>
+
+              <Box>
+                <strong>{t('Job ID:')}</strong> {data?.job_id}
+              </Box>
+              <Box>
+                <strong>{t('Job Name:')}</strong> {data?.job_name}
+              </Box>
+              <Box>
+                <strong>{t('Current Status:')}</strong> {data?.job_status}
+              </Box>
+
+              <FormField
+                label={t('Type "confirm" to proceed')}
+                description={t('Please type the word "confirm" to enable the deletion button.')}
+              >
+                <Input
+                  value={confirmText}
+                  onChange={({ detail }) => setConfirmText(detail.value)}
+                  placeholder="confirm"
+                  autoFocus
+                />
+              </FormField>
+            </SpaceBetween>
+          </Modal>
+
           <DistributionsPanel
             loadHelpPanelContent={loadHelpPanelContent}
             validation={true}

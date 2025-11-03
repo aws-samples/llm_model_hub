@@ -60,6 +60,8 @@ export const TRAINING_STAGES = [
   { label: 'KTO', value: 'kto' },
   { label: 'GRPO', value: 'grpo' },
   { label: 'DAPO', value: 'dapo' },
+  { label: 'GSPO', value: 'gspo' },
+  { label: 'CISPO', value: 'cispo' },
 
 ]
 export const OPTMIZERS =[

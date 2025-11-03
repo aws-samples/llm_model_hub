@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ANSI Log Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #0f1419;
+            color: #e6edf3;
+        }
+        .log-line {
+            padding: 8px 12px;
+            border-bottom: 1px solid #21262d;
+            white-space: pre-wrap;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            background: #1c2128;
+            padding: 15px;
+            border-radius: 6px;
+        }
+        h3 {
+            color: #58a6ff;
+        }
+    </style>
+</head>
+<body>
+    <h1>ANSI Escape Code Test</h1>
+
+    <div class="test-section">
+        <h3>原始日志格式（带 #033）：</h3>
+        <div class="log-line">2025-11-03 10:29:52,625 - INFO - train.py:236 - #033[36m(BatchFunctionRewardManager pid=22268)#033[0m **Rating**: 5.0</div>
+        <div class="log-line">2025-11-03 10:29:52,625 - WARNING - train.py:234 - #033[2m#033[36m(pid=12619) #033[0mRunning step 0</div>
+    </div>
+
+    <div class="test-section">
+        <h3>应该显示的颜色效果：</h3>
+        <div class="log-line">2025-11-03 10:29:52,625 - INFO - train.py:236 - <span style="color: cyan">(BatchFunctionRewardManager pid=22268)</span> **Rating**: 5.0</div>
+        <div class="log-line">2025-11-03 10:29:52,625 - WARNING - train.py:234 - <span style="opacity: 0.5; color: cyan">(pid=12619)</span> Running step 0</div>
+    </div>
+
+    <div class="test-section">
+        <h3>ANSI 颜色代码说明：</h3>
+        <ul>
+            <li><code>#033[36m</code> → 青色 (Cyan)</li>
+            <li><code>#033[0m</code> → 重置颜色</li>
+            <li><code>#033[2m</code> → 暗淡 (Dim)</li>
+            <li><code>#033[1m</code> → 粗体 (Bold)</li>
+            <li><code>#033[31m</code> → 红色 (Red)</li>
+            <li><code>#033[32m</code> → 绿色 (Green)</li>
+            <li><code>#033[33m</code> → 黄色 (Yellow)</li>
+        </ul>
+    </div>
+
+    <script>
+        // Test the conversion
+        const testLog = "2025-11-03 10:29:52,625 - INFO - #033[36m(BatchFunctionRewardManager)#033[0m";
+        const converted = testLog.replace(/#033/g, '\x1b');
+        console.log('Original:', testLog);
+        console.log('Converted:', converted);
+        console.log('Has escape codes:', converted.includes('\x1b'));
+    </script>
+</body>
+</html>

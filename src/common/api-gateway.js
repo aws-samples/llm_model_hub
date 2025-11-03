@@ -2,8 +2,11 @@
 // SPDX-License-Identifier: MIT-0
 import axios from 'axios';
 // console.log(process.env)
-export const API_ENDPOINT= process.env.REACT_APP_API_ENDPOINT;
-export const API_KEY = process.env.REACT_APP_API_KEY;
+// Use relative path for API calls, which will be proxied to backend
+// In development: requests go to http://localhost:3000/v1/* -> proxied to http://localhost:8000/v1/*
+// In production: requests go to same host, need nginx/ALB to route /v1/* to backend
+export const API_ENDPOINT = process.env.REACT_APP_API_ENDPOINT || '/v1';
+export const API_KEY = process.env.REACT_APP_API_KEY || '';
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 export const remotePost = async(formdata,path,stream=false) =>{

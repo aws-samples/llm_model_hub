@@ -28,8 +28,18 @@ else
     partition="aws"
 fi
 
-VERSION=0.3.1
-BASE_IMAGE=hiyouga/verl:ngc-th2.7.0-cu12.6-vllm0.9.1
+VERSION=0.3.2
+# BASE_IMAGE=hiyouga/verl:ngc-th2.8.0-cu12.9-vllm0.11.0
+if [[ $region =~ ^cn ]]; then
+    # BASE_IMAGE="727897471807.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.8.0-gpu-py312-cu129-ubuntu22.04-sagemaker"
+
+    BASE_IMAGE="727897471807.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:pytorch-training:2.8.0-gpu-py312-cu129-ubuntu22.04-sagemaker"
+    PIP_INDEX="https://mirrors.aliyun.com/pypi/simple"
+else
+    BASE_IMAGE="763104351884.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.8.0-gpu-py312-cu129-ubuntu22.04-sagemaker"
+    PIP_INDEX="https://pypi.org/simple"
+fi
+
 inference_image=sagemaker/easyr1
 inference_fullname=${account}.dkr.ecr.${region}.amazonaws.${suffix}/${inference_image}:${VERSION}
 
@@ -67,18 +77,6 @@ rm -f ecr-policy-temp.json
 
 # Build the docker image locally with the image name and then push it to ECR
 # with the full name.
-
-# Add variables for build arguments pytorch-training:2.5.1-gpu-py311-cu124-ubuntu22.04-sagemaker
-# https://github.com/aws/deep-learning-containers/blob/master/available_images.md
-if [[ $region =~ ^cn ]]; then
-    BASE_IMAGE="727897471807.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.4.0-gpu-py311"
-    PIP_INDEX="https://mirrors.aliyun.com/pypi/simple"
-
-else
-    BASE_IMAGE="${BASE_IMAGE}"
-    PIP_INDEX="https://pypi.org/simple"
-fi
-
 
 docker build \
     --build-arg BASE_IMAGE="${BASE_IMAGE}" \

@@ -23,7 +23,7 @@ account=$(aws sts  get-caller-identity --query Account --output text)
 partition=$(aws sts get-caller-identity --query 'Arn' --output text | cut -d: -f2)
 
 
-VLLM_VERSION=v0.10.2
+VLLM_VERSION=v0.11.0
 inference_image=sagemaker_endpoint/vllm
 inference_fullname=${account}.dkr.ecr.${region}.amazonaws.${suffix}/${inference_image}:${VLLM_VERSION}
 

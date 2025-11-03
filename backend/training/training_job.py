@@ -363,6 +363,16 @@ class TrainingJobExcutor(BaseModel):
             configs['worker.actor.clip_ratio_low'] = clip_ratio_low
             configs['algorithm.disable_kl'] = True
             configs['algorithm.online_filtering'] = True
+        elif stage == 'gspo':
+            configs['worker.actor.clip_ratio_high'] = clip_ratio_high
+            configs['worker.actor.clip_ratio_low'] = clip_ratio_low
+            configs['worker.actor.loss_type'] = 'gspo_token'
+            configs['worker.actor.loss_avg_mode'] = 'seq'
+        elif stage == 'cispo':
+            configs['worker.actor.clip_ratio_high'] = clip_ratio_high
+            configs['worker.actor.clip_ratio_low'] = clip_ratio_low
+            configs['worker.actor.loss_type'] = 'cispo'
+            
         logger.info(configs)
         
         # 注意：需要跟https://github.com/hiyouga/EasyR1/tree/main/examples/reward_function里的对应
@@ -607,7 +617,7 @@ class TrainingJobExcutor(BaseModel):
                                 instance_type=job_payload['instance_type'])
 
             return True,'create job success'
-        elif job_payload['stage'] in ['grpo','dapo']:
+        elif job_payload['stage'] in ['grpo','dapo','gspo','cispo']:
             
             ret,msg = self.create_easyr1_training(
                 job_payload = job_payload,
