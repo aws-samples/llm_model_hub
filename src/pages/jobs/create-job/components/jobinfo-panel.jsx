@@ -518,6 +518,22 @@ const EasyR1JobSetting = ({ validation,
     useEffect(()=>{
       setData({prompt_template:'dummy'});
     },[]);
+
+    // Set default clip ratio values based on stage
+    useEffect(() => {
+      if (!readOnly && data.stage) {
+        if (data.stage === 'dapo') {
+          setData({ clip_ratio_low: '0.2' });
+          setData({ clip_ratio_high: '0.28' });
+        } else if (data.stage === 'gspo') {
+          setData({ clip_ratio_low: '3e-4' });
+          setData({ clip_ratio_high: '4e-4' });
+        } else if (data.stage === 'cispo') {
+          setData({ clip_ratio_low: '0' });
+          setData({ clip_ratio_high: '4' });
+        }
+      }
+    }, [data.stage]);
     return (<SpaceBetween size="xl" direction="vertical">
             <Container
               header={<Header variant="h2">{t('training_job_settings')}</Header>}
@@ -795,7 +811,7 @@ const EasyR1JobSetting = ({ validation,
               </FormField>
               <FormField
                     label="Clip ratio low"
-                    description="DAPO时使用"
+                    description="DAPO/GSPO/CISPO时使用"
                     stretch={false}
                   >
                     <Input readOnly={readOnly}
@@ -808,7 +824,7 @@ const EasyR1JobSetting = ({ validation,
                   ]}>
               <FormField
                     label="Clip ratio high"
-                    description="DAPO时使用"
+                    description="DAPO/GSPO/CISPO时使用"
                     stretch={false}
                   >
                     <Input readOnly={readOnly}
@@ -1346,7 +1362,7 @@ export default function DistributionPanel({
         </SpaceBetween>
       </Container>
 
-      {data.stage === 'grpo'|| data.stage === 'dapo' ?
+      {data.stage === 'grpo'|| data.stage === 'dapo' ||data.stage === 'gspo'||data.stage === 'cispo' ?
         <EasyR1JobSetting onChange={onChange} validation={validation} readOnly={readOnly} data={data} errors={errors} setData={setData} refs={refs} />
         :
         <LFJobSetting onChange={onChange} validation={validation} readOnly={readOnly} data={data} errors={errors} setData={setData} refs={refs} />

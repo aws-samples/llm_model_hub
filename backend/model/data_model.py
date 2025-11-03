@@ -18,6 +18,8 @@ class JobType(Enum):
     rm = 'rm'
     grpo = 'grpo'
     dapo = 'dapo'
+    gspo = 'gspo'
+    cispo = 'cispo'
 
 class EndpointStatus(Enum):
     PRECREATING = "PRECREATING"
@@ -100,7 +102,7 @@ class CommonResponse(BaseModel):
     
 class GetFactoryConfigRequest(BaseModel):
     config_name:Literal["model_name","prompt_template","dataset"] 
-    stage:Optional[str] = Literal["sft","ppo","dpo","kto"] 
+    stage:Optional[str] = Literal["sft","ppo","dpo","kto","grpo","dapo","gspo","cispo"] 
     
 class ListModelNamesResponse(BaseModel):
     response_id:str

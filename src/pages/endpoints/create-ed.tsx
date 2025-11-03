@@ -303,7 +303,7 @@ const SetExtraSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
       </FormField>
       <FormField
         label="max-model-len"
-        description="模型上下文最大长度，默认值12288"
+        description="模型上下文最大长度，默认值模型config文件中最大长度"
         stretch={false}
       >
         <Input
