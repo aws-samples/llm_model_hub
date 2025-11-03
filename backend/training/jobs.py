@@ -68,7 +68,8 @@ async def get_job_by_id(request:GetJobsRequest) -> JobsResponse:
     # print(f"database.get_job_by_id:{results}")
     job_info=None
     if results:
-        _,job_id,job_name,job_run_name,output_s3_path,job_type,job_status,job_create_time,job_start_time,job_end_time,job_payload,ts = results[0]
+        # Note: error_message was added via ALTER TABLE, so it's at the end after ts
+        _,job_id,job_name,job_run_name,output_s3_path,job_type,job_status,job_create_time,job_start_time,job_end_time,job_payload,ts,error_message = results[0]
         job_info= JobInfo(job_id=job_id,
                         job_name=job_name,
                         job_run_name=job_run_name,
@@ -79,6 +80,7 @@ async def get_job_by_id(request:GetJobsRequest) -> JobsResponse:
                         job_start_time=job_start_time,
                         job_end_time=job_end_time,
                         job_payload=json.loads(job_payload),
+                        error_message=error_message,
                         ts=ts)
         print(job_info.json())
     else:
@@ -90,10 +92,11 @@ async def delete_job_by_id(request:DelJobsRequest) -> CommonResponse:
     ret = database.delete_job_by_id(request.job_id)
     return CommonResponse(response_id=str(uuid.uuid4()), response={"code":"SUCCESS" if ret else "FAILED","message":"" if ret else "Job already started"})
  
-async def list_jobs(request:ListJobsRequest) ->ListJobsResponse: 
+async def list_jobs(request:ListJobsRequest) ->ListJobsResponse:
     results = database.list_jobs(query_terms=request.query_terms,page_size=request.page_size,page_index=request.page_index)
     count = database.count_jobs(query_terms=request.query_terms)
     # print(f"list_jobs:{results}")
+    # Note: error_message was added via ALTER TABLE, so it's at the end after ts
     jobs = [JobInfo(job_id=job_id,
                      job_name=job_name,
                      job_run_name=job_run_name,
@@ -104,9 +107,10 @@ async def list_jobs(request:ListJobsRequest) ->ListJobsResponse:
                         job_create_time=job_create_time,
                         job_start_time=job_start_time,
                         job_end_time=job_end_time,
+                        error_message=error_message,
                         ts=ts
-                    ) 
-            for _,job_id,job_name,job_run_name,output_s3_path,job_type,job_status,job_create_time,job_start_time,job_end_time,job_payload,ts in results]
+                    )
+            for _,job_id,job_name,job_run_name,output_s3_path,job_type,job_status,job_create_time,job_start_time,job_end_time,job_payload,ts,error_message in results]
     return ListJobsResponse(response_id= str(uuid.uuid4()), jobs=jobs,total_count=count)
 
 
@@ -115,7 +119,8 @@ def sync_get_job_by_id(job_id:str) -> JobInfo:
     results = database.get_job_by_id(job_id)
     job_info=None
     if results:
-        _,job_id,job_name,job_run_name,output_s3_path,job_type,job_status,job_create_time,job_start_time,job_end_time,job_payload,ts = results[0]
+        # Note: error_message was added via ALTER TABLE, so it's at the end after ts
+        _,job_id,job_name,job_run_name,output_s3_path,job_type,job_status,job_create_time,job_start_time,job_end_time,job_payload,ts,error_message = results[0]
         job_info= JobInfo(job_id=job_id,
                         job_name=job_name,
                         job_run_name=job_run_name,
@@ -126,6 +131,7 @@ def sync_get_job_by_id(job_id:str) -> JobInfo:
                         job_start_time=job_start_time,
                         job_end_time=job_end_time,
                         job_payload=json.loads(job_payload),
+                        error_message=error_message,
                         ts=ts)
     else:
         raise Exception(f"Job {job_id} not found")
@@ -159,8 +165,83 @@ def get_job_status(job_id:str):
             job_status = sm_status
     else:
         raise Exception(f"Job {job_id} not found")
-    
+
     return job_status
+
+
+def stop_sagemaker_training_job(job_name:str):
+    """
+    Stop a SageMaker training job
+
+    Args:
+        job_name: SageMaker training job name
+
+    Returns:
+        bool: True if stop request was successful
+    """
+    try:
+        response = sagemaker_client.stop_training_job(TrainingJobName=job_name)
+        logger.info(f"Successfully requested stop for training job: {job_name}")
+        return True
+    except Exception as e:
+        logger.error(f"Error stopping training job {job_name}: {str(e)}")
+        return False
+
+
+async def stop_and_delete_job(job_id: str) -> CommonResponse:
+    """
+    Stop SageMaker training job and delete job record
+
+    Args:
+        job_id: Job ID
+
+    Returns:
+        CommonResponse with success or error message
+    """
+    try:
+        # Get job information
+        job_info = sync_get_job_by_id(job_id)
+
+        # Check if job can be stopped
+        if job_info.job_status not in [JobStatus.SUBMITTED, JobStatus.CREATING, JobStatus.RUNNING, JobStatus.PENDING]:
+            return CommonResponse(
+                response_id=str(uuid.uuid4()),
+                response={
+                    "code": "FAILED",
+                    "message": f"Job cannot be stopped. Current status: {job_info.job_status.value}"
+                }
+            )
+
+        # Stop SageMaker training job if it exists
+        if job_info.job_run_name:
+            stop_success = stop_sagemaker_training_job(job_info.job_run_name)
+            if not stop_success:
+                logger.warning(f"Failed to stop SageMaker job {job_info.job_run_name}, but will continue with deletion")
+
+        # Update job status to TERMINATED
+        database.set_job_status(job_id, JobStatus.TERMINATED)
+        database.update_job_end_time(job_id, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+
+        # Delete job from database
+        database.delete_job_by_id(job_id)
+
+        return CommonResponse(
+            response_id=str(uuid.uuid4()),
+            response={
+                "code": "SUCCESS",
+                "message": f"Job {job_id} has been stopped and deleted successfully"
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error in stop_and_delete_job for {job_id}: {str(e)}")
+        return CommonResponse(
+            response_id=str(uuid.uuid4()),
+            response={
+                "code": "FAILED",
+                "message": f"Failed to stop and delete job: {str(e)}"
+            }
+        )
 
 
     

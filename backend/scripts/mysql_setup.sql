@@ -10,7 +10,10 @@ CREATE TABLE IF NOT EXISTS JOB_TABLE (
     job_start_time DATETIME,
     job_end_time DATETIME,
     job_payload TEXT,
-    ts BIGINT
+    ts BIGINT,
+    error_message TEXT DEFAULT NULL,
+    INDEX idx_job_status (job_status),
+    INDEX idx_job_id (job_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 

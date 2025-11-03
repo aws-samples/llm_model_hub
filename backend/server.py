@@ -21,7 +21,7 @@ import uuid
 from pydantic import BaseModel,Field
 from model.data_model import *
 import asyncio
-from training.jobs import create_job,list_jobs,get_job_by_id,delete_job_by_id,fetch_training_log,get_job_status
+from training.jobs import create_job,list_jobs,get_job_by_id,delete_job_by_id,fetch_training_log,get_job_status,stop_and_delete_job
 from utils.get_factory_config import get_factory_config
 from utils.outputs import list_s3_objects
 from inference.endpoint_management import deploy_endpoint,delete_endpoint,get_endpoint_status,list_endpoints,deploy_endpoint_byoc,get_endpoint_engine
@@ -136,6 +136,10 @@ async def delete_job(request:DelJobsRequest):
     resp = await delete_job_by_id(request)
     return resp
 
+@app.post("/v1/stop_and_delete_job",dependencies=[Depends(check_api_key)])
+async def stop_delete_job(request:DelJobsRequest):
+    resp = await stop_and_delete_job(request.job_id)
+    return resp
 
 @app.post("/v1/create_job",dependencies=[Depends(check_api_key)])
 async def handle_create_job(request: CreateJobsRequest):

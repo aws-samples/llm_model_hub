@@ -22,7 +22,7 @@ fi
 account=$(aws sts  get-caller-identity --query Account --output text)
 partition=$(aws sts get-caller-identity --query 'Arn' --output text | cut -d: -f2)
 
-SGL_VERSION=v0.5.4.post2-cu129-amd64
+SGL_VERSION=v0.5.3rc0-cu126
 inference_image=sagemaker_endpoint/sglang
 inference_fullname=${account}.dkr.ecr.${region}.amazonaws.${suffix}/${inference_image}:${SGL_VERSION}
 

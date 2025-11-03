@@ -288,7 +288,7 @@ const SetExtraSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
     <SpaceBetween size='xs'>
         <FormField
         label="mem-fraction-static"
-        description={"默认使用0.7，以适应小机型，如果推理过程中没有OOM，可以设置成0.9"}
+        description={"默认使用0.7，如果推理过程中没有OOM，可以提高"}
         stretch={false}
       >
         <Input

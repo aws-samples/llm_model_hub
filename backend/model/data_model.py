@@ -64,12 +64,13 @@ class JobInfo(BaseModel):
     job_name: str
     job_run_name:str
     output_s3_path: str
-    job_type : JobType 
-    job_status : JobStatus 
+    job_type : JobType
+    job_status : JobStatus
     job_payload : Dict[str,Any]
-    job_create_time: Optional[datetime] = None 
+    job_create_time: Optional[datetime] = None
     job_start_time:Optional[datetime] = None
-    job_end_time:Optional[datetime] = None 
+    job_end_time:Optional[datetime] = None
+    error_message: Optional[str] = None  # Detailed error message when job fails
     ts:int
 
 class JobStatusResponse(BaseModel):
