@@ -151,7 +151,6 @@ Resources:
               
               # Write environment variables
               echo "Writing environment variables"
-              echo "REACT_APP_API_ENDPOINT=http://$EC2_IP:8000/v1" > /home/ubuntu/llm_model_hub/.env || error_exit "Failed to write frontend env file"
               echo "REACT_APP_API_KEY=$RANDOM_KEY" >> /home/ubuntu/llm_model_hub/.env || error_exit "Failed to append to frontend env file"
               echo "REACT_APP_CALCULATOR=https://aws-gpu-memory-caculator.streamlit.app/" >> /home/ubuntu/llm_model_hub/.env || error_exit "Failed to append to frontend env file"
 
@@ -321,10 +320,6 @@ Resources:
       GroupDescription: Allow SSH, port 8000 and 3000
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 8000
-          ToPort: 8000
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
           FromPort: 3000
           ToPort: 3000
           CidrIp: 0.0.0.0/0
@@ -347,6 +342,7 @@ Resources:
         - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess
       Policies:
         - PolicyName: CloudFormationSignalPolicy
           PolicyDocument:
@@ -363,6 +359,20 @@ Resources:
                 Action:
                   - ssm:PutParameter
                 Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/*'
+        - PolicyName: ECRPublicAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr-public:GetAuthorizationToken
+                  - ecr-public:BatchCheckLayerAvailability
+                  - ecr-public:GetDownloadUrlForLayer
+                  - ecr-public:BatchGetImage
+                  - ecr-public:DescribeRepositories
+                  - ecr-public:DescribeImages
+                  - sts:GetServiceBearerToken
+                Resource: '*'
 
 
   EC2InstanceProfile:

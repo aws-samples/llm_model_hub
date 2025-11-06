@@ -2,16 +2,13 @@
 set -v
 set -e
 
-# This script shows how to build the Docker image and push it to ECR to be ready for use
-# by SageMaker.
+# This script pulls the image from AWS Public ECR and copies it to private ECR for use by SageMaker.
+# SageMaker does not support Public ECR directly, so we need to copy to private ECR.
 
-# The argument to this script is the region name. 
-# 尝试使用 IMDSv2 获取 token
+# Get the current region
 TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
-
-# Get the current region and write it to the backend .env file
 region=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/region)
-# region=$(aws configure get region)
+
 suffix="com"
 
 if [[ $region =~ ^cn ]]; then
@@ -22,7 +19,11 @@ fi
 account=$(aws sts  get-caller-identity --query Account --output text)
 partition=$(aws sts get-caller-identity --query 'Arn' --output text | cut -d: -f2)
 
-SGL_VERSION=v0.5.3rc0-cu126
+# Public ECR image
+public_ecr_image=public.ecr.aws/f8g1z3n8/llm-modelhub-byoc-sglang:latest
+
+# Private ECR configuration
+SGL_VERSION=latest
 inference_image=sagemaker_endpoint/sglang
 inference_fullname=${account}.dkr.ecr.${region}.amazonaws.${suffix}/${inference_image}:${SGL_VERSION}
 
@@ -34,7 +35,10 @@ then
     aws  ecr create-repository --repository-name "${inference_image}" --region ${region}
 fi
 
-# Get the login command from ECR and execute it directly
+# Login to AWS Public ECR
+aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
+
+# Login to private ECR
 aws  ecr get-login-password --region $region | docker login --username AWS --password-stdin $account.dkr.ecr.$region.amazonaws.${suffix}
 
 # Substitute the AWS account ID into the ECR policy
@@ -50,13 +54,13 @@ aws ecr set-repository-policy \
 # Clean up temporary policy file
 rm -f ecr-policy-temp.json
 
-# Build the docker image locally with the image name and then push it to ECR
-# with the full name.
+# Pull image from Public ECR
+docker pull ${public_ecr_image}
 
-docker build  --build-arg SGL_VERSION=${SGL_VERSION} -t ${inference_image}:${SGL_VERSION}  -f Dockerfile.sglang . 
+# Tag the image for private ECR
+docker tag ${public_ecr_image} ${inference_fullname}
 
-docker tag ${inference_image}:${SGL_VERSION} ${inference_fullname}
-
+# Push to private ECR
 docker push ${inference_fullname}
 # 删除 .env 文件中的 sglang_image= 这一行
 sed -i '/^sglang_image=/d' /home/ubuntu/llm_model_hub/backend/.env

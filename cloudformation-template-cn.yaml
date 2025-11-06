@@ -74,6 +74,22 @@ Resources:
         - arn:aws-cn:iam::aws:policy/CloudWatchLogsFullAccess
         - arn:aws-cn:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws-cn:iam::aws:policy/AmazonSageMakerFullAccess
+        - arn:aws-cn:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess
+      Policies:
+        - PolicyName: ECRPublicAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr-public:GetAuthorizationToken
+                  - ecr-public:BatchCheckLayerAvailability
+                  - ecr-public:GetDownloadUrlForLayer
+                  - ecr-public:BatchGetImage
+                  - ecr-public:DescribeRepositories
+                  - ecr-public:DescribeImages
+                  - sts:GetServiceBearerToken
+                Resource: '*'
       # Policies:
       #   - PolicyName: CloudFormationSignalPolicy
       #     PolicyDocument:

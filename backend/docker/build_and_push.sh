@@ -2,16 +2,12 @@
 set -v
 set -e
 
-# This script shows how to build the Docker image and push it to ECR to be ready for use
-# by SageMaker.
+# This script pulls the image from AWS Public ECR and copies it to private ECR for use by SageMaker.
+# SageMaker does not support Public ECR directly, so we need to copy to private ECR.
 
-# The argument to this script is the region name. 
-# 尝试使用 IMDSv2 获取 token
+# Get the current region
 TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
-
-# Get the current region and write it to the backend .env file
 region=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/region)
-# region=$(aws configure get region)
 
 suffix="com"
 
@@ -23,8 +19,11 @@ fi
 account=$(aws sts  get-caller-identity --query Account --output text)
 partition=$(aws sts get-caller-identity --query 'Arn' --output text | cut -d: -f2)
 
+# Public ECR image
+public_ecr_image=public.ecr.aws/f8g1z3n8/llm-modelhub-llamafactory:latest
 
-VERSION=0.9.4.dev0
+# Private ECR configuration
+VERSION=latest
 inference_image=sagemaker/llamafactory
 inference_fullname=${account}.dkr.ecr.${region}.amazonaws.${suffix}/${inference_image}:${VERSION}
 
@@ -36,17 +35,11 @@ then
     aws  ecr create-repository --repository-name "${inference_image}" --region ${region}
 fi
 
-# Get the login command from ECR and execute it directly
+# Login to AWS Public ECR
+aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
+
+# Login to private ECR
 aws  ecr get-login-password --region $region | docker login --username AWS --password-stdin $account.dkr.ecr.$region.amazonaws.${suffix}
-
-# First, authenticate with AWS ECR
-# Run these commands in your terminal before building:
-
-if [[ $region =~ ^cn ]]; then
-    aws ecr get-login-password --region $region | docker login --username AWS --password-stdin 727897471807.dkr.ecr.$region.amazonaws.${suffix}
-else
-    aws ecr get-login-password --region $region | docker login --username AWS --password-stdin 763104351884.dkr.ecr.$region.amazonaws.${suffix}
-fi
 
 # Substitute the AWS account ID into the ECR policy
 sed "s/\${AWS_ACCOUNT_ID}/${account}/g" ecr-policy.json > ecr-policy-temp.json
@@ -60,29 +53,13 @@ aws ecr set-repository-policy \
 # Clean up temporary policy file
 rm -f ecr-policy-temp.json
 
-# Build the docker image locally with the image name and then push it to ECR
-# with the full name.
+# Pull image from Public ECR
+docker pull ${public_ecr_image}
 
-# Add variables for build arguments pytorch-training:2.5.1-gpu-py311-cu124-ubuntu22.04-sagemaker
-# https://github.com/aws/deep-learning-containers/blob/master/available_images.md
-if [[ $region =~ ^cn ]]; then
-    BASE_IMAGE="727897471807.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.6.0-gpu-py312-cu126-ubuntu22.04-sagemaker"
-    PIP_INDEX="https://mirrors.aliyun.com/pypi/simple"
-    sed -i '/^RUN pip install "unsloth[cu126-torch260]/d' /home/ubuntu/llm_model_hub/backend/docker/Dockerfile
+# Tag the image for private ECR
+docker tag ${public_ecr_image} ${inference_fullname}
 
-else
-    BASE_IMAGE="763104351884.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.6.0-gpu-py312-cu126-ubuntu22.04-sagemaker"
-    PIP_INDEX="https://pypi.org/simple"
-fi
-
-
-docker build \
-    --build-arg BASE_IMAGE="${BASE_IMAGE}" \
-    --build-arg PIP_INDEX="${PIP_INDEX}" \
-    -t ${inference_image}:${VERSION} .
-
-docker tag ${inference_image}:${VERSION} ${inference_fullname}
-
+# Push to private ECR
 docker push ${inference_fullname}
 # 删除 .env 文件中的 training_image= 这一行
 sed -i '/^training_image=/d' /home/ubuntu/llm_model_hub/backend/.env
