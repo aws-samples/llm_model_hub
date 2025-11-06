@@ -456,7 +456,7 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
           {t("enable")}
         </Toggle>
       </FormField>
-      <FormField
+      {/* <FormField
         label="limit-mm-per-prompt"
         description="一个请求最大支持图片或者video数量，默认是image=1，设置值格式为 image=N,video=M"
         stretch={false}
@@ -470,7 +470,7 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
             setData((pre: any) => ({ ...pre,  extra_params:{...pre.extra_params,limit_mm_per_prompt: detail.value } }))
           }}
         />
-      </FormField>
+      </FormField> */}
       <FormField
         label="max-num-seqs"
         description="Maximum number of sequences per iteration.,默认值256"
