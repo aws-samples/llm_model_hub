@@ -25,7 +25,3 @@ docker build  --build-arg SGL_VERSION=${SGL_VERSION} -t ${inference_image}:lates
 docker tag ${inference_image}:latest ${inference_fullname}
 
 docker push ${inference_fullname}
-# 删除 .env 文件中的 sglang_image= 这一行
-sed -i '/^sglang_image=/d' /home/ubuntu/llm_model_hub/backend/.env
-echo "" >> /home/ubuntu/llm_model_hub/backend/.env
-echo "sglang_image=${inference_fullname}" >> /home/ubuntu/llm_model_hub/backend/.env
