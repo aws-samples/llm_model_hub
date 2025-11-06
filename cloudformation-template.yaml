@@ -320,10 +320,6 @@ Resources:
       GroupDescription: Allow SSH, port 8000 and 3000
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 8000
-          ToPort: 8000
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
           FromPort: 3000
           ToPort: 3000
           CidrIp: 0.0.0.0/0
@@ -346,6 +342,7 @@ Resources:
         - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess
       Policies:
         - PolicyName: CloudFormationSignalPolicy
           PolicyDocument:
@@ -362,6 +359,20 @@ Resources:
                 Action:
                   - ssm:PutParameter
                 Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/*'
+        - PolicyName: ECRPublicAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr-public:GetAuthorizationToken
+                  - ecr-public:BatchCheckLayerAvailability
+                  - ecr-public:GetDownloadUrlForLayer
+                  - ecr-public:BatchGetImage
+                  - ecr-public:DescribeRepositories
+                  - ecr-public:DescribeImages
+                  - sts:GetServiceBearerToken
+                Resource: '*'
 
 
   EC2InstanceProfile:
