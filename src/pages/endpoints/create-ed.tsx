@@ -219,13 +219,13 @@ const InputEndpointName = ({ data, setData, readOnly }: SelectQuantTypeProps) =>
   return (
     <SpaceBetween size='xs'>
       <FormField
-        description="自定义推理Endpoint名称，如果不填则自动生成"
+        description={t("custom_endpoint_name_desc")}
         stretch={true}
       >
         <Input
           readOnly={readOnly}
           value={value}
-          placeholder={`仅支持英文+数字+'-'组合`}
+          placeholder={t("endpoint_name_placeholder")}
           onChange={({ detail }) => {
             setValue(detail.value);
             setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,endpoint_name: detail.value }  }))
@@ -243,7 +243,7 @@ const InputCustRepo = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   return (
     <SpaceBetween size='xs'>
       <FormField
-        description="海外区输入HuggingFace Repo地址,例如:unsloth/llama-3-8b-Instruct，中国区请输入魔搭社区地址,例如:baicai003/Llama3-Chinese_v2"
+        description={t("custom_model_repo_desc_global")}
         stretch={true}
       >
         <Input
@@ -265,7 +265,7 @@ const InputS3Path = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   return (
     <SpaceBetween size='xs'>
       <FormField
-        description="输入S3存储路径，例如：s3://bucket/model/"
+        description={t("custom_model_s3path_desc")}
         stretch={true}
       >
         <S3Selector 
@@ -287,8 +287,8 @@ const SetExtraSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   return (
     <SpaceBetween size='xs'>
         <FormField
-        label="mem-fraction-static"
-        description={"默认使用0.7，如果推理过程中没有OOM，可以提高"}
+        label={t("mem_fraction_static")}
+        description={t("mem_fraction_static_desc")}
         stretch={false}
       >
         <Input
@@ -302,8 +302,8 @@ const SetExtraSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
         />
       </FormField>
       <FormField
-        label="max-model-len"
-        description="模型上下文最大长度，默认值模型config文件中最大长度"
+        label={t("max_model_len")}
+        description={t("max_model_len_desc_sglang")}
         stretch={false}
       >
         <Input
@@ -316,9 +316,9 @@ const SetExtraSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
         />
       </FormField>
       <FormField
-        label="chat-template"
-        description={<Box><Box>对于多模态模型，需要填写此项，否则只能当作文本模型。</Box>
-          <Link external href={"https://docs.sglang.ai/backend/openai_api_vision.html#Chat-Template"} >有效值参考链接</Link></Box>}
+        label={t("chat_template")}
+        description={<Box><Box>{t("chat_template_desc")}</Box>
+          <Link external href={"https://docs.sglang.ai/backend/openai_api_vision.html#Chat-Template"} >{t("chat_template_ref")}</Link></Box>}
         stretch={false}
       >
         <Input
@@ -332,9 +332,9 @@ const SetExtraSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
         />
       </FormField>
         <FormField
-        label="tool-call-parser"
-        description={<Box><Box>如果使用tool use能力，需要填写此项。</Box>
-          <Link external href={"https://docs.sglang.ai/backend/server_arguments.html"} >有效值参考链接</Link></Box>}
+        label={t("tool_call_parser")}
+        description={<Box><Box>{t("tool_call_parser_desc")}</Box>
+          <Link external href={"https://docs.sglang.ai/backend/server_arguments.html"} >{t("tool_call_parser_ref")}</Link></Box>}
         stretch={false}
       >
         <Input
@@ -365,8 +365,8 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
   return (
     <SpaceBetween size='xs'>
       <FormField
-        label="max-model-len"
-        description="模型上下文最大长度，不能超过kv cache的size,默认值12288"
+        label={t("max_model_len")}
+        description={t("max_model_len_desc_vllm")}
         stretch={false}
       >
         <Input
@@ -379,8 +379,8 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
         />
       </FormField>
       <FormField
-        label="tensor-parallel-size"
-        description="tensor并行度,默认是实例的GPU数量"
+        label={t("tensor_parallel_size")}
+        description={t("tensor_parallel_size_desc")}
         stretch={false}
       >
         <Input
@@ -409,9 +409,9 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
         />
       </FormField> */}
         <FormField
-        label="tool-call-parser"
-        description={<Box><Box>如果使用tool use能力，需要填写此项。</Box>
-          <Link external href={"https://docs.vllm.ai/en/latest/features/tool_calling.html#xlam-models-xlam"} >有效值参考链接</Link></Box>}
+        label={t("tool_call_parser")}
+        description={<Box><Box>{t("tool_call_parser_desc")}</Box>
+          <Link external href={"https://docs.vllm.ai/en/latest/features/tool_calling.html#xlam-models-xlam"} >{t("tool_call_parser_ref")}</Link></Box>}
         stretch={false}
       >
         <Input
@@ -425,8 +425,8 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
         />
       </FormField>
       <FormField
-        label="enable-prefix-caching"
-        description="是否启用prefix caching"
+        label={t("enable_prefix_caching")}
+        description={t("enable_prefix_caching_desc")}
         stretch={false}
       >
         <Toggle
@@ -441,8 +441,8 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
         </Toggle>
       </FormField>
       <FormField
-        label="enfore-eager"
-        description="是否启用PyTorch eager-mode，默认False"
+        label={t("enforce_eager")}
+        description={t("enforce_eager_desc")}
         stretch={false}
       >
         <Toggle
@@ -472,8 +472,8 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
         />
       </FormField> */}
       <FormField
-        label="max-num-seqs"
-        description="Maximum number of sequences per iteration.,默认值256"
+        label={t("max_num_seqs")}
+        description={t("max_num_seqs_desc")}
         stretch={false}
       >
         <Input
@@ -586,45 +586,45 @@ export const DeployModelModal = ({
       footer={
         <Box float="right">
           <SpaceBetween direction="horizontal" size="xs">
-            <Button variant="link" onClick={() => setVisible(false)}>Cancel</Button>
+            <Button variant="link" onClick={() => setVisible(false)}>{t("cancel")}</Button>
             <Button variant="primary" onClick={onDeloyConfirm}
               loading={loading}
               disabled={loading}
-            >Confirm</Button>
+            >{t("confirm")}</Button>
           </SpaceBetween>
         </Box>
       }
-      header="Deploy model as endpoint"
+      header={t("deploy_model_endpoint")}
     ><SpaceBetween size="l">
         <FormField
-          label="Model Name"
+          label={t("model_name")}
           stretch={false}
-          description="select a supported Model"
+          description={t("select_supported_model")}
           i18nStrings={{ errorIconAriaLabel: 'Error' }}
         >
           <SelectModelName data={data} setData={setData} readOnly={modelNameReadOnly} />
         </FormField>
         <FormField
-          label="(选填)自定义Endpoint Name"
+          label={t("custom_endpoint_name")}
           stretch={false}
         >
           <InputEndpointName data={data} setData={setData} readOnly={false} />
         </FormField>
         <FormField
-          label="自定义模型仓库"
+          label={t("custom_model_repo")}
           stretch={false}
         >
           <InputCustRepo data={data} setData={setData} readOnly={modelNameReadOnly} />
         </FormField>
         <FormField
-          label="自定义模型S3Path"
+          label={t("custom_model_s3path")}
           stretch={false}
         >
           <InputS3Path data={data} setData={setData} readOnly={modelNameReadOnly} />
         </FormField>
 
         <FormField
-          label="Instance Type"
+          label={t("instance_type")}
           // description="Select a Instance type to deploy the model."
           // description={<Link href={`${instanceCalculator}`} external>使用机型计算器估算</Link>}
 
@@ -646,10 +646,10 @@ export const DeployModelModal = ({
         </FormField>
 
         <FormField
-          label="Engine Type"
+          label={t("engine_type")}
           stretch={false}
           errorText={errors.engine}
-          description={<Link href='https://docs.djl.ai/docs/serving/serving/docs/lmi/user_guides/vllm_user_guide.html' external>各类引擎支持模型信息</Link>}
+          description={<Link href='https://docs.djl.ai/docs/serving/serving/docs/lmi/user_guides/vllm_user_guide.html' external>{t("engine_support_info")}</Link>}
           i18nStrings={{ errorIconAriaLabel: 'Error' }}
         >
           <SetEngineType data={data} setData={setData} readOnly={false} />
