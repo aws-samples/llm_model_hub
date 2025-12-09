@@ -5,13 +5,16 @@ FROM lmsysorg/sglang:$SGL_VERSION
 # RUN pip install transformers==4.48.3
 # 设置工作目录
 WORKDIR /app
-
+COPY model_tar/s5cmd /app/
 # 复制当前目录下的内容到容器内的/app
 COPY app_sglang/ /app
 
 # 安装新的依赖
 COPY requirements.txt /app
 RUN pip install -r requirements.txt  
+
+# Create /opt/ml/model directory for SageMaker compatibility
+RUN mkdir -p /opt/ml/model  
 
 # 修改restapi
 RUN \

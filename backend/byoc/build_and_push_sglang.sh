@@ -19,11 +19,11 @@ fi
 account=$(aws sts  get-caller-identity --query Account --output text)
 partition=$(aws sts get-caller-identity --query 'Arn' --output text | cut -d: -f2)
 
+SGL_VERSION=v0.5.6
 # Public ECR image
-public_ecr_image=public.ecr.aws/f8g1z3n8/llm-modelhub-byoc-sglang:latest
+public_ecr_image=public.ecr.aws/f8g1z3n8/llm-modelhub-byoc-sglang:${SGL_VERSION}
 
 # Private ECR configuration
-SGL_VERSION=latest
 inference_image=sagemaker_endpoint/sglang
 inference_fullname=${account}.dkr.ecr.${region}.amazonaws.${suffix}/${inference_image}:${SGL_VERSION}
 
@@ -62,6 +62,7 @@ docker tag ${public_ecr_image} ${inference_fullname}
 
 # Push to private ECR
 docker push ${inference_fullname}
+echo ${inference_fullname}
 # 删除 .env 文件中的 sglang_image= 这一行
 sed -i '/^sglang_image=/d' /home/ubuntu/llm_model_hub/backend/.env
 echo "" >> /home/ubuntu/llm_model_hub/backend/.env

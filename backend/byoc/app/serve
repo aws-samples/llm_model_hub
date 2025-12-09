@@ -24,101 +24,83 @@ fi
 model_dir=$(find "$base_dir" -mindepth 1 -maxdepth 1 -type d -print -quit)
 
 
-# Check if a subdirectory was found
-if [ -z "$model_dir" ]; then
-    echo "No subdirectory found"
-    exit 0
-else
-    # Set the model_path
-    model_path="$model_dir"
-    max_model_len=$(expr $MAX_MODEL_LEN + 0)
-    max_num_seqs=$(expr $MAX_NUM_SEQS + 0)
-    tensor_parallel_size=$(expr $TENSOR_PARALLEL_SIZE + 0)
-    dtype="$DTYPE"
-    echo "Found model directory" $model_dir
-    if [ -f "$model_dir/.env" ]; then
-        source $model_dir/.env
-    fi
 
-    if [ -f "$model_dir/start.sh" ]; then
-        # If start.sh file exists, use its content as model_id
-        cd $(dirname "$model_dir/start.sh")
-        echo "Running $model_dir/start.sh"
-        cp $model_dir/start.sh /app/
-        chmod +x /app/start.sh
-        /app/start.sh
+# Set the model_path
+model_path="$model_dir"
+max_model_len=$(expr ${MAX_MODEL_LEN:-4096} + 0)
+max_num_seqs=$(expr ${MAX_NUM_SEQS:-256} + 0)
+tensor_parallel_size=$(expr ${TENSOR_PARALLEL_SIZE:-1} + 0)
+dtype="${DTYPE:-auto}"
+echo "Found model directory" $model_dir
+
+
+# Get model_id from environment variable
+model_id=$HF_MODEL_ID
+s3_model_path=$S3_MODEL_PATH
+#检查是否是s3 url
+if [[ $s3_model_path == s3://* ]]; then
+    #检查是否以/结尾，如果是则去掉
+    if [[ $s3_model_path == */ ]]; then
+        s3_model_path=${s3_model_path%/}
+        s3_model_path="${s3_model_path}/*"
     else
-        # Get model_id from environment variable
-        model_id=$HF_MODEL_ID
-        s3_model_path=$S3_MODEL_PATH
-        #检查是否是s3 url
-        if [[ $s3_model_path == s3://* ]]; then
-            #检查是否以/结尾，如果是则去掉
-            if [[ $s3_model_path == */ ]]; then
-                s3_model_path=${s3_model_path%/}
-                s3_model_path="${s3_model_path}/*"
-            else
-                s3_model_path="${s3_model_path}/*"
-            fi
-            #mv s5cmd to app foler
-            cp $model_dir/s5cmd /app/s5cmd
-            chmod +x /app/s5cmd
-            # If model_id is an S3 address, sync files to base_dir
-
-            echo "Syncing files from S3: $s3_model_path"
-            echo "using: $model_id"
-            s5cmd sync $s3_model_path $file_dir
-            # Set model_id to base_dir for local loading
-            echo "Using model: $file_dir"
-
-            command="vllm serve $file_dir --port $SAGEMAKER_BIND_TO_PORT --download-dir $file_dir --trust-remote-code --max-model-len $max_model_len --tensor-parallel-size $tensor_parallel_size --dtype $dtype --max-num-seqs $max_num_seqs"
-            
-            if [ "${ENABLE_PREFIX_CACHING}" = "1" ]; then
-                command="$command --enable-prefix-caching"
-            fi
-
-            if [ "${ENFORCE_EAGER}" = "1" ]; then
-                command="$command --enforce-eager"
-            fi
-
-            #if LIMIT_MM_PER_RPOMPT is not None then append to command
-            if [ -n "${LIMIT_MM_PER_PROMPT}" ]; then
-                command="$command --limit-mm-per-prompt $LIMIT_MM_PER_PROMPT"
-            fi
-
-            if [ -n "${TOOL_CALL_PARSER}" ]; then
-                command="$command --enable-auto-tool-choice --tool-call-parser $TOOL_CALL_PARSER"
-            fi
-            
-            eval $command
- 
-
-        else
-            # If model_id file exists, use its content as model_id
-            # model_id=$(cat "$model_dir/model_id")
-            echo "using: $model_id"
-            command="vllm serve $model_id --port $SAGEMAKER_BIND_TO_PORT --trust-remote-code  --max-model-len $max_model_len --tensor-parallel-size $tensor_parallel_size --dtype $dtype --max-num-seqs $max_num_seqs"
-            
-            if [ "${ENABLE_PREFIX_CACHING}" = "1" ]; then
-                command="$command --enable-prefix-caching"
-            fi
-
-            if [ "${ENFORCE_EAGER}" = "1" ]; then
-                command="$command --enforce-eager"
-            fi
-
-            #if LIMIT_MM_PER_RPOMPT is not None then append to command
-            if [ -n "${LIMIT_MM_PER_PROMPT}" ]; then
-                command="$command --limit-mm-per-prompt $LIMIT_MM_PER_PROMPT"
-            fi
-
-            if [ -n "${TOOL_CALL_PARSER}" ]; then
-                command="$command --enable-auto-tool-choice --tool-call-parser $TOOL_CALL_PARSER"
-            fi
-            
-            eval $command
-        fi
-
-
+        s3_model_path="${s3_model_path}/*"
     fi
+    #mv s5cmd to app foler
+    # cp $model_dir/s5cmd /app/s5cmd
+    chmod +x /app/s5cmd
+    # If model_id is an S3 address, sync files to base_dir
+
+    echo "Syncing files from S3: $s3_model_path"
+    echo "using: $model_id"
+    s5cmd sync $s3_model_path $file_dir
+    # Set model_id to base_dir for local loading
+    echo "Using model: $file_dir"
+
+    command="vllm serve $file_dir --port $SAGEMAKER_BIND_TO_PORT --download-dir $file_dir --trust-remote-code --max-model-len $max_model_len --tensor-parallel-size $tensor_parallel_size --dtype $dtype --max-num-seqs $max_num_seqs"
+    
+    if [ "${ENABLE_PREFIX_CACHING}" = "1" ]; then
+        command="$command --enable-prefix-caching"
+    fi
+
+    if [ "${ENFORCE_EAGER}" = "1" ]; then
+        command="$command --enforce-eager"
+    fi
+
+    #if LIMIT_MM_PER_RPOMPT is not None then append to command
+    if [ -n "${LIMIT_MM_PER_PROMPT}" ]; then
+        command="$command --limit-mm-per-prompt $LIMIT_MM_PER_PROMPT"
+    fi
+
+    if [ -n "${TOOL_CALL_PARSER}" ]; then
+        command="$command --enable-auto-tool-choice --tool-call-parser $TOOL_CALL_PARSER"
+    fi
+    
+    eval $command
+
+
+else
+    # If model_id file exists, use its content as model_id
+    # model_id=$(cat "$model_dir/model_id")
+    echo "using: $model_id"
+    command="vllm serve $model_id --port $SAGEMAKER_BIND_TO_PORT --trust-remote-code  --max-model-len $max_model_len --tensor-parallel-size $tensor_parallel_size --dtype $dtype --max-num-seqs $max_num_seqs"
+    
+    if [ "${ENABLE_PREFIX_CACHING}" = "1" ]; then
+        command="$command --enable-prefix-caching"
+    fi
+
+    if [ "${ENFORCE_EAGER}" = "1" ]; then
+        command="$command --enforce-eager"
+    fi
+
+    #if LIMIT_MM_PER_RPOMPT is not None then append to command
+    if [ -n "${LIMIT_MM_PER_PROMPT}" ]; then
+        command="$command --limit-mm-per-prompt $LIMIT_MM_PER_PROMPT"
+    fi
+
+    if [ -n "${TOOL_CALL_PARSER}" ]; then
+        command="$command --enable-auto-tool-choice --tool-call-parser $TOOL_CALL_PARSER"
+    fi
+    
+    eval $command
 fi

@@ -16,6 +16,10 @@ import {
   Multiselect,
   Toggle,
   Textarea,
+  Box,
+  StatusIndicator,
+  Spinner,
+  ColumnLayout,
 } from '@cloudscape-design/components';
 import { FT_OPTIONS, QUANT_OPTIONS, TRAINING_STAGES, TRAINING_PRECISION, OPTMIZERS, INSTANCE_TYPES, BOOSTER_OPTIONS, DEEPSPEED,FORMAT_PROMPT_OPTIONS } from '../form-config';
 import validateField from '../form-validation-config';
@@ -23,6 +27,170 @@ import { remotePost } from '../../../../common/api-gateway';
 import { S3Selector } from './output-path';
 import { JsonEditor,PythonEditor } from './code-editor';
 import { t } from 'i18next';
+
+
+// SpotPriceInfo component to display spot price and interruption rate
+const SpotPriceInfo = ({ instanceType, useSpot, readOnly }) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [priceData, setPriceData] = useState(null);
+  const [riskData, setRiskData] = useState(null);
+
+  useEffect(() => {
+    // Only fetch if we have an instance type and spot is enabled
+    if (!instanceType || !useSpot || readOnly) {
+      setPriceData(null);
+      setRiskData(null);
+      return;
+    }
+
+    const fetchSpotInfo = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        // Fetch spot price history
+        const priceResponse = await remotePost(
+          { instance_types: [instanceType], days: 7 },
+          'spot_price_history'
+        );
+
+        if (priceResponse?.response?.instance_types?.[instanceType]) {
+          setPriceData(priceResponse.response.instance_types[instanceType]);
+        } else {
+          setPriceData(null);
+        }
+
+        // Fetch interruption rate
+        const riskResponse = await remotePost(
+          { instance_type: instanceType },
+          'spot_interruption_rate'
+        );
+
+        if (riskResponse?.response) {
+          setRiskData(riskResponse.response);
+        } else {
+          setRiskData(null);
+        }
+      } catch (err) {
+        console.error('Error fetching spot price info:', err);
+        setError(err.message || t('spot_price_error'));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSpotInfo();
+  }, [instanceType, useSpot, readOnly]);
+
+  // Don't show anything if spot is not enabled or no instance type selected
+  if (!useSpot || readOnly) {
+    return null;
+  }
+
+  if (!instanceType) {
+    return (
+      <Box color="text-status-inactive" padding={{ top: 's' }}>
+        <StatusIndicator type="info">{t('spot_select_instance')}</StatusIndicator>
+      </Box>
+    );
+  }
+
+  if (loading) {
+    return (
+      <Box padding={{ top: 's' }}>
+        <SpaceBetween direction="horizontal" size="xs">
+          <Spinner size="normal" />
+          <span>{t('spot_price_loading')}</span>
+        </SpaceBetween>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box padding={{ top: 's' }}>
+        <StatusIndicator type="error">{error}</StatusIndicator>
+      </Box>
+    );
+  }
+
+  if (!priceData?.available) {
+    return (
+      <Box padding={{ top: 's' }}>
+        <StatusIndicator type="warning">{t('spot_not_available')}</StatusIndicator>
+      </Box>
+    );
+  }
+
+  const getRiskStatusType = (riskLevel) => {
+    switch (riskLevel) {
+      case 'low':
+        return 'success';
+      case 'medium':
+        return 'warning';
+      case 'high':
+        return 'error';
+      default:
+        return 'info';
+    }
+  };
+
+  const getRiskLabel = (riskLevel) => {
+    switch (riskLevel) {
+      case 'low':
+        return t('spot_risk_low');
+      case 'medium':
+        return t('spot_risk_medium');
+      case 'high':
+        return t('spot_risk_high');
+      default:
+        return t('spot_risk_unknown');
+    }
+  };
+
+  return (
+    <Box padding={{ top: 's' }}>
+      <ExpandableSection headerText={t('spot_price_info')} variant="footer" defaultExpanded>
+        <SpaceBetween size="s">
+          <ColumnLayout columns={2} variant="text-grid">
+            <div>
+              <Box variant="awsui-key-label">{t('spot_current_price')}</Box>
+              <Box variant="p">
+                ${priceData.availability_zones?.[0]?.current_price?.toFixed(4) || 'N/A'}/hr
+              </Box>
+            </div>
+            <div>
+              <Box variant="awsui-key-label">{t('spot_price_range')}</Box>
+              <Box variant="p">
+                ${priceData.min_price?.toFixed(4)} - ${priceData.max_price?.toFixed(4)}/hr
+              </Box>
+            </div>
+            <div>
+              <Box variant="awsui-key-label">{t('spot_volatility')}</Box>
+              <Box variant="p">{priceData.price_volatility?.toFixed(1)}%</Box>
+            </div>
+            <div>
+              <Box variant="awsui-key-label">{t('spot_risk_level')}</Box>
+              <StatusIndicator type={getRiskStatusType(riskData?.risk_level)}>
+                {getRiskLabel(riskData?.risk_level)}
+              </StatusIndicator>
+            </div>
+            <div>
+              <Box variant="awsui-key-label">{t('spot_recommended_az')}</Box>
+              <Box variant="p">{priceData.recommended_az || 'N/A'}</Box>
+            </div>
+          </ColumnLayout>
+          {riskData?.risk_description && (
+            <Box variant="small" color="text-body-secondary">
+              {riskData.risk_description}
+            </Box>
+          )}
+        </SpaceBetween>
+      </ExpandableSection>
+    </Box>
+  );
+};
 
 
 function AdvancedConfigs({ onChange, readOnly, data, setData }) {
@@ -33,8 +201,8 @@ function AdvancedConfigs({ onChange, readOnly, data, setData }) {
           gridDefinition={[{ colspan: { default: 6, xxs: 4 } }, { colspan: { default: 6, xxs: 4 } }]}
         >
           <FormField
-            label="Warmup steps"
-            description="Number of steps used for warmup."
+            label={t("warmup_steps")}
+            description={t("warmup_steps_desc")}
             stretch={false}
           >
             <Input readOnly={readOnly}
@@ -43,8 +211,8 @@ function AdvancedConfigs({ onChange, readOnly, data, setData }) {
             />
           </FormField>
           <FormField
-            label="Logging steps"
-            description="Number of steps between two logs."
+            label={t("logging_steps")}
+            description={t("logging_steps_desc")}
             stretch={false}
           >
             <Input readOnly={readOnly}
@@ -57,8 +225,8 @@ function AdvancedConfigs({ onChange, readOnly, data, setData }) {
           gridDefinition={[{ colspan: { default: 6, xxs: 4 } }, { colspan: { default: 6, xxs: 4 } }]}
         >
           <FormField
-            label="Save steps"
-            description="Number of steps between two checkpoints."
+            label={t("save_steps")}
+            description={t("save_steps_desc")}
             stretch={false}
           >
             <Input readOnly={readOnly}
@@ -67,8 +235,8 @@ function AdvancedConfigs({ onChange, readOnly, data, setData }) {
             />
           </FormField>
           <FormField
-            label="Optimizer"
-            description="The optimizer to use."
+            label={t("optimizer")}
+            description={t("optimizer_desc")}
             stretch={false}
           >
             <SelectOptimizer readOnly={readOnly} data={data} setData={setData} />
@@ -81,8 +249,8 @@ function AdvancedConfigs({ onChange, readOnly, data, setData }) {
           gridDefinition={[{ colspan: { default: 6, xxs: 4 } }, { colspan: { default: 6, xxs: 4 } }]}
         >
           <FormField
-            label="LoRA rank"
-            description="The rank of LoRA matrices."
+            label={t("lora_rank")}
+            description={t("lora_rank_desc")}
             stretch={false}
           >
             <Input readOnly={readOnly}
@@ -91,8 +259,8 @@ function AdvancedConfigs({ onChange, readOnly, data, setData }) {
             />
           </FormField>
           <FormField
-            label="LoRA alpha"
-            description="Lora scaling coefficient."
+            label={t("lora_alpha")}
+            description={t("lora_alpha_desc")}
             stretch={false}
           >
             <Input readOnly={readOnly}
@@ -105,8 +273,8 @@ function AdvancedConfigs({ onChange, readOnly, data, setData }) {
           gridDefinition={[{ colspan: { default: 6, xxs: 4 } }, { colspan: { default: 6, xxs: 4 } }]}
         >
           <FormField
-            label="LoRA Target Modules"
-            description="Lora target modules such as v_proj,k_proj, default is all, which apply to all linear layers"
+            label={t("lora_target_modules")}
+            description={t("lora_target_modules_desc")}
             stretch={false}
           >
             <Input readOnly={readOnly}
@@ -159,13 +327,13 @@ function AdvancedConfigs({ onChange, readOnly, data, setData }) {
 function DeepSpeedConfigs({ onChange, readOnly, data, setData }) {
   return (
     <SpaceBetween size="l">
-      <ExpandableSection headerText="DeepSpeed configurations (Applicable for Multi-GPU/Nodes)" variant="footer" expanded>
+      <ExpandableSection headerText={t("deepspeed_config")} variant="footer" expanded>
         <Grid
           gridDefinition={[{ colspan: { default: 6, xxs: 4 } }, { colspan: { default: 6, xxs: 4 } }]}
         >
           <FormField
-            label="DeepSpeed Stage"
-            description="DeepSpeed stage for distributed training."
+            label={t("deepspeed_stage")}
+            description={t("deepspeed_stage_desc")}
             stretch={false}
           >
             <RadioGroup
@@ -542,16 +710,16 @@ const EasyR1JobSetting = ({ validation,
                 <FormField
                   label={t('model_name')}
                   stretch={false}
-                  description="Select Model"
+                  description={t("select_model")}
                   errorText={errors.model_name}
                   i18nStrings={{ errorIconAriaLabel: 'Error' }}
                 >
                   <SelectModelName data={data} setData={setData} readOnly={readOnly} refs={refs} />
                 </FormField>
                 <FormField
-                  label="Use Existing Model Weight (Optional)"
+                  label={t("use_existing_model_weight")}
                   stretch={false}
-                  description="使用已有的模型文件进行训练"
+                  description={t("use_existing_model_weight_desc")}
                   errorText={errors.s3_model_path}
                   i18nStrings={{ errorIconAriaLabel: 'Error' }}
                 >
@@ -562,9 +730,9 @@ const EasyR1JobSetting = ({ validation,
                     outputPath={readOnly ? data.job_payload?.s3_model_path : data.s3_model_path} />
                 </FormField>
                 <FormField
-                  label="Use Existing Checkpoint (Optional)"
+                  label={t("use_existing_checkpoint")}
                   stretch={false}
-                  description="使用已有的checkpoint文件继续训练"
+                  description={t("use_existing_checkpoint_desc")}
                   errorText={errors.s3_checkpoint}
                   i18nStrings={{ errorIconAriaLabel: 'Error' }}
                 >
@@ -576,7 +744,7 @@ const EasyR1JobSetting = ({ validation,
                 </FormField>
                 <FormField
                   label={t('finetuning_method')}
-                  description="Choose Finetuning method for the job (For GRPO Only support full currently)"
+                  description={t("choose_ft_method_grpo")}
                   stretch={true}
                 >
                   <RadioGroup
@@ -604,13 +772,13 @@ const EasyR1JobSetting = ({ validation,
             >
               <SpaceBetween size="l">
                 <FormField
-                  label="Training Data in S3"
+                  label={t("training_data_s3")}
                   stretch={false}
-                  description="Input the S3 path of your own dataset"
+                  description={t("training_data_s3_desc")}
                   errorText={errors.s3DataPath}
                   i18nStrings={{ errorIconAriaLabel: 'Error' }}
                 >
-                <S3Selector label={"S3 Data Path"}
+                <S3Selector label={t("training_data_s3")}
                   readOnly={readOnly}
                   objectsIsItemDisabled={(item) => !item.IsFolder}
                   setOutputPath={(value) => setData({ s3DataPath: value })}
@@ -618,8 +786,8 @@ const EasyR1JobSetting = ({ validation,
                 </FormField>
                   {(data.job_payload?.s3_data_path || data.s3DataPath) &&
                   <FormField
-                    label="Dataset Info"
-                    description="Need to prepare a data set info in parquet format. For example"
+                    label={t("dataset_info")}
+                    description={t("dataset_info_desc_parquet")}
                     stretch={false}
                   >
                   <JsonEditor
@@ -631,7 +799,7 @@ const EasyR1JobSetting = ({ validation,
                 <FormField
                   label={t("public_datasets")}
                   stretch={false}
-                  description="select open-source datasets from hf"
+                  description={t("select_public_datasets")}
                   errorText={errors.dataset}
                   i18nStrings={{ errorIconAriaLabel: 'Error' }}
                 >
@@ -641,7 +809,7 @@ const EasyR1JobSetting = ({ validation,
                 ]}>
                   <FormField
                     label={t("max_prompt_length")}
-                    description="Maximum Prompt Length."
+                    description={t("max_prompt_length_desc")}
                     stretch={false}
                   >
                     <Input readOnly={readOnly}
@@ -651,7 +819,7 @@ const EasyR1JobSetting = ({ validation,
                   </FormField>
                   <FormField
                     label={t("max_response_length")}
-                    description="Max response length."
+                    description={t("max_response_length_desc")}
                     stretch={false}
                   >
                     <Input readOnly={readOnly}
@@ -678,7 +846,7 @@ const EasyR1JobSetting = ({ validation,
                   ]}>
                   <FormField
                     label={t("total_epochs")}
-                    description="Total training epochs."
+                    description={t("total_epochs_desc")}
                     stretch={false}
                   >
                     <Input readOnly={readOnly}
@@ -688,7 +856,7 @@ const EasyR1JobSetting = ({ validation,
                   </FormField>
                   <FormField
                     label={t("max_steps")}
-                    description="Max steps."
+                    description={t("max_steps_desc")}
                     stretch={false}
                   >
                     <Input readOnly={readOnly}
@@ -701,7 +869,7 @@ const EasyR1JobSetting = ({ validation,
                   ]}>
               <FormField
                 label={t('save_freq')}
-                description="Number of steps between two checkpoints."
+                description={t("save_freq_desc")}
                 stretch={false}
               >
                 <Input readOnly={readOnly}
@@ -711,7 +879,7 @@ const EasyR1JobSetting = ({ validation,
               </FormField>
                <FormField
                 label={t('val_freq')}
-                description="Number of validataion steps between two checkpoints."
+                description={t("val_freq_desc")}
                 stretch={false}
               >
                 <Input readOnly={readOnly}
@@ -723,8 +891,8 @@ const EasyR1JobSetting = ({ validation,
                   <Grid gridDefinition={[{ colspan: { "default": 4, xxs: 4 } }, { colspan: { "default": 4, xxs: 4 } },
                 ]}>
                   <FormField
-                    label="Global batch size"
-                    description="用于更新policy model的batch大小"
+                    label={t("global_batch_size")}
+                    description={t("global_batch_size_desc")}
                     stretch={false}
                   >
                     <Input readOnly={readOnly}
@@ -733,8 +901,8 @@ const EasyR1JobSetting = ({ validation,
                     />
                   </FormField>
                   <FormField
-                    label="Validation temperature"
-                    description="用于推理验证集时模型采样温度"
+                    label={t("val_temperature")}
+                    description={t("val_temperature_desc")}
                     stretch={false}
                   >
                     <Input readOnly={readOnly}
@@ -754,8 +922,8 @@ const EasyR1JobSetting = ({ validation,
               <Grid gridDefinition={[{ colspan: { "default": 4, xxs: 4 } }, { colspan: { "default": 4, xxs: 4 } },
                   ]}>
               <FormField
-                label="Rollout tensor parallel size"
-                description="tensor parallel size for rollout stage"
+                label={t("rollout_tp_size")}
+                description={t("rollout_tp_size_desc")}
                 stretch={false}
               >
                 <Input readOnly={readOnly}
@@ -764,8 +932,8 @@ const EasyR1JobSetting = ({ validation,
                 />
               </FormField>
               <FormField
-                label="Rollout limit images"
-                description="vllm parameters, if use VLM, need to set >0"
+                label={t("rollout_limit_images")}
+                description={t("rollout_limit_images_desc")}
                 stretch={false}
               >
                 <Input readOnly={readOnly}
@@ -777,8 +945,8 @@ const EasyR1JobSetting = ({ validation,
               <Grid gridDefinition={[{ colspan: { "default": 4, xxs: 4 } }, { colspan: { "default": 4, xxs: 4 } },
                   ]}>
               <FormField
-                label="Rollout batch size"
-                description="一次Rollout的batch大小，建议与Global batch size保持4:1或者2:1"
+                label={t("rollout_batch_size")}
+                description={t("rollout_batch_size_desc")}
                 stretch={false}
               >
                 <Input readOnly={readOnly}
@@ -787,8 +955,8 @@ const EasyR1JobSetting = ({ validation,
                 />
               </FormField>
               <FormField
-                    label="Rollout number"
-                    description="每条prompt rollout采样条数"
+                    label={t("rollout_num")}
+                    description={t("rollout_num_desc")}
                     stretch={false}
                   >
                     <Input readOnly={readOnly}
@@ -800,8 +968,8 @@ const EasyR1JobSetting = ({ validation,
               <Grid gridDefinition={[{ colspan: { "default": 4, xxs: 4 } }, { colspan: { "default": 4, xxs: 4 } },
                   ]}>
               <FormField
-                    label="Mini Rollout batch size"
-                    description="把rollout batch再切分成小的batch"
+                    label={t("mini_rollout_batch_size")}
+                    description={t("mini_rollout_batch_size_desc")}
                     stretch={false}
                   >
                     <Input readOnly={readOnly}
@@ -810,8 +978,8 @@ const EasyR1JobSetting = ({ validation,
                     />
               </FormField>
               <FormField
-                    label="Clip ratio low"
-                    description="DAPO/GSPO/CISPO时使用"
+                    label={t("clip_ratio_low")}
+                    description={t("clip_ratio_low_desc")}
                     stretch={false}
                   >
                     <Input readOnly={readOnly}
@@ -823,8 +991,8 @@ const EasyR1JobSetting = ({ validation,
               <Grid gridDefinition={[{ colspan: { "default": 4, xxs: 4 } }, { colspan: { "default": 4, xxs: 4 } },
                   ]}>
               <FormField
-                    label="Clip ratio high"
-                    description="DAPO/GSPO/CISPO时使用"
+                    label={t("clip_ratio_high")}
+                    description={t("clip_ratio_high_desc")}
                     stretch={false}
                   >
                     <Input readOnly={readOnly}
@@ -836,8 +1004,8 @@ const EasyR1JobSetting = ({ validation,
               <Grid gridDefinition={[{ colspan: { "default": 4, xxs: 4 } }, { colspan: { "default": 4, xxs: 4 } },
                   ]}>
                 <FormField
-                  label="Offload params"
-                  description="GPU显存不够时开启，在rollout时，卸载权重到cpu内存，会减少GPU显存消耗，但是影响速度，需要更多cpu内存"
+                  label={t("offload_params")}
+                  description={t("offload_params_desc")}
                   stretch={false}
                 >
                   <Toggle
@@ -849,8 +1017,8 @@ const EasyR1JobSetting = ({ validation,
                   </Toggle>
                 </FormField>
                 <FormField
-                  label="Offload optimizer"
-                  description="GPU显存不够时开启，在rollout时，卸载优化器参数到cpu内存，会减少GPU显存消耗，但是影响速度，需要更多cpu内存"
+                  label={t("offload_optimizer")}
+                  description={t("offload_optimizer_desc")}
                   stretch={false}
                 >
                   <Toggle
@@ -896,7 +1064,7 @@ const EasyR1JobSetting = ({ validation,
               <SpaceBetween size="l">
                 <FormField
                   label={t('instance_type')}
-                  description="Selecte a instance type for training."
+                  description={t("select_instance_type")}
                   stretch={false}
                   errorText={errors.instance_type}
                   i18nStrings={{ errorIconAriaLabel: 'Error' }}
@@ -905,7 +1073,7 @@ const EasyR1JobSetting = ({ validation,
                 </FormField>
                 <FormField
                   label={t('instance_amount')}
-                  description="Set the instance amount"
+                  description={t("set_instance_amount")}
                   stretch={false}
                   errorText={errors.instance_num}
                   i18nStrings={{ errorIconAriaLabel: 'Error' }}
@@ -950,10 +1118,15 @@ const EasyR1JobSetting = ({ validation,
                     onChange={({ detail: { value } }) => onChange('max_spot_wait', value)}
                   />
                 </FormField>
+                <SpotPriceInfo
+                  instanceType={data.instance_type}
+                  useSpot={data.use_spot}
+                  readOnly={readOnly}
+                />
               </SpaceBetween>
             </Container>
           </SpaceBetween>
-      )    
+      )
   }
 
 const LFJobSetting = ({ validation,
@@ -973,16 +1146,16 @@ const LFJobSetting = ({ validation,
         <FormField
           label={t('model_name')}
           stretch={false}
-          description="选择模型"
+          description={t("select_model")}
           errorText={errors.model_name}
           i18nStrings={{ errorIconAriaLabel: 'Error' }}
         >
           <SelectModelName data={data} setData={setData} readOnly={readOnly} refs={refs} />
         </FormField>
         <FormField
-          label="使用已有的模型权重进行训练 (Optional)"
+          label={t("use_existing_model_weight")}
           stretch={false}
-          description="使用已有的模型文件进行训练"
+          description={t("use_existing_model_weight_desc")}
           errorText={errors.s3_model_path}
           i18nStrings={{ errorIconAriaLabel: 'Error' }}
         >
@@ -993,9 +1166,9 @@ const LFJobSetting = ({ validation,
             outputPath={readOnly ? data.job_payload?.s3_model_path : data.s3_model_path} />
         </FormField>
         <FormField
-          label="使用已有的Checkpoint (Optional)"
+          label={t("use_existing_checkpoint")}
           stretch={false}
-          description="使用已有的checkpoint文件继续训练（⚠️：如果是Lora训练，选择Lora模型checkpoint）"
+          description={t("use_existing_checkpoint_lora_desc")}
           errorText={errors.s3_checkpoint}
           i18nStrings={{ errorIconAriaLabel: 'Error' }}
         >
@@ -1006,8 +1179,8 @@ const LFJobSetting = ({ validation,
             outputPath={readOnly ? data.job_payload?.s3_checkpoint : data.s3_checkpoint} />
         </FormField>
         <FormField
-          label="选择Chat Template"
-          description="select a Chat Template to format the dataset"
+          label={t("select_chat_template")}
+          description={t("select_chat_template_desc")}
           stretch={false}
           errorText={errors.prompt_template}
           i18nStrings={{ errorIconAriaLabel: 'Error' }}
@@ -1016,7 +1189,7 @@ const LFJobSetting = ({ validation,
         </FormField>
         <FormField
           label={t('finetuning_method')}
-          description="Choose Finetuning method for the job"
+          description={t("choose_ft_method")}
           stretch={true}
         >
           <RadioGroup
@@ -1041,7 +1214,7 @@ const LFJobSetting = ({ validation,
           />
         </FormField> */}
         <FormField
-          label="Booster Option"
+          label={t("booster_option")}
           stretch={true}
         >
           <RadioGroup
@@ -1069,13 +1242,13 @@ const LFJobSetting = ({ validation,
     >
       <SpaceBetween size="l">
         <FormField
-          label="Training Data in S3"
+          label={t("training_data_s3")}
           stretch={false}
-          description="Input the S3 path of your own dataset"
+          description={t("training_data_s3_desc")}
           errorText={errors.s3DataPath}
           i18nStrings={{ errorIconAriaLabel: 'Error' }}
         >
-          <S3Selector label={"S3 Data Path"}
+          <S3Selector label={t("training_data_s3")}
             readOnly={readOnly}
             objectsIsItemDisabled={(item) => !item.IsFolder}
             setOutputPath={(value) => setData({ s3DataPath: value })}
@@ -1083,8 +1256,8 @@ const LFJobSetting = ({ validation,
         </FormField>
         {(data.job_payload?.s3_data_path || data.s3DataPath) &&
           <FormField
-            label="Dataset Info"
-            description="Need to prepare a data set info in Json format. For example"
+            label={t("dataset_info")}
+            description={t("dataset_info_desc_json")}
             stretch={false}
           >
             <JsonEditor
@@ -1097,7 +1270,7 @@ const LFJobSetting = ({ validation,
         <FormField
           label={t("public_datasets")}
           stretch={false}
-          description="select open-source datasets from hf"
+          description={t("select_public_datasets")}
           errorText={errors.dataset}
           i18nStrings={{ errorIconAriaLabel: 'Error' }}
         >
@@ -1106,8 +1279,8 @@ const LFJobSetting = ({ validation,
         <Grid gridDefinition={[{ colspan: { "default": 4, xxs: 4 } }, { colspan: { "default": 4, xxs: 4 } },
         ]}>
           <FormField
-            label="Max samples"
-            description="Maximum samples per dataset."
+            label={t("max_samples")}
+            description={t("max_samples_desc")}
             stretch={false}
           >
             <Input readOnly={readOnly}
@@ -1116,8 +1289,8 @@ const LFJobSetting = ({ validation,
             />
           </FormField>
           <FormField
-            label="Cutoff length"
-            description="Max tokens in input sequence."
+            label={t("cutoff_length")}
+            description={t("cutoff_length_desc")}
             stretch={false}
           >
             <Input readOnly={readOnly}
@@ -1128,8 +1301,8 @@ const LFJobSetting = ({ validation,
         </Grid>
         <Grid gridDefinition={[{ colspan: { "default": 4, xxs: 4 } }]}>
           <FormField
-            label="Val size"
-            description="Proportion of data in the dev set."
+            label={t("val_size")}
+            description={t("val_size_desc")}
             stretch={false}
           >
             <Input readOnly={readOnly}
@@ -1147,7 +1320,7 @@ const LFJobSetting = ({ validation,
       <SpaceBetween size="l">
         <FormField
           label={t('instance_type')}
-          description="Selecte a instance type for training."
+          description={t("select_instance_type")}
           stretch={false}
           errorText={errors.instance_type}
           i18nStrings={{ errorIconAriaLabel: 'Error' }}
@@ -1156,7 +1329,7 @@ const LFJobSetting = ({ validation,
         </FormField>
         <FormField
           label={t('instance_amount')}
-          description="Set the instance amount"
+          description={t("set_instance_amount")}
           stretch={false}
           errorText={errors.instance_num}
           i18nStrings={{ errorIconAriaLabel: 'Error' }}
@@ -1201,6 +1374,11 @@ const LFJobSetting = ({ validation,
             onChange={({ detail: { value } }) => onChange('max_spot_wait', value)}
           />
         </FormField>
+        <SpotPriceInfo
+          instanceType={data.instance_type}
+          useSpot={data.use_spot}
+          readOnly={readOnly}
+        />
       </SpaceBetween>
     </Container>
     <Container header={<Header variant="h2">{t("hyper_params_settings")}</Header>}
@@ -1209,8 +1387,8 @@ const LFJobSetting = ({ validation,
       <SpaceBetween size="l">
         <Grid gridDefinition={[{ colspan: { "default": 6, xxs: 4 } }, { colspan: { "default": 6, xxs: 4 } }]}>
           <FormField
-            label="Learning rate"
-            description="Initial learning rate for AdamW."
+            label={t("learning_rate")}
+            description={t("learning_rate_desc")}
             stretch={false}
           >
             <Input readOnly={readOnly}
@@ -1219,8 +1397,8 @@ const LFJobSetting = ({ validation,
             />
           </FormField>
           <FormField
-            label="Epoch"
-            description="Total number of training epochs to perform."
+            label={t("epoch")}
+            description={t("epoch_desc")}
             stretch={false}
           >
             <Input readOnly={readOnly}
@@ -1231,8 +1409,8 @@ const LFJobSetting = ({ validation,
         </Grid>
         <Grid gridDefinition={[{ colspan: { "default": 6, xxs: 4 } }, { colspan: { "default": 6, xxs: 4 } }]}>
           <FormField
-            label="Batch size per device"
-            description="Number of samples processed on each GPU."
+            label={t("batch_size_per_device")}
+            description={t("batch_size_per_device_desc")}
             stretch={false}
           >
             <Input readOnly={readOnly}
@@ -1241,8 +1419,8 @@ const LFJobSetting = ({ validation,
             />
           </FormField>
           <FormField
-            label="Gradient accumulation"
-            description="Number of steps for gradient accumulation."
+            label={t("gradient_accumulation")}
+            description={t("gradient_accumulation_desc")}
             stretch={false}
           >
             <Input readOnly={readOnly}
@@ -1253,8 +1431,8 @@ const LFJobSetting = ({ validation,
         </Grid>
         <Grid gridDefinition={[{ colspan: { "default": 6, xxs: 4 } }, { colspan: { "default": 6, xxs: 4 } }]}>
           <FormField
-            label="Training precision"
-            description="Whether to use mixed precision training."
+            label={t("training_precision")}
+            description={t("training_precision_desc")}
             stretch={false}
           >
             <SelectTrainingPrecision data={data} readOnly={readOnly} setData={setData} />
@@ -1336,7 +1514,7 @@ export default function DistributionPanel({
         <SpaceBetween size="l">
           <FormField
             label={t('job_name')}
-            description="Give a name to your job."
+            description={t("job_name_desc")}
             stretch={false}
             errorText={errors.job_name}
             i18nStrings={{ errorIconAriaLabel: 'Error' }}
@@ -1344,7 +1522,7 @@ export default function DistributionPanel({
             <Input readOnly={readOnly}
               value={data.job_name}
               onChange={({ detail: { value } }) => onChange('job_name', value)}
-              placeholder="Give a name to your job"
+              placeholder={t("job_name_desc")}
               ref={refs.job_name}
               onBlur={() => onBlur('job_name')}
             />
@@ -1352,7 +1530,7 @@ export default function DistributionPanel({
 
           <FormField
             label={t('train_stage')}
-            description="The stage to perform in training."
+            description={t("train_stage_desc")}
             stretch={false}
             errorText={errors.stage}
             i18nStrings={{ errorIconAriaLabel: 'Error' }}

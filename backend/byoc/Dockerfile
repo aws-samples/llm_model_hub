@@ -6,10 +6,13 @@ WORKDIR /app
 
 # 复制当前目录下的内容到容器内的/app
 COPY app/ /app
-
+COPY model_tar/s5cmd /app/
 # 安装新的依赖
 COPY requirements.txt /app
-RUN pip install -r requirements.txt  
+RUN pip install -r requirements.txt
+
+# Create /opt/ml/model directory for SageMaker compatibility
+RUN mkdir -p /opt/ml/model  
 
 # install flash attention 3
 # RUN git clone https://github.com/Dao-AILab/flash-attention.git && \
@@ -18,7 +21,6 @@ RUN pip install -r requirements.txt
 # 修改restapi
 RUN \
 export PYTHON_SITEPACKAGES=`python3 -c "import site; print(site.getsitepackages()[0])"`; \
-sed -i 's/model: str/model: Optional[str] = None/' ${PYTHON_SITEPACKAGES}/vllm/entrypoints/openai/protocol.py ; \
 sed -i 's/extra="forbid"//1' ${PYTHON_SITEPACKAGES}/vllm/entrypoints/openai/protocol.py ; \
 sed -i '/async def _check_model/,/:$/!b;/:$/a\
 \        if 1 == 1:\n\

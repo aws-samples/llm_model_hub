@@ -168,3 +168,12 @@ class InferenceRequest(BaseModel):
 class LoginRequest(BaseModel):
     username:str
     password:str
+
+class SpotPriceHistoryRequest(BaseModel):
+    instance_types: List[str]
+    region: Optional[str] = None
+    days: int = Field(default=7, ge=1, le=90)
+
+class SpotInterruptionRateRequest(BaseModel):
+    instance_type: str
+    region: Optional[str] = None

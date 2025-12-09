@@ -19,11 +19,11 @@ fi
 account=$(aws sts  get-caller-identity --query Account --output text)
 partition=$(aws sts get-caller-identity --query 'Arn' --output text | cut -d: -f2)
 
+VLLM_VERSION=v0.11.0
 # Public ECR image
-public_ecr_image=public.ecr.aws/f8g1z3n8/llm-modelhub-byoc-vllm:latest
+public_ecr_image=public.ecr.aws/f8g1z3n8/llm-modelhub-byoc-vllm:${VLLM_VERSION}
 
 # Private ECR configuration
-VLLM_VERSION=latest
 inference_image=sagemaker_endpoint/vllm
 inference_fullname=${account}.dkr.ecr.${region}.amazonaws.${suffix}/${inference_image}:${VLLM_VERSION}
 
@@ -63,6 +63,7 @@ docker tag ${public_ecr_image} ${inference_fullname}
 
 # Push to private ECR
 docker push ${inference_fullname}
+echo ${inference_fullname}
 # 删除 .env 文件中的 vllm_image= 这一行
 sed -i '/^vllm_image=/d' /home/ubuntu/llm_model_hub/backend/.env
 echo "" >> /home/ubuntu/llm_model_hub/backend/.env
