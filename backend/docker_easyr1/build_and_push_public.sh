@@ -15,7 +15,7 @@ if [[ $region =~ ^cn ]]; then
     suffix="com.cn"
 fi
 
-VERSION=0.3.2
+VERSION=0.3.2.4d13ebe
 # BASE_IMAGE=hiyouga/verl:ngc-th2.8.0-cu12.9-vllm0.11.0
 if [[ $region =~ ^cn ]]; then
     # BASE_IMAGE="727897471807.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.8.0-gpu-py312-cu129-ubuntu22.04-sagemaker"

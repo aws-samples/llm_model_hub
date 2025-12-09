@@ -334,7 +334,7 @@ const SetExtraSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
         <FormField
         label={t("tool_call_parser")}
         description={<Box><Box>{t("tool_call_parser_desc")}</Box>
-          <Link external href={"https://docs.sglang.ai/backend/server_arguments.html"} >{t("tool_call_parser_ref")}</Link></Box>}
+          <Link external href={"https://docs.sglang.io/advanced_features/tool_parser.html"} >{t("tool_call_parser_ref")}</Link></Box>}
         stretch={false}
       >
         <Input

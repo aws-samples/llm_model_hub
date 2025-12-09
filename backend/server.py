@@ -22,6 +22,7 @@ from pydantic import BaseModel,Field
 from model.data_model import *
 import asyncio
 from training.jobs import create_job,list_jobs,get_job_by_id,delete_job_by_id,fetch_training_log,get_job_status,stop_and_delete_job
+from training.spot_price_history import get_spot_price_history, get_spot_interruption_rate
 from utils.get_factory_config import get_factory_config
 from utils.outputs import list_s3_objects
 from inference.endpoint_management import deploy_endpoint,delete_endpoint,get_endpoint_status,list_endpoints,deploy_endpoint_byoc,get_endpoint_engine
@@ -179,6 +180,33 @@ async def handle_get_job_status(request:GetJobsRequest):
 async def handle_list_s3_path(request:ListS3ObjectsRequest):
     ret = list_s3_objects(request.output_s3_path)
     return S3ObjectsResponse(response_id=str(uuid.uuid4()),objects=ret)
+
+@app.post("/v1/spot_price_history",dependencies=[Depends(check_api_key)])
+async def handle_spot_price_history(request:SpotPriceHistoryRequest):
+    """
+    Query EC2 Spot Price History for specified instance types.
+    Returns price statistics and availability zones to help users assess spot instance viability.
+    """
+    result = await asyncio.to_thread(
+        get_spot_price_history,
+        instance_types=request.instance_types,
+        region=request.region,
+        days=request.days
+    )
+    return CommonResponse(response_id=str(uuid.uuid4()), response=result)
+
+@app.post("/v1/spot_interruption_rate",dependencies=[Depends(check_api_key)])
+async def handle_spot_interruption_rate(request:SpotInterruptionRateRequest):
+    """
+    Get estimated spot interruption rate for an instance type.
+    Returns risk assessment based on price volatility.
+    """
+    result = await asyncio.to_thread(
+        get_spot_interruption_rate,
+        instance_type=request.instance_type,
+        region=request.region
+    )
+    return CommonResponse(response_id=str(uuid.uuid4()), response=result)
     
 @app.post('/v1/deploy_endpoint',dependencies=[Depends(check_api_key)])
 async def handle_deploy_endpoint(request:DeployModelRequest):

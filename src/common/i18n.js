@@ -331,7 +331,21 @@ i18n
             enforce_eager:'enforce-eager',
             enforce_eager_desc:'Whether to enable PyTorch eager-mode, default False',
             max_num_seqs:'max-num-seqs',
-            max_num_seqs_desc:'Maximum number of sequences per iteration, default 256'
+            max_num_seqs_desc:'Maximum number of sequences per iteration, default 256',
+            spot_price_info:'Spot Price Info',
+            spot_price_loading:'Loading spot price information...',
+            spot_price_error:'Failed to load spot price information',
+            spot_current_price:'Current Price',
+            spot_price_range:'Price Range',
+            spot_volatility:'Volatility',
+            spot_risk_level:'Risk Level',
+            spot_recommended_az:'Recommended AZ',
+            spot_risk_low:'Low',
+            spot_risk_medium:'Medium',
+            spot_risk_high:'High',
+            spot_risk_unknown:'Unknown',
+            spot_not_available:'Spot pricing not available for this instance type',
+            spot_select_instance:'Select an instance type and enable spot to view pricing'
         }
       },
       zh:{
@@ -650,7 +664,21 @@ i18n
             enforce_eager:'enforce-eager',
             enforce_eager_desc:'是否启用PyTorch eager-mode，默认False',
             max_num_seqs:'max-num-seqs',
-            max_num_seqs_desc:'Maximum number of sequences per iteration，默认值256'
+            max_num_seqs_desc:'Maximum number of sequences per iteration，默认值256',
+            spot_price_info:'Spot价格信息',
+            spot_price_loading:'正在加载Spot价格信息...',
+            spot_price_error:'加载Spot价格信息失败',
+            spot_current_price:'当前价格',
+            spot_price_range:'价格区间',
+            spot_volatility:'价格波动',
+            spot_risk_level:'中断风险',
+            spot_recommended_az:'推荐可用区',
+            spot_risk_low:'低',
+            spot_risk_medium:'中',
+            spot_risk_high:'高',
+            spot_risk_unknown:'未知',
+            spot_not_available:'该实例类型无Spot定价信息',
+            spot_select_instance:'选择实例类型并启用Spot以查看价格'
 
         }
       }

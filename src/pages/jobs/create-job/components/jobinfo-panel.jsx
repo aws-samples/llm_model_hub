@@ -16,6 +16,10 @@ import {
   Multiselect,
   Toggle,
   Textarea,
+  Box,
+  StatusIndicator,
+  Spinner,
+  ColumnLayout,
 } from '@cloudscape-design/components';
 import { FT_OPTIONS, QUANT_OPTIONS, TRAINING_STAGES, TRAINING_PRECISION, OPTMIZERS, INSTANCE_TYPES, BOOSTER_OPTIONS, DEEPSPEED,FORMAT_PROMPT_OPTIONS } from '../form-config';
 import validateField from '../form-validation-config';
@@ -23,6 +27,170 @@ import { remotePost } from '../../../../common/api-gateway';
 import { S3Selector } from './output-path';
 import { JsonEditor,PythonEditor } from './code-editor';
 import { t } from 'i18next';
+
+
+// SpotPriceInfo component to display spot price and interruption rate
+const SpotPriceInfo = ({ instanceType, useSpot, readOnly }) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [priceData, setPriceData] = useState(null);
+  const [riskData, setRiskData] = useState(null);
+
+  useEffect(() => {
+    // Only fetch if we have an instance type and spot is enabled
+    if (!instanceType || !useSpot || readOnly) {
+      setPriceData(null);
+      setRiskData(null);
+      return;
+    }
+
+    const fetchSpotInfo = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        // Fetch spot price history
+        const priceResponse = await remotePost(
+          { instance_types: [instanceType], days: 7 },
+          'spot_price_history'
+        );
+
+        if (priceResponse?.response?.instance_types?.[instanceType]) {
+          setPriceData(priceResponse.response.instance_types[instanceType]);
+        } else {
+          setPriceData(null);
+        }
+
+        // Fetch interruption rate
+        const riskResponse = await remotePost(
+          { instance_type: instanceType },
+          'spot_interruption_rate'
+        );
+
+        if (riskResponse?.response) {
+          setRiskData(riskResponse.response);
+        } else {
+          setRiskData(null);
+        }
+      } catch (err) {
+        console.error('Error fetching spot price info:', err);
+        setError(err.message || t('spot_price_error'));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSpotInfo();
+  }, [instanceType, useSpot, readOnly]);
+
+  // Don't show anything if spot is not enabled or no instance type selected
+  if (!useSpot || readOnly) {
+    return null;
+  }
+
+  if (!instanceType) {
+    return (
+      <Box color="text-status-inactive" padding={{ top: 's' }}>
+        <StatusIndicator type="info">{t('spot_select_instance')}</StatusIndicator>
+      </Box>
+    );
+  }
+
+  if (loading) {
+    return (
+      <Box padding={{ top: 's' }}>
+        <SpaceBetween direction="horizontal" size="xs">
+          <Spinner size="normal" />
+          <span>{t('spot_price_loading')}</span>
+        </SpaceBetween>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box padding={{ top: 's' }}>
+        <StatusIndicator type="error">{error}</StatusIndicator>
+      </Box>
+    );
+  }
+
+  if (!priceData?.available) {
+    return (
+      <Box padding={{ top: 's' }}>
+        <StatusIndicator type="warning">{t('spot_not_available')}</StatusIndicator>
+      </Box>
+    );
+  }
+
+  const getRiskStatusType = (riskLevel) => {
+    switch (riskLevel) {
+      case 'low':
+        return 'success';
+      case 'medium':
+        return 'warning';
+      case 'high':
+        return 'error';
+      default:
+        return 'info';
+    }
+  };
+
+  const getRiskLabel = (riskLevel) => {
+    switch (riskLevel) {
+      case 'low':
+        return t('spot_risk_low');
+      case 'medium':
+        return t('spot_risk_medium');
+      case 'high':
+        return t('spot_risk_high');
+      default:
+        return t('spot_risk_unknown');
+    }
+  };
+
+  return (
+    <Box padding={{ top: 's' }}>
+      <ExpandableSection headerText={t('spot_price_info')} variant="footer" defaultExpanded>
+        <SpaceBetween size="s">
+          <ColumnLayout columns={2} variant="text-grid">
+            <div>
+              <Box variant="awsui-key-label">{t('spot_current_price')}</Box>
+              <Box variant="p">
+                ${priceData.availability_zones?.[0]?.current_price?.toFixed(4) || 'N/A'}/hr
+              </Box>
+            </div>
+            <div>
+              <Box variant="awsui-key-label">{t('spot_price_range')}</Box>
+              <Box variant="p">
+                ${priceData.min_price?.toFixed(4)} - ${priceData.max_price?.toFixed(4)}/hr
+              </Box>
+            </div>
+            <div>
+              <Box variant="awsui-key-label">{t('spot_volatility')}</Box>
+              <Box variant="p">{priceData.price_volatility?.toFixed(1)}%</Box>
+            </div>
+            <div>
+              <Box variant="awsui-key-label">{t('spot_risk_level')}</Box>
+              <StatusIndicator type={getRiskStatusType(riskData?.risk_level)}>
+                {getRiskLabel(riskData?.risk_level)}
+              </StatusIndicator>
+            </div>
+            <div>
+              <Box variant="awsui-key-label">{t('spot_recommended_az')}</Box>
+              <Box variant="p">{priceData.recommended_az || 'N/A'}</Box>
+            </div>
+          </ColumnLayout>
+          {riskData?.risk_description && (
+            <Box variant="small" color="text-body-secondary">
+              {riskData.risk_description}
+            </Box>
+          )}
+        </SpaceBetween>
+      </ExpandableSection>
+    </Box>
+  );
+};
 
 
 function AdvancedConfigs({ onChange, readOnly, data, setData }) {
@@ -950,10 +1118,15 @@ const EasyR1JobSetting = ({ validation,
                     onChange={({ detail: { value } }) => onChange('max_spot_wait', value)}
                   />
                 </FormField>
+                <SpotPriceInfo
+                  instanceType={data.instance_type}
+                  useSpot={data.use_spot}
+                  readOnly={readOnly}
+                />
               </SpaceBetween>
             </Container>
           </SpaceBetween>
-      )    
+      )
   }
 
 const LFJobSetting = ({ validation,
@@ -1201,6 +1374,11 @@ const LFJobSetting = ({ validation,
             onChange={({ detail: { value } }) => onChange('max_spot_wait', value)}
           />
         </FormField>
+        <SpotPriceInfo
+          instanceType={data.instance_type}
+          useSpot={data.use_spot}
+          readOnly={readOnly}
+        />
       </SpaceBetween>
     </Container>
     <Container header={<Header variant="h2">{t("hyper_params_settings")}</Header>}

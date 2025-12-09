@@ -15,7 +15,7 @@ if [[ $region =~ ^cn ]]; then
     suffix="com.cn"
 fi
 
-VERSION=0.9.4.dev0
+VERSION=0.9.4.cb4cdb4
 inference_image=llm-modelhub-llamafactory
 public_ecr_uri=public.ecr.aws/f8g1z3n8
 inference_fullname=${public_ecr_uri}/${inference_image}:latest

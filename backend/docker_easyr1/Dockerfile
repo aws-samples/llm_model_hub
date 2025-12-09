@@ -14,6 +14,16 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
+# Install systemctl
+RUN apt-get update && \
+    apt-get install -y -o Dpkg::Options::="--force-confdef" systemd && \
+    apt-get clean
+
+# Install tini
+RUN apt-get update && \
+    apt-get install -y tini && \
+    apt-get clean
+
 
 # Make PIP_INDEX available after FROM
 ARG PIP_INDEX
@@ -21,6 +31,30 @@ ARG PIP_INDEX
 # RUN pip3 install sagemaker-training boto3
 
 
+# Uninstall nv-pytorch fork
+RUN pip uninstall -y torch torchvision torchaudio \
+    pytorch-quantization pytorch-triton torch-tensorrt \
+    transformer-engine flash-attn apex megatron-core \
+    xgboost opencv grpcio
+
+# Remove nv file
+RUN rm -rf /workspace
+
+# Fix cv2
+RUN rm -rf /usr/local/lib/python3.10/dist-packages/cv2
+
+# Install torch-2.8.0+cu128 + vllm-0.11.0
+RUN pip install --no-cache-dir "vllm==0.11.0" "torch==2.8.0" "torchvision==0.23.0" "torchaudio==2.8.0" tensordict torchdata \
+    "transformers[hf_xet]>=4.51.0" accelerate datasets peft hf-transfer \
+    "numpy<2.0.0" "pyarrow>=15.0.0" "grpcio>=1.62.1" "optree>=0.13.0" pandas \
+    ray[default] codetiming hydra-core pylatexenc qwen-vl-utils wandb liger-kernel mathruler \
+    pytest yapf py-spy pre-commit ruff
+
+# Install flash-attn-2.8.3
+RUN ABI_FLAG=$(python -c "import torch; print('TRUE' if torch._C._GLIBCXX_USE_CXX11_ABI else 'FALSE')") && \
+    URL="https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.8cxx11abi${ABI_FLAG}-cp312-cp312-linux_x86_64.whl" && \
+    wget -nv -P /opt/tiger "${URL}" && \
+    pip install --no-cache-dir "/opt/tiger/$(basename ${URL})"
 
 # Install the requirements
 COPY requirements_deps.txt /opt/ml/code/
