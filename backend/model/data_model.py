@@ -1,11 +1,39 @@
 import sys
+import warnings
 from typing import Annotated, Sequence, TypedDict, Dict, Optional,List, Any,TypedDict,Literal
 from enum import Enum
 from datetime import datetime
-from pydantic import BaseModel,Field
+from pydantic import BaseModel,Field, field_validator
 
 
 sys.path.append('./')
+
+# HyperPod Instance Type Pod Limits
+# Instances with single ENI have very limited pod capacity (~14 pods max)
+# Base HyperPod components + inference operator + KEDA require 15+ pods
+# These instance types are NOT recommended for HyperPod EKS clusters
+HYPERPOD_LOW_POD_CAPACITY_INSTANCES = {
+    # ml.g5 family - xlarge and 2xlarge have single ENI (14 pods max)
+    'ml.g5.xlarge': 14,
+    'ml.g5.2xlarge': 14,
+    # ml.g4dn family - xlarge and 2xlarge have single ENI
+    'ml.g4dn.xlarge': 14,
+    'ml.g4dn.2xlarge': 14,
+    # ml.p3 family - 2xlarge has limited capacity
+    'ml.p3.2xlarge': 14,
+}
+
+# Minimum recommended instance types for HyperPod (4xlarge or larger recommended)
+HYPERPOD_RECOMMENDED_MIN_INSTANCES = [
+    'ml.g5.4xlarge',    # 29 pods max, 1 GPU
+    'ml.g5.8xlarge',    # 58 pods max, 1 GPU
+    'ml.g5.12xlarge',   # 58 pods max, 4 GPUs
+    'ml.g5.24xlarge',   # 234 pods max, 4 GPUs
+    'ml.g5.48xlarge',   # 234 pods max, 8 GPUs
+    'ml.p4d.24xlarge',  # 234 pods max, 8 GPUs
+    'ml.p4de.24xlarge', # 234 pods max, 8 GPUs
+    'ml.p5.48xlarge',   # 234 pods max, 8 GPUs
+]
 
 #create an enum for job_type, with [sft,pt]
 
@@ -116,6 +144,35 @@ class S3ObjectsResponse(BaseModel):
     response_id:str
     objects:List[Dict[str,Any]]
     
+class HyperPodDeployConfig(BaseModel):
+    """Configuration for HyperPod deployment with advanced features"""
+    # Basic configuration
+    replicas: int = 1
+    namespace: str = "default"
+
+    # Auto-scaling configuration (KEDA-based)
+    enable_autoscaling: bool = False
+    min_replicas: int = 1
+    max_replicas: int = 10
+    autoscaling_metric: str = "Invocations"  # CloudWatch metric name
+    autoscaling_target: int = 100  # Target value for metric
+    metric_collection_period: int = 60  # seconds
+    cooldown_period: int = 300  # seconds
+
+    # KV Cache configuration
+    enable_kv_cache: bool = False
+    enable_l1_cache: bool = True  # Local CPU memory cache
+    enable_l2_cache: bool = False  # Distributed cache
+    kv_cache_backend: str = "tieredstorage"  # "tieredstorage" or "redis"
+    l2_cache_url: Optional[str] = None  # Required for redis backend
+
+    # Intelligent Routing configuration
+    enable_intelligent_routing: bool = False
+    routing_strategy: str = "prefixaware"  # "prefixaware", "kvaware", "session", "roundrobin"
+
+    # ALB configuration
+    use_public_alb: bool = False  # If True, configure ALB as internet-facing
+
 class DeployModelRequest(BaseModel):
     job_id:str
     model_name:Optional[str] = ''
@@ -126,6 +183,10 @@ class DeployModelRequest(BaseModel):
     cust_repo_type:Optional[str] = ''
     cust_repo_addr:Optional[str] = ''
     extra_params:Optional[Dict[str,Any]] = None
+    # HyperPod deployment options
+    deployment_target: Literal["sagemaker", "hyperpod"] = "sagemaker"
+    hyperpod_cluster_id: Optional[str] = None  # Required when deployment_target="hyperpod"
+    hyperpod_config: Optional[HyperPodDeployConfig] = None
     
 class EndpointRequest(BaseModel):
     endpoint_name:str
@@ -149,6 +210,9 @@ class EndpointInfo(BaseModel):
     endpoint_create_time: Optional[datetime] = None
     endpoint_delete_time:Optional[datetime] = None
     extra_config:Optional[str]= None
+    # HyperPod deployment info
+    deployment_target: str = "sagemaker"  # "sagemaker" or "hyperpod"
+    hyperpod_cluster_id: Optional[str] = None
     
     
 class ListEndpointsResponse(BaseModel):
@@ -177,3 +241,161 @@ class SpotPriceHistoryRequest(BaseModel):
 class SpotInterruptionRateRequest(BaseModel):
     instance_type: str
     region: Optional[str] = None
+
+# ==================== HyperPod EKS Cluster Models ====================
+
+class ClusterStatus(Enum):
+    """HyperPod/EKS Cluster status"""
+    PENDING = "PENDING"
+    CREATING = "CREATING"
+    UPDATING = "UPDATING"
+    ACTIVE = "ACTIVE"
+    DELETING = "DELETING"
+    FAILED = "FAILED"
+    DELETED = "DELETED"
+
+class InstanceGroupConfig(BaseModel):
+    """Instance group configuration for HyperPod cluster"""
+    name: str
+    instance_type: str
+    instance_count: int = 0
+    min_instance_count: Optional[int] = None
+    threads_per_core: int = 1
+    use_spot: bool = False
+    kubernetes_labels: Optional[Dict[str, str]] = None
+    training_plan_arn: Optional[str] = None
+    storage_volume_size: int = 500  # Additional EBS volume size in GB
+    enable_instance_stress_check: bool = False  # Enable InstanceStress deep health check
+    enable_instance_connectivity_check: bool = False  # Enable InstanceConnectivity deep health check
+
+    @field_validator('instance_type')
+    @classmethod
+    def validate_instance_type_pod_capacity(cls, v: str) -> str:
+        """
+        Validate instance type has sufficient pod capacity for HyperPod.
+
+        HyperPod EKS clusters require at least 15+ pods for base components:
+        - kube-system pods (coredns, aws-node, kube-proxy, etc.)
+        - cert-manager
+        - KEDA
+        - HyperPod inference operator
+        - Your actual workload pods
+
+        Instances with single ENI (xlarge, 2xlarge) have max ~14 pods which is insufficient.
+        """
+        if v in HYPERPOD_LOW_POD_CAPACITY_INSTANCES:
+            max_pods = HYPERPOD_LOW_POD_CAPACITY_INSTANCES[v]
+            raise ValueError(
+                f"Instance type '{v}' has insufficient pod capacity ({max_pods} max) for HyperPod EKS. "
+                f"HyperPod requires 15+ pods for base components. "
+                f"Please use ml.g5.4xlarge or larger. "
+                f"Recommended: {', '.join(HYPERPOD_RECOMMENDED_MIN_INSTANCES[:3])}"
+            )
+        return v
+
+class VPCConfigModel(BaseModel):
+    """VPC configuration for cluster deployment"""
+    vpc_id: Optional[str] = None  # Use existing VPC
+    vpc_cidr: str = "10.0.0.0/16"
+    public_subnet_cidrs: List[str] = ["10.0.1.0/24", "10.0.2.0/24"]
+    private_subnet_cidrs: List[str] = ["10.0.10.0/24", "10.0.20.0/24"]
+    subnet_ids: Optional[List[str]] = None  # Use existing subnets
+    security_group_ids: Optional[List[str]] = None  # Use existing SGs
+
+class EKSConfigModel(BaseModel):
+    """EKS cluster configuration"""
+    kubernetes_version: str = "1.31"
+    endpoint_public_access: bool = True
+    endpoint_private_access: bool = True
+    authentication_mode: str = "API_AND_CONFIG_MAP"
+    enable_logging: bool = True
+
+class HyperPodConfigModel(BaseModel):
+    """HyperPod cluster configuration"""
+    node_recovery: str = "Automatic"
+    node_provisioning_mode: str = "Continuous"  # "Continuous" or "OnDemand"
+    enable_deep_health_checks: bool = True
+    enable_autoscaling: bool = False
+
+class CreateClusterRequest(BaseModel):
+    """Request to create HyperPod EKS cluster"""
+    cluster_name: str
+    eks_cluster_name: Optional[str] = None  # Defaults to cluster_name-eks
+    instance_groups: List[InstanceGroupConfig]
+    vpc_config: Optional[VPCConfigModel] = None
+    eks_config: Optional[EKSConfigModel] = None
+    hyperpod_config: Optional[HyperPodConfigModel] = None
+    lifecycle_script_s3_uri: Optional[str] = None
+    s3_mount_bucket: Optional[str] = None  # S3 bucket for Mountpoint, defaults to lifecycle bucket if not specified
+    tags: Optional[Dict[str, str]] = None
+
+class ClusterInfo(BaseModel):
+    """HyperPod EKS cluster information"""
+    cluster_id: str
+    cluster_name: str
+    eks_cluster_name: str
+    eks_cluster_arn: Optional[str] = None
+    hyperpod_cluster_arn: Optional[str] = None
+    cluster_status: ClusterStatus
+    vpc_id: Optional[str] = None
+    subnet_ids: Optional[List[str]] = None
+    instance_groups: Optional[List[Dict[str, Any]]] = None
+    cluster_create_time: Optional[datetime] = None
+    cluster_update_time: Optional[datetime] = None
+    error_message: Optional[str] = None
+    cluster_config: Optional[Dict[str, Any]] = None
+    ts: int
+
+class ListClustersRequest(BaseModel):
+    """Request to list clusters"""
+    page_size: int = 20
+    page_index: Optional[int] = Field(default=1)
+    query_terms: Optional[Dict[str, Any]] = Field(default=None)
+
+class ListClustersResponse(BaseModel):
+    """Response for listing clusters"""
+    response_id: str
+    clusters: List[ClusterInfo]
+    total_count: int
+
+class GetClusterRequest(BaseModel):
+    """Request to get cluster by ID"""
+    cluster_id: str
+
+class ClusterResponse(BaseModel):
+    """Single cluster response"""
+    response_id: str
+    body: ClusterInfo
+
+class DeleteClusterRequest(BaseModel):
+    """Request to delete cluster"""
+    cluster_id: str
+    delete_vpc: bool = False  # Whether to delete associated VPC resources
+
+class UpdateClusterRequest(BaseModel):
+    """Request to update cluster"""
+    cluster_id: str
+    instance_groups: Optional[List[InstanceGroupConfig]] = None
+    hyperpod_config: Optional[HyperPodConfigModel] = None
+
+class ListClusterNodesRequest(BaseModel):
+    """Request to list cluster nodes/instances"""
+    cluster_id: str
+
+class ClusterNodeInfo(BaseModel):
+    """Information about a single cluster node/instance"""
+    instance_id: str
+    instance_status: str
+    instance_group_name: str
+    instance_type: Optional[str] = None
+    launch_time: Optional[str] = None
+    private_dns_name: Optional[str] = None
+    private_ip_address: Optional[str] = None
+    threads_per_core: Optional[int] = None
+    placement: Optional[Dict[str, Any]] = None
+
+class ListClusterNodesResponse(BaseModel):
+    """Response for listing cluster nodes"""
+    response_id: str
+    nodes: List[ClusterNodeInfo]
+    total_count: int

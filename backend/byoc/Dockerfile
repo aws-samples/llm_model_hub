@@ -1,5 +1,5 @@
 ARG VLLM_VERSION
-FROM vllm/vllm-openai:$VLLM_VERSION
+FROM    :$VLLM_VERSION
 
 # 设置工作目录
 WORKDIR /app

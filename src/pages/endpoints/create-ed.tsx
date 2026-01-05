@@ -3,10 +3,10 @@
 import React, { useEffect, useState } from 'react';
 import {
   Button, Modal, Box, RadioGroup, RadioGroupProps, FormField,
-  Link, Input,
+  Link, Input, Alert,
   Toggle, SpaceBetween, Select, SelectProps
 } from '@cloudscape-design/components';
-import { remotePost } from '../../common/api-gateway';
+import { remotePost, remoteGet } from '../../common/api-gateway';
 import { useSimpleNotifications } from '../commons/use-notifications';
 import { useNavigate } from "react-router-dom";
 import { t } from 'i18next';
@@ -107,6 +107,11 @@ const ENGINE: RadioGroupProps.RadioButtonDefinition[] = [
   // { label: 'HF accelerate', value: 'scheduler' },
 ]
 
+const DEPLOYMENT_TARGETS: RadioGroupProps.RadioButtonDefinition[] = [
+  { label: 'SageMaker Endpoint', value: 'sagemaker' },
+  { label: 'HyperPod Cluster', value: 'hyperpod' },
+]
+
 const defaultData = {
   instance_type: 'ml.g5.2xlarge',
   engine: 'auto',
@@ -115,8 +120,35 @@ const defaultData = {
   quantize: '',
   cust_repo_type: 'hf',
   cust_repo_addr: '',
-  extra_params:{enable_prefix_caching:true}
+  extra_params:{enable_prefix_caching:true},
+  deployment_target: 'sagemaker',
+  hyperpod_cluster_id: undefined,
+  availableInstanceTypes: [] as string[],  // Available instance types from selected HyperPod cluster
+  hyperpod_config: {
+    replicas: 1,
+    namespace: 'default',
+    enable_autoscaling: false,
+    min_replicas: 1,
+    max_replicas: 10,
+    enable_kv_cache: false,
+    kv_cache_backend: 'tieredstorage',
+    enable_intelligent_routing: false,
+    routing_strategy: 'prefixaware',
+    use_public_alb: false
+  }
 }
+
+const ROUTING_STRATEGIES: SelectProps.Option[] = [
+  { label: 'Prefix Aware', value: 'prefixaware', description: 'Route based on prompt prefix (default)' },
+  { label: 'KV Aware', value: 'kvaware', description: 'Real-time KV cache tracking for maximum cache hits' },
+  { label: 'Session', value: 'session', description: 'Route based on user session for multi-turn conversations' },
+  { label: 'Round Robin', value: 'roundrobin', description: 'Simple round-robin distribution' },
+]
+
+const KV_CACHE_BACKENDS: SelectProps.Option[] = [
+  { label: 'Tiered Storage (Recommended)', value: 'tieredstorage', description: 'Distributed tiered storage cache' },
+  { label: 'Redis', value: 'redis', description: 'Redis-based distributed cache' },
+]
 
 const instanceCalculator = process.env.REACT_APP_CALCULATOR;
 
@@ -170,6 +202,31 @@ const SelectModelName = ({ data, setData, readOnly }: SelectModelProps) => {
 }
 const SelectInstanceType = ({ data, setData, readOnly }: SelectInstanceTypeProps) => {
   const [selectOption, setSelectOption] = useState<SelectProps.Option | null>(INSTANCE_TYPES[3]);
+
+  // Filter instance types based on deployment target and available types
+  const availableOptions = React.useMemo(() => {
+    if (data.deployment_target === 'hyperpod' && data.availableInstanceTypes?.length > 0) {
+      // Only show instance types available in the selected HyperPod cluster
+      return INSTANCE_TYPES.filter(opt => data.availableInstanceTypes.includes(opt.value));
+    }
+    return INSTANCE_TYPES;
+  }, [data.deployment_target, data.availableInstanceTypes]);
+
+  // Update selection when available options change
+  React.useEffect(() => {
+    if (data.deployment_target === 'hyperpod' && data.availableInstanceTypes?.length > 0) {
+      const currentValue = selectOption?.value;
+      if (!data.availableInstanceTypes.includes(currentValue)) {
+        // Current selection is not available, auto-select first available
+        const firstAvailable = availableOptions[0];
+        if (firstAvailable) {
+          setSelectOption(firstAvailable);
+          setData((pre: any) => ({ ...pre, instance_type: firstAvailable.value }));
+        }
+      }
+    }
+  }, [data.availableInstanceTypes, data.deployment_target]);
+
   return (
     <Select
       selectedOption={selectOption}
@@ -178,8 +235,12 @@ const SelectInstanceType = ({ data, setData, readOnly }: SelectInstanceTypeProps
         setSelectOption(detail.selectedOption);
         setData((pre: any) => ({ ...pre, instance_type: detail.selectedOption.value }))
       }}
-      options={INSTANCE_TYPES}
+      options={availableOptions}
       selectedAriaLabel="Selected"
+      placeholder={data.deployment_target === 'hyperpod' && availableOptions.length === 0
+        ? "Select a cluster first"
+        : "Select instance type"
+      }
     />
   )
 }
@@ -351,6 +412,300 @@ const SetExtraSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   )
 }
 
+
+const SetDeploymentTarget = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
+  return (
+    <RadioGroup
+      items={DEPLOYMENT_TARGETS}
+      readOnly={readOnly}
+      value={data.deployment_target || 'sagemaker'}
+      onChange={({ detail }) => {
+        setData((pre: any) => ({ ...pre, deployment_target: detail.value }))
+      }}
+    />
+  )
+}
+
+interface ClusterSelectorProps {
+  data: any;
+  setData: (value: any) => void;
+  readOnly: boolean;
+}
+
+const SelectHyperPodCluster = ({ data, setData, readOnly }: ClusterSelectorProps) => {
+  const [loadStatus, setLoadStatus] = useState<any>("loading");
+  const [clusters, setClusters] = useState<any[]>([]);
+  const [selectOption, setSelectOption] = useState<SelectProps.Option | null>(null);
+  const [loadingInstanceTypes, setLoadingInstanceTypes] = useState(false);
+
+  const handleLoadClusters = async () => {
+    setLoadStatus("loading");
+    try {
+      const response = await remotePost({ page_size: 100, page_index: 1 }, 'list_clusters');
+      const clusterList = response.clusters || [];
+      // Filter only ACTIVE clusters
+      const activeClusters = clusterList.filter((c: any) => c.cluster_status === 'ACTIVE');
+      setClusters(activeClusters);
+      setLoadStatus("finished");
+    } catch (error) {
+      console.log(error);
+      setLoadStatus("error");
+    }
+  };
+
+  const handleLoadInstanceTypes = async (clusterId: string) => {
+    setLoadingInstanceTypes(true);
+    try {
+      const response = await remoteGet(`cluster_instance_types/${clusterId}`);
+      const instanceTypes = response?.response?.body?.instance_types || [];
+      setData((pre: any) => ({
+        ...pre,
+        availableInstanceTypes: instanceTypes,
+        // Auto-select the first available instance type if current selection is invalid
+        instance_type: instanceTypes.length > 0 && !instanceTypes.includes(pre.instance_type)
+          ? instanceTypes[0]
+          : pre.instance_type
+      }));
+    } catch (error) {
+      console.log('Failed to load instance types:', error);
+      setData((pre: any) => ({ ...pre, availableInstanceTypes: [] }));
+    }
+    setLoadingInstanceTypes(false);
+  };
+
+  useEffect(() => {
+    if (data.deployment_target === 'hyperpod') {
+      handleLoadClusters();
+    }
+  }, [data.deployment_target]);
+
+  return (
+    <Select
+      statusType={loadStatus}
+      onLoadItems={handleLoadClusters}
+      disabled={readOnly || loadingInstanceTypes}
+      selectedOption={selectOption}
+      placeholder={loadingInstanceTypes ? "Loading instance types..." : "Select a HyperPod cluster"}
+      onChange={({ detail }) => {
+        setSelectOption(detail.selectedOption);
+        const clusterId = detail.selectedOption?.value;
+        setData((pre: any) => ({ ...pre, hyperpod_cluster_id: clusterId }));
+        // Fetch available instance types for this cluster
+        if (clusterId) {
+          handleLoadInstanceTypes(clusterId);
+        }
+      }}
+      options={clusters.map((cluster) => ({
+        label: cluster.cluster_name,
+        value: cluster.cluster_id,
+        description: `EKS: ${cluster.eks_cluster_name}`
+      }))}
+      selectedAriaLabel="Selected"
+    />
+  )
+}
+
+const SetHyperPodReplicas = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
+  const [value, setValue] = useState<string>('1');
+  return (
+    <Input
+      readOnly={readOnly}
+      value={value}
+      type="number"
+      onChange={({ detail }) => {
+        setValue(detail.value);
+        setData((pre: any) => ({
+          ...pre,
+          hyperpod_config: { ...pre.hyperpod_config, replicas: parseInt(detail.value) || 1 }
+        }))
+      }}
+    />
+  )
+}
+
+const SetHyperPodNamespace = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
+  const [value, setValue] = useState<string>('default');
+  return (
+    <Input
+      readOnly={readOnly}
+      value={value}
+      placeholder="default"
+      onChange={({ detail }) => {
+        setValue(detail.value);
+        setData((pre: any) => ({
+          ...pre,
+          hyperpod_config: { ...pre.hyperpod_config, namespace: detail.value || 'default' }
+        }))
+      }}
+    />
+  )
+}
+
+// HyperPod Auto-scaling Configuration
+const SetHyperPodAutoscaling = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
+  const [enabled, setEnabled] = useState<boolean>(false);
+  const [minReplicas, setMinReplicas] = useState<string>('1');
+  const [maxReplicas, setMaxReplicas] = useState<string>('10');
+
+  return (
+    <SpaceBetween size="s">
+      <Toggle
+        readOnly={readOnly}
+        checked={enabled}
+        onChange={({ detail }) => {
+          setEnabled(detail.checked);
+          setData((pre: any) => ({
+            ...pre,
+            hyperpod_config: { ...pre.hyperpod_config, enable_autoscaling: detail.checked }
+          }))
+        }}
+      >
+        {t("enable_autoscaling") || "Enable Auto-scaling"}
+      </Toggle>
+      {enabled && (
+        <SpaceBetween size="s" direction="horizontal">
+          <FormField label={t("min_replicas") || "Min Replicas"}>
+            <Input
+              readOnly={readOnly}
+              value={minReplicas}
+              type="number"
+              onChange={({ detail }) => {
+                setMinReplicas(detail.value);
+                setData((pre: any) => ({
+                  ...pre,
+                  hyperpod_config: { ...pre.hyperpod_config, min_replicas: parseInt(detail.value) || 1 }
+                }))
+              }}
+            />
+          </FormField>
+          <FormField label={t("max_replicas") || "Max Replicas"}>
+            <Input
+              readOnly={readOnly}
+              value={maxReplicas}
+              type="number"
+              onChange={({ detail }) => {
+                setMaxReplicas(detail.value);
+                setData((pre: any) => ({
+                  ...pre,
+                  hyperpod_config: { ...pre.hyperpod_config, max_replicas: parseInt(detail.value) || 10 }
+                }))
+              }}
+            />
+          </FormField>
+        </SpaceBetween>
+      )}
+    </SpaceBetween>
+  )
+}
+
+// HyperPod KV Cache Configuration
+const SetHyperPodKVCache = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
+  const [enabled, setEnabled] = useState<boolean>(false);
+  const [backend, setBackend] = useState<SelectProps.Option | null>(KV_CACHE_BACKENDS[0]);
+
+  return (
+    <SpaceBetween size="s">
+      <Toggle
+        readOnly={readOnly}
+        checked={enabled}
+        onChange={({ detail }) => {
+          setEnabled(detail.checked);
+          setData((pre: any) => ({
+            ...pre,
+            hyperpod_config: { ...pre.hyperpod_config, enable_kv_cache: detail.checked }
+          }))
+        }}
+      >
+        {t("enable_kv_cache") || "Enable KV Cache"}
+      </Toggle>
+      {enabled && (
+        <FormField label={t("kv_cache_backend") || "KV Cache Backend"}>
+          <Select
+            disabled={readOnly}
+            selectedOption={backend}
+            onChange={({ detail }) => {
+              setBackend(detail.selectedOption);
+              setData((pre: any) => ({
+                ...pre,
+                hyperpod_config: { ...pre.hyperpod_config, kv_cache_backend: detail.selectedOption?.value || 'tieredstorage' }
+              }))
+            }}
+            options={KV_CACHE_BACKENDS}
+            selectedAriaLabel="Selected"
+          />
+        </FormField>
+      )}
+    </SpaceBetween>
+  )
+}
+
+// HyperPod Intelligent Routing Configuration
+const SetHyperPodIntelligentRouting = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
+  const [enabled, setEnabled] = useState<boolean>(false);
+  const [strategy, setStrategy] = useState<SelectProps.Option | null>(ROUTING_STRATEGIES[0]);
+
+  return (
+    <SpaceBetween size="s">
+      <Toggle
+        readOnly={readOnly}
+        checked={enabled}
+        onChange={({ detail }) => {
+          setEnabled(detail.checked);
+          setData((pre: any) => ({
+            ...pre,
+            hyperpod_config: { ...pre.hyperpod_config, enable_intelligent_routing: detail.checked }
+          }))
+        }}
+      >
+        {t("enable_intelligent_routing") || "Enable Intelligent Routing"}
+      </Toggle>
+      {enabled && (
+        <FormField label={t("routing_strategy") || "Routing Strategy"}>
+          <Select
+            disabled={readOnly}
+            selectedOption={strategy}
+            onChange={({ detail }) => {
+              setStrategy(detail.selectedOption);
+              setData((pre: any) => ({
+                ...pre,
+                hyperpod_config: { ...pre.hyperpod_config, routing_strategy: detail.selectedOption?.value || 'prefixaware' }
+              }))
+            }}
+            options={ROUTING_STRATEGIES}
+            selectedAriaLabel="Selected"
+          />
+        </FormField>
+      )}
+    </SpaceBetween>
+  )
+}
+
+const SetHyperPodPublicALB = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
+  const [enabled, setEnabled] = useState(data.hyperpod_config?.use_public_alb || false);
+
+  return (
+    <SpaceBetween size="s">
+      <Toggle
+        readOnly={readOnly}
+        checked={enabled}
+        onChange={({ detail }) => {
+          setEnabled(detail.checked);
+          setData((pre: any) => ({
+            ...pre,
+            hyperpod_config: { ...pre.hyperpod_config, use_public_alb: detail.checked }
+          }))
+        }}
+      >
+        {t("use_public_alb") || "Use Public ALB (Internet-Facing)"}
+      </Toggle>
+      {enabled && (
+        <Alert type="warning">
+          {t("public_alb_warning") || "Warning: Enabling public ALB exposes the endpoint to the internet. Ensure proper authentication is configured."}
+        </Alert>
+      )}
+    </SpaceBetween>
+  )
+}
 
 const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   const [value1, setValue1] = useState<string>('');
@@ -597,6 +952,74 @@ export const DeployModelModal = ({
       header={t("deploy_model_endpoint")}
     ><SpaceBetween size="l">
         <FormField
+          label={t("deployment_target") || "Deployment Target"}
+          stretch={false}
+          description={t("deployment_target_desc") || "Select where to deploy the model endpoint"}
+        >
+          <SetDeploymentTarget data={data} setData={setData} readOnly={false} />
+        </FormField>
+
+        {data.deployment_target === 'hyperpod' && (
+          <>
+            <FormField
+              label={t("hyperpod_cluster") || "HyperPod Cluster"}
+              stretch={false}
+              description={t("hyperpod_cluster_desc") || "Select an active HyperPod cluster for deployment"}
+            >
+              <SelectHyperPodCluster data={data} setData={setData} readOnly={false} />
+            </FormField>
+
+            <FormField
+              label={t("namespace") || "Kubernetes Namespace"}
+              stretch={false}
+              description={t("namespace_desc") || "Kubernetes namespace for the deployment (default: 'default')"}
+            >
+              <SetHyperPodNamespace data={data} setData={setData} readOnly={false} />
+            </FormField>
+
+            <FormField
+              label={t("replicas") || "Replicas"}
+              stretch={false}
+              description={t("replicas_desc") || "Number of model replicas to deploy"}
+            >
+              <SetHyperPodReplicas data={data} setData={setData} readOnly={false} />
+            </FormField>
+
+            <FormField
+              label={t("autoscaling") || "Auto-scaling"}
+              stretch={false}
+              description={t("autoscaling_desc") || "Automatically scale replicas based on CloudWatch metrics"}
+            >
+              <SetHyperPodAutoscaling data={data} setData={setData} readOnly={false} />
+            </FormField>
+
+            <FormField
+              label={t("kv_cache") || "KV Cache"}
+              stretch={false}
+              description={t("kv_cache_desc") || "Enable KV cache for optimized inference performance. Reduces time to first token by up to 40%."}
+            >
+              <SetHyperPodKVCache data={data} setData={setData} readOnly={false} />
+            </FormField>
+
+            <FormField
+              label={t("intelligent_routing") || "Intelligent Routing"}
+              stretch={false}
+              description={t("intelligent_routing_desc") || "Enable intelligent routing for optimized request distribution across replicas"}
+            >
+              <SetHyperPodIntelligentRouting data={data} setData={setData} readOnly={false} />
+            </FormField>
+
+            <FormField
+              label={t("public_alb") || "Public ALB"}
+              stretch={false}
+              description={t("public_alb_desc") || "Configure the load balancer to be internet-facing (allows access from outside the VPC)"}
+            >
+              <SetHyperPodPublicALB data={data} setData={setData} readOnly={false} />
+            </FormField>
+          </>
+        )}
+
+        <FormField
           label={t("model_name")}
           stretch={false}
           description={t("select_supported_model")}
@@ -616,18 +1039,18 @@ export const DeployModelModal = ({
         >
           <InputCustRepo data={data} setData={setData} readOnly={modelNameReadOnly} />
         </FormField>
-        <FormField
-          label={t("custom_model_s3path")}
-          stretch={false}
-        >
-          <InputS3Path data={data} setData={setData} readOnly={modelNameReadOnly} />
-        </FormField>
+        {/* S3 path is only for SageMaker deployments */}
+        {data.deployment_target === 'sagemaker' && (
+          <FormField
+            label={t("custom_model_s3path")}
+            stretch={false}
+          >
+            <InputS3Path data={data} setData={setData} readOnly={modelNameReadOnly} />
+          </FormField>
+        )}
 
         <FormField
           label={t("instance_type")}
-          // description="Select a Instance type to deploy the model."
-          // description={<Link href={`${instanceCalculator}`} external>使用机型计算器估算</Link>}
-
           stretch={false}
           errorText={errors.instance_type}
           i18nStrings={{ errorIconAriaLabel: 'Error' }}
@@ -635,15 +1058,18 @@ export const DeployModelModal = ({
           <SelectInstanceType data={data} setData={setData} readOnly={false} />
         </FormField>
 
-        <FormField
-          label={t("instance_qty")}
-          description={t("instance_qty_desc")}
-          stretch={false}
-          errorText={errors.instance_count}
-          i18nStrings={{ errorIconAriaLabel: 'Error' }}
-        >
-          <SetInstanceQty data={data} setData={setData} readOnly={false} />
-        </FormField>
+        {/* Instance count is only for SageMaker deployments - HyperPod uses replicas */}
+        {data.deployment_target === 'sagemaker' && (
+          <FormField
+            label={t("instance_qty")}
+            description={t("instance_qty_desc")}
+            stretch={false}
+            errorText={errors.instance_count}
+            i18nStrings={{ errorIconAriaLabel: 'Error' }}
+          >
+            <SetInstanceQty data={data} setData={setData} readOnly={false} />
+          </FormField>
+        )}
 
         <FormField
           label={t("engine_type")}

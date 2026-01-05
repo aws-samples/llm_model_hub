@@ -82,6 +82,7 @@ sleep 30
 echo "create database and import data....."
 cd scripts 
 docker exec hub-mysql sh -c "mysql -u root -p1234560 -D llm  < /opt/data/mysql_setup.sql"
-
+sleep 5
+docker exec hub-mysql sh -c "mysql -u root -p1234560 -D llm < /opt/data/init_cluster_table.sql"
 # 删除flash-attn，中国区安装超时
 sed -i '/^flash_attn==/d' /home/ubuntu/llm_model_hub/backend/docker/requirements_deps.txt

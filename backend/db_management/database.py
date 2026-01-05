@@ -6,8 +6,11 @@ import sys
 import os
 sys.path.append('./')
 from pydantic import BaseModel
-from model.data_model import JobInfo, JobStatus,EndpointStatus
-from utils.config import MYSQL_CONFIG,JOB_TABLE,EP_TABLE,USER_TABLE
+from model.data_model import JobInfo, JobStatus, EndpointStatus, ClusterInfo, ClusterStatus
+from utils.config import MYSQL_CONFIG, JOB_TABLE, EP_TABLE, USER_TABLE
+
+# Cluster table name
+CLUSTER_TABLE = 'CLUSTER_TABLE'
 from datetime import datetime
 
 def singleton(cls):
@@ -173,7 +176,7 @@ class DatabaseWrapper(BaseModel):
                 connection.commit()
                 return True
 
-    def create_endpoint(self,  
+    def create_endpoint(self,
                         job_id:str,
                                 model_name:str,
                                model_s3_path:str,
@@ -185,20 +188,24 @@ class DatabaseWrapper(BaseModel):
                                extra_config:str,
                                engine:str,
                                enable_lora:bool,
-                               endpoint_status:EndpointStatus):
+                               endpoint_status:EndpointStatus,
+                               deployment_target:str = 'sagemaker',
+                               hyperpod_cluster_id:str = None):
         ret = True
         try:
             with self.connection_pool.get_connection() as connection:
                 with connection.cursor() as cursor:
                     cursor.execute(
-                        f"INSERT INTO {EP_TABLE} (job_id, endpoint_name, model_name, engine,enable_lora, instance_type, instance_count, model_s3_path, endpoint_status, endpoint_create_time, endpoint_delete_time, extra_config) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", 
-                        (job_id,endpoint_name,model_name,engine,enable_lora,instance_type,instance_count,model_s3_path,endpoint_status.value,endpoint_create_time,endpoint_delete_time,
-                         json.dumps(extra_config, ensure_ascii=False),
+                        f"INSERT INTO {EP_TABLE} (job_id, endpoint_name, model_name, engine, enable_lora, instance_type, instance_count, model_s3_path, endpoint_status, endpoint_create_time, endpoint_delete_time, extra_config, deployment_target, hyperpod_cluster_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                        (job_id, endpoint_name, model_name, engine, enable_lora, instance_type, instance_count, model_s3_path, endpoint_status.value, endpoint_create_time, endpoint_delete_time,
+                         json.dumps(extra_config, ensure_ascii=False) if extra_config else None,
+                         deployment_target,
+                         hyperpod_cluster_id
                          )
                     )
                     connection.commit()
         except Exception as e:
-            print(f"Error saving job: {e}")
+            print(f"Error saving endpoint: {e}")
             ret = False
         return ret
     
@@ -229,7 +236,52 @@ class DatabaseWrapper(BaseModel):
             with connection.cursor() as cursor:
                 cursor.execute(f"SELECT engine FROM {EP_TABLE} WHERE endpoint_name = %s",(endpoint_name,))
                 return cursor.fetchone()
-                
+
+    def get_endpoint_full(self, endpoint_name:str):
+        """Get full endpoint details including deployment_target and hyperpod_cluster_id."""
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(f"SELECT * FROM {EP_TABLE} WHERE endpoint_name = %s",(endpoint_name,))
+                return cursor.fetchone()
+
+    def get_hyperpod_endpoints_creating(self):
+        """Get all HyperPod endpoints in CREATING status for background monitoring."""
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"SELECT endpoint_name, hyperpod_cluster_id, extra_config FROM {EP_TABLE} WHERE deployment_target = 'hyperpod' AND endpoint_status = 'CREATING'"
+                )
+                return cursor.fetchall()
+
+    def count_hyperpod_endpoints_by_cluster_and_instance(self, hyperpod_cluster_id: str, instance_type: str) -> int:
+        """
+        Count active HyperPod endpoints for a given cluster and instance type.
+
+        Returns the count of endpoints that are not FAILED or DELETED.
+        """
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"SELECT COUNT(*) FROM {EP_TABLE} WHERE hyperpod_cluster_id = %s AND instance_type = %s AND endpoint_status NOT IN ('FAILED', 'NOTFOUND')",
+                    (hyperpod_cluster_id, instance_type)
+                )
+                result = cursor.fetchone()
+                return result[0] if result else 0
+
+    def get_hyperpod_endpoints_by_cluster(self, hyperpod_cluster_id: str) -> list:
+        """
+        Get all active HyperPod endpoints for a given cluster.
+
+        Returns list of (endpoint_name, instance_type, endpoint_status) tuples.
+        """
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"SELECT endpoint_name, instance_type, endpoint_status FROM {EP_TABLE} WHERE hyperpod_cluster_id = %s AND endpoint_status NOT IN ('FAILED', 'NOTFOUND')",
+                    (hyperpod_cluster_id,)
+                )
+                return cursor.fetchall()
+
     def query_users(self, username:str):
         with self.connection_pool.get_connection() as connection:
             with connection.cursor() as cursor:
@@ -246,10 +298,216 @@ class DatabaseWrapper(BaseModel):
         with self.connection_pool.get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                        f"INSERT INTO {USER_TABLE} (username, userpwd,groupname, extra_config ) VALUES (%s, %s, %s,%s )", 
+                        f"INSERT INTO {USER_TABLE} (username, userpwd,groupname, extra_config ) VALUES (%s, %s, %s,%s )",
                         (username, password, groupname,json.dumps(extra_config, ensure_ascii=False),)
                     )
                 connection.commit()
-        
+
+    # ==================== Cluster Operations ====================
+
+    def save_cluster(self, cluster_detail: ClusterInfo) -> bool:
+        """Save a new cluster record."""
+        ret = True
+        try:
+            with self.connection_pool.get_connection() as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        f"""INSERT INTO {CLUSTER_TABLE}
+                        (cluster_id, cluster_name, eks_cluster_name, eks_cluster_arn, hyperpod_cluster_arn,
+                         cluster_status, vpc_id, subnet_ids, instance_groups, cluster_create_time,
+                         cluster_update_time, error_message, cluster_config, ts)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                        (cluster_detail.cluster_id,
+                         cluster_detail.cluster_name,
+                         cluster_detail.eks_cluster_name,
+                         cluster_detail.eks_cluster_arn,
+                         cluster_detail.hyperpod_cluster_arn,
+                         cluster_detail.cluster_status.value,
+                         cluster_detail.vpc_id,
+                         json.dumps(cluster_detail.subnet_ids) if cluster_detail.subnet_ids else None,
+                         json.dumps(cluster_detail.instance_groups) if cluster_detail.instance_groups else None,
+                         cluster_detail.cluster_create_time,
+                         cluster_detail.cluster_update_time,
+                         cluster_detail.error_message,
+                         json.dumps(cluster_detail.cluster_config, ensure_ascii=False) if cluster_detail.cluster_config else None,
+                         cluster_detail.ts)
+                    )
+                    connection.commit()
+        except Exception as e:
+            print(f"Error saving cluster: {e}")
+            ret = False
+        return ret
+
+    def get_cluster_by_id(self, cluster_id: str) -> Optional[ClusterInfo]:
+        """Get cluster by ID."""
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(f"SELECT * FROM {CLUSTER_TABLE} WHERE cluster_id = %s", (cluster_id,))
+                row = cursor.fetchone()
+                if row:
+                    return self._row_to_cluster_info(row)
+                return None
+
+    def _row_to_cluster_info(self, row) -> ClusterInfo:
+        """Convert database row to ClusterInfo object."""
+        # Parse cluster_config first to check for instance_groups
+        cluster_config = json.loads(row[12]) if row[12] else None
+        # Prefer instance_groups from cluster_config (more up-to-date) over the column
+        instance_groups_from_column = json.loads(row[8]) if row[8] else None
+        instance_groups_from_config = cluster_config.get('instance_groups') if cluster_config else None
+        instance_groups = instance_groups_from_config or instance_groups_from_column
+
+        return ClusterInfo(
+            cluster_id=row[0],
+            cluster_name=row[1],
+            eks_cluster_name=row[2],
+            eks_cluster_arn=row[3],
+            hyperpod_cluster_arn=row[4],
+            cluster_status=ClusterStatus(row[5]),
+            vpc_id=row[6],
+            subnet_ids=json.loads(row[7]) if row[7] else None,
+            instance_groups=instance_groups,
+            cluster_create_time=row[9],
+            cluster_update_time=row[10],
+            error_message=row[11],
+            cluster_config=cluster_config,
+            ts=row[13]
+        )
+
+    def list_clusters(self, query_terms: Dict[str, Any] = None, page_size: int = 20, page_index: int = 1):
+        """List clusters with pagination."""
+        offset = (page_index - 1) * page_size
+        clusters = []
+        total_count = 0
+
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                # Get total count
+                cursor.execute(f"SELECT COUNT(*) FROM {CLUSTER_TABLE} WHERE cluster_status <> 'DELETED'")
+                total_count = cursor.fetchone()[0]
+
+                # Get clusters
+                if query_terms:
+                    query_string = f"SELECT * FROM {CLUSTER_TABLE} WHERE cluster_status <> 'DELETED' AND "
+                    query_params = []
+                    for key, value in query_terms.items():
+                        query_string += f"{key} = %s AND "
+                        query_params.append(value)
+                    query_string = query_string[:-4] + " ORDER BY ts DESC LIMIT %s OFFSET %s"
+                    query_params.extend([page_size, offset])
+                    cursor.execute(query_string, tuple(query_params))
+                else:
+                    cursor.execute(
+                        f"SELECT * FROM {CLUSTER_TABLE} WHERE cluster_status <> 'DELETED' ORDER BY ts DESC LIMIT %s OFFSET %s",
+                        (page_size, offset)
+                    )
+
+                rows = cursor.fetchall()
+                for row in rows:
+                    clusters.append(self._row_to_cluster_info(row))
+
+        return clusters, total_count
+
+    def set_cluster_status(self, cluster_id: str, status: ClusterStatus):
+        """Update cluster status."""
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"UPDATE {CLUSTER_TABLE} SET cluster_status = %s, cluster_update_time = %s WHERE cluster_id = %s",
+                    (status.value, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), cluster_id)
+                )
+                connection.commit()
+
+    def update_cluster_error(self, cluster_id: str, error_message: str):
+        """Update cluster with error message."""
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"UPDATE {CLUSTER_TABLE} SET error_message = %s, cluster_status = %s, cluster_update_time = %s WHERE cluster_id = %s",
+                    (error_message, ClusterStatus.FAILED.value, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), cluster_id)
+                )
+                connection.commit()
+
+    def update_cluster_config(self, cluster_id: str, cluster_config: Dict[str, Any]):
+        """Update cluster configuration."""
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"UPDATE {CLUSTER_TABLE} SET cluster_config = %s, cluster_update_time = %s WHERE cluster_id = %s",
+                    (json.dumps(cluster_config, ensure_ascii=False), datetime.now().strftime('%Y-%m-%d %H:%M:%S'), cluster_id)
+                )
+                connection.commit()
+
+    def update_cluster_instance_groups(self, cluster_id: str, instance_groups: List[Dict[str, Any]]):
+        """Update cluster instance groups column."""
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"UPDATE {CLUSTER_TABLE} SET instance_groups = %s, cluster_update_time = %s WHERE cluster_id = %s",
+                    (json.dumps(instance_groups) if instance_groups else None, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), cluster_id)
+                )
+                connection.commit()
+
+    def update_cluster_arns(self, cluster_id: str, eks_cluster_arn: str = None, hyperpod_cluster_arn: str = None):
+        """Update cluster ARNs."""
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                updates = []
+                params = []
+                if eks_cluster_arn:
+                    updates.append("eks_cluster_arn = %s")
+                    params.append(eks_cluster_arn)
+                if hyperpod_cluster_arn:
+                    updates.append("hyperpod_cluster_arn = %s")
+                    params.append(hyperpod_cluster_arn)
+
+                if updates:
+                    updates.append("cluster_update_time = %s")
+                    params.append(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+                    params.append(cluster_id)
+
+                    query = f"UPDATE {CLUSTER_TABLE} SET {', '.join(updates)} WHERE cluster_id = %s"
+                    cursor.execute(query, tuple(params))
+                    connection.commit()
+
+    def get_clusters_by_status(self, status: ClusterStatus):
+        """Get clusters by status."""
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(f"SELECT cluster_id FROM {CLUSTER_TABLE} WHERE cluster_status = %s", (status.value,))
+                return cursor.fetchall()
+
+    def delete_cluster_by_id(self, cluster_id: str) -> bool:
+        """Delete cluster record (soft delete by setting status to DELETED)."""
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"UPDATE {CLUSTER_TABLE} SET cluster_status = %s, cluster_update_time = %s WHERE cluster_id = %s",
+                    (ClusterStatus.DELETED.value, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), cluster_id)
+                )
+                connection.commit()
+                return True
+
+    def update_cluster_vpc_info(self, cluster_id: str, vpc_id: str, subnet_ids: List[str], security_group_ids: Optional[List[str]] = None):
+        """Update cluster VPC information."""
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                # Also update cluster_config with security_group_ids
+                if security_group_ids:
+                    cursor.execute(f"SELECT cluster_config FROM {CLUSTER_TABLE} WHERE cluster_id = %s", (cluster_id,))
+                    row = cursor.fetchone()
+                    config = json.loads(row[0]) if row and row[0] else {}
+                    config['security_group_ids'] = security_group_ids
+                    cursor.execute(
+                        f"UPDATE {CLUSTER_TABLE} SET vpc_id = %s, subnet_ids = %s, cluster_config = %s, cluster_update_time = %s WHERE cluster_id = %s",
+                        (vpc_id, json.dumps(subnet_ids), json.dumps(config, ensure_ascii=False), datetime.now().strftime('%Y-%m-%d %H:%M:%S'), cluster_id)
+                    )
+                else:
+                    cursor.execute(
+                        f"UPDATE {CLUSTER_TABLE} SET vpc_id = %s, subnet_ids = %s, cluster_update_time = %s WHERE cluster_id = %s",
+                        (vpc_id, json.dumps(subnet_ids), datetime.now().strftime('%Y-%m-%d %H:%M:%S'), cluster_id)
+                    )
+                connection.commit()
+
     def close(self):
         self.connection_pool.close()

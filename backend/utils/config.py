@@ -35,7 +35,7 @@ role = os.environ.get('role')
 print(f"sagemaker role:{role}")
 
 
-sagemaker_session =  sagemaker.session.Session(boto_session=boto_sess) #sagemaker.session.Session()
+sagemaker_session = sagemaker.Session(boto_session=boto_sess)
 region = sagemaker_session.boto_region_name
 default_bucket = sagemaker_session.default_bucket()
 print(f"default_bucket:{default_bucket}")

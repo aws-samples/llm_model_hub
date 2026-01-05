@@ -42,6 +42,18 @@ const rawColumns = [
     isRowHeader: true,
   },
   {
+    id: 'deployment_target',
+    sortingField: 'deployment_target',
+    cell: item => (
+      <StatusIndicator type={item.deployment_target === 'hyperpod' ? 'info' : 'success'}>
+        {item.deployment_target === 'hyperpod' ? 'HyperPod' : 'SageMaker'}
+      </StatusIndicator>
+    ),
+    header: 'Target',
+    minWidth: 80,
+    isRowHeader: true,
+  },
+  {
     id: 'engine',
     sortingField: 'engine',
     cell: item => item.engine,
@@ -151,6 +163,7 @@ const CONTENT_DISPLAY_OPTIONS = [
   { id: 'id', label: 'ID', alwaysVisible: true },
   { id: 'status', label: 'Status' },
   { id: 'endpoint_name', label: 'Endpoint name' },
+  { id: 'deployment_target', label: 'Target' },
   { id: 'engine', label: 'Engine' },
   { id: 'model_name', label: 'Model' },
   { id: 'instance_type', label: 'Instance type' },
@@ -175,6 +188,7 @@ export const DEFAULT_PREFERENCES = {
     { id: 'id', visible: true },
     { id: 'status', visible: true },
     { id: 'endpoint_name', visible: true },
+    { id: 'deployment_target', visible: true },
     { id: 'model_name', visible: true },
     { id: 'engine', visible: true },
     { id: 'instance_type', visible: true },

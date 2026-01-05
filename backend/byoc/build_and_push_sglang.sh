@@ -19,7 +19,7 @@ fi
 account=$(aws sts  get-caller-identity --query Account --output text)
 partition=$(aws sts get-caller-identity --query 'Arn' --output text | cut -d: -f2)
 
-SGL_VERSION=v0.5.6
+SGL_VERSION=v0.5.6.post1-cu129-amd64
 # Public ECR image
 public_ecr_image=public.ecr.aws/f8g1z3n8/llm-modelhub-byoc-sglang:${SGL_VERSION}
 

@@ -9,7 +9,7 @@ set -e
 TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
 region=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/region)
 
-SGL_VERSION=v0.5.6
+SGL_VERSION=v0.5.6.post1-cu129-amd64
 inference_image=llm-modelhub-byoc-sglang
 public_ecr_uri=public.ecr.aws/f8g1z3n8
 inference_fullname=${public_ecr_uri}/${inference_image}:${SGL_VERSION}

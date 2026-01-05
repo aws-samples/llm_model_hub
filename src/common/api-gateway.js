@@ -31,6 +31,26 @@ export const remotePost = async(formdata,path,stream=false) =>{
     }
 }
 
+export const remoteGet = async(path) => {
+    const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${API_KEY}`
+    };
+
+    try {
+        const resp = await axios.get(`${API_ENDPOINT}/${path}`, { headers });
+
+        if (resp.statusText === 'OK') {
+            return resp.data;
+        } else {
+            console.log(`Server error:${resp.status}`);
+            throw `Server error:${resp.status}`;
+        }
+    } catch (err) {
+        throw err;
+    }
+}
+
 export const fetchPost = async (formData,path) => {
     const headers = {
       'Content-Type': 'application/json',

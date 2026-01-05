@@ -22,20 +22,27 @@ export const navItems: SideNavigationProps['items'] = [
   },
   {
     type: 'section',
+    text: 'Cluster Management',
+    items: [
+      { type: 'link', text: 'HyperPod Clusters', href: '/clusters' },
+    ],
+  },
+  {
+    type: 'section',
     text: 'Playground',
     items: [
       { type: 'link', text: 'Chat', href: '/chat' },
     ],
-  }, 
+  },
   {
     type: 'section',
     text: i18n.t('readme'),
     items: [
-      { type: 'link', external: true, 
+      { type: 'link', external: true,
       info: <Badge color="green">必读</Badge>,
       text: '使用说明', href: 'https://amzn-chn.feishu.cn/docx/QniUdr7FroxShfxeoPacLJKtnXf' },
     ],
-  }, 
+  },
 ];
 
 

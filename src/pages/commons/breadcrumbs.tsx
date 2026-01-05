@@ -32,6 +32,21 @@ export const chatBreadcrumbs = [
   },
 ];
 
+export const clustersBreadcrumbs = [
+  {
+    text: 'HyperPod Clusters',
+    href: '/clusters',
+  },
+];
+
+export const createClusterBreadcrumbs = [
+  ...clustersBreadcrumbs,
+  {
+    text: 'Create Cluster',
+    href: '/clusters/create',
+  },
+];
+
 
 export function Breadcrumbs({ items }: { items: BreadcrumbGroupProps['items'] }) {
   return (

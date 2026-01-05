@@ -23,9 +23,19 @@ from model.data_model import *
 import asyncio
 from training.jobs import create_job,list_jobs,get_job_by_id,delete_job_by_id,fetch_training_log,get_job_status,stop_and_delete_job
 from training.spot_price_history import get_spot_price_history, get_spot_interruption_rate
+from eks_management.clusters import (
+    create_cluster as create_eks_cluster,
+    list_clusters as list_eks_clusters,
+    get_cluster_by_id as get_eks_cluster_by_id,
+    delete_cluster as delete_eks_cluster,
+    update_cluster as update_eks_cluster,
+    get_cluster_status as get_eks_cluster_status,
+    list_cluster_nodes as list_eks_cluster_nodes,
+    get_cluster_instance_types as get_eks_cluster_instance_types,
+)
 from utils.get_factory_config import get_factory_config
 from utils.outputs import list_s3_objects
-from inference.endpoint_management import deploy_endpoint,delete_endpoint,get_endpoint_status,list_endpoints,deploy_endpoint_byoc,get_endpoint_engine
+from inference.endpoint_management import deploy_endpoint,delete_endpoint,get_endpoint_status,list_endpoints,deploy_endpoint_byoc,get_endpoint_engine,get_endpoint_info,deploy_endpoint_hyperpod,delete_endpoint_hyperpod
 from inference.serving import inference,inference_byoc
 from users.login import login_auth
 from utils.config import DEFAULT_REGION
@@ -102,6 +112,14 @@ def create_error_response(code: int, message: str) -> JSONResponse:
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
+    # Log detailed validation errors for debugging
+    logger.error(f"Request validation error on {request.url.path}")
+    logger.error(f"Validation errors: {exc.errors()}")
+    try:
+        body = await request.body()
+        logger.error(f"Request body: {body.decode('utf-8')[:2000]}")  # Log first 2000 chars
+    except Exception:
+        pass
     return create_error_response(400, str(exc))
 
 @app.get("/")
@@ -210,7 +228,43 @@ async def handle_spot_interruption_rate(request:SpotInterruptionRateRequest):
     
 @app.post('/v1/deploy_endpoint',dependencies=[Depends(check_api_key)])
 async def handle_deploy_endpoint(request:DeployModelRequest):
-    logger.info(request)
+    logger.info(f"Deploy endpoint request received: {request}")
+
+    # Route to HyperPod deployment if deployment_target is "hyperpod"
+    if request.deployment_target == "hyperpod":
+        logger.info(f"HyperPod deployment requested - cluster_id: {request.hyperpod_cluster_id}, "
+                   f"model_name: {request.model_name}, engine: {request.engine}, "
+                   f"instance_type: {request.instance_type}")
+        if not request.hyperpod_cluster_id:
+            logger.error("HyperPod deployment failed: hyperpod_cluster_id is required")
+            return CommonResponse(response_id=str(uuid.uuid4()),response={"result":False, "endpoint_name": "hyperpod_cluster_id is required for HyperPod deployment"})
+        try:
+            hyperpod_config = request.hyperpod_config.model_dump() if request.hyperpod_config else {}
+            logger.info(f"HyperPod config: {hyperpod_config}")
+            logger.info(f"Extra params: {request.extra_params}")
+            ret, msg = await asyncio.wait_for(
+                asyncio.to_thread(deploy_endpoint_hyperpod,
+                                job_id=request.job_id,
+                                engine=request.engine,
+                                instance_type=request.instance_type,
+                                enable_lora=request.enable_lora,
+                                model_name=request.model_name,
+                                hyperpod_cluster_id=request.hyperpod_cluster_id,
+                                hyperpod_config=hyperpod_config,
+                                extra_params=request.extra_params or {}
+                                ),
+                                timeout=120)
+            logger.info(f"HyperPod deployment result: success={ret}, message={msg}")
+            return CommonResponse(response_id=str(uuid.uuid4()),response={"result":ret, "endpoint_name": msg})
+        except asyncio.TimeoutError:
+            logger.error("HyperPod deployment timed out after 120 seconds")
+            return CommonResponse(response_id=str(uuid.uuid4()),response={"result":False, "endpoint_name": "Operation timed out"})
+        except Exception as e:
+            import traceback
+            logger.error(f"HyperPod deployment error: {e}\n{traceback.format_exc()}")
+            return CommonResponse(response_id=str(uuid.uuid4()),response={"result":False, "endpoint_name": str(e)})
+
+    # Original SageMaker deployment logic
     #engine不是'auto','vllm'，则使用lmi
     if request.engine in ['auto','vllm','sglang'] :
         try:
@@ -229,7 +283,7 @@ async def handle_deploy_endpoint(request:DeployModelRequest):
                                 timeout=10)
             return CommonResponse(response_id=str(uuid.uuid4()),response={"result":ret, "endpoint_name": msg})
         except asyncio.TimeoutError:
-            return CommonResponse(response_id=str(uuid.uuid4()),response={"result":True, "endpoint_name": "Too long,swithing to background process"}) 
+            return CommonResponse(response_id=str(uuid.uuid4()),response={"result":True, "endpoint_name": "Too long,swithing to background process"})
     else:
         try:
             ret,msg =  await asyncio.wait_for(
@@ -254,6 +308,37 @@ async def handle_deploy_endpoint(request:DeployModelRequest):
 async def handle_delete_endpoint(request:EndpointRequest):
     logger.info(request)
     endpoint_name = request.endpoint_name
+
+    # Check if this is a HyperPod endpoint
+    endpoint_info = get_endpoint_info(endpoint_name)
+    if endpoint_info and endpoint_info.get('deployment_target') == 'hyperpod':
+        # HyperPod endpoint - delete from Kubernetes cluster
+        hyperpod_cluster_id = endpoint_info.get('hyperpod_cluster_id')
+        if not hyperpod_cluster_id:
+            # No cluster ID, just delete from database
+            from db_management.database import DatabaseWrapper
+            db = DatabaseWrapper()
+            db.delete_endpoint(endpoint_name=endpoint_name)
+            return CommonResponse(response_id=str(uuid.uuid4()), response={"result": True, "msg": "Endpoint deleted from database (no cluster ID)"})
+
+        extra_config = endpoint_info.get('extra_config')
+
+        # Parse extra_config to get namespace
+        namespace = 'default'
+        if extra_config:
+            if isinstance(extra_config, str):
+                try:
+                    extra_config = json.loads(extra_config)
+                except:
+                    pass
+            if isinstance(extra_config, dict):
+                namespace = extra_config.get('namespace', 'default')
+
+        logger.info(f"Deleting HyperPod endpoint: {endpoint_name}, cluster_id: {hyperpod_cluster_id}, namespace: {namespace}")
+        result, msg = delete_endpoint_hyperpod(endpoint_name, hyperpod_cluster_id, namespace)
+        return CommonResponse(response_id=str(uuid.uuid4()), response={"result": result, "msg": msg})
+
+    # SageMaker endpoint - use standard deletion
     result,msg = delete_endpoint(endpoint_name)
     return CommonResponse(response_id=str(uuid.uuid4()),response={"result": result,"msg":msg}) 
 
@@ -287,9 +372,122 @@ def stream_generator_byoc(inference_request:InferenceRequest) -> AsyncIterable[b
     for chunk in response_stream:
         yield chunk
     
+# ==================== HyperPod EKS Cluster APIs ====================
+
+@app.post('/v1/create_cluster', dependencies=[Depends(check_api_key)])
+async def handle_create_cluster(request: CreateClusterRequest):
+    """Create a new HyperPod EKS cluster."""
+    logger.info(f"Creating cluster: {request.model_dump_json(indent=2)}")
+    cluster_detail = await create_eks_cluster(request)
+    if cluster_detail:
+        body = {
+            'statusCode': 200,
+            'headers': {'Content-Type': 'application/json'},
+            'body': cluster_detail.dict()
+        }
+        return CommonResponse(response=body, response_id=str(uuid.uuid4()))
+    else:
+        body = {
+            'statusCode': 500,
+            'headers': {'Content-Type': 'application/json'},
+            'body': 'create cluster failed'
+        }
+        return CommonResponse(response=body, response_id=str(uuid.uuid4()))
+
+
+@app.post('/v1/list_clusters', dependencies=[Depends(check_api_key)])
+async def handle_list_clusters(request: ListClustersRequest):
+    """List HyperPod EKS clusters."""
+    # logger.info(f"Listing clusters, page_size={request.page_size}, page_index={request.page_index}")
+    resp = await list_eks_clusters(request)
+    return resp
+
+
+@app.post('/v1/get_cluster', dependencies=[Depends(check_api_key)])
+async def handle_get_cluster(request: GetClusterRequest):
+    """Get HyperPod EKS cluster by ID."""
+    logger.info(f"Getting cluster: {request.cluster_id}")
+    resp = await get_eks_cluster_by_id(request)
+    return resp
+
+
+@app.post('/v1/delete_cluster', dependencies=[Depends(check_api_key)])
+async def handle_delete_cluster(request: DeleteClusterRequest):
+    """Delete a HyperPod EKS cluster."""
+    logger.info(f"Deleting cluster: {request.cluster_id}")
+    resp = await delete_eks_cluster(request)
+    return resp
+
+
+@app.post('/v1/update_cluster', dependencies=[Depends(check_api_key)])
+async def handle_update_cluster(request: UpdateClusterRequest):
+    """Update a HyperPod EKS cluster."""
+    logger.info(f"Updating cluster: {request.model_dump_json(indent=2)}")
+    resp = await update_eks_cluster(request)
+    return resp
+
+
+@app.post('/v1/update_cluster_instance_groups', dependencies=[Depends(check_api_key)])
+async def handle_update_cluster_instance_groups(request: UpdateClusterRequest):
+    """Update cluster instance groups only."""
+    logger.info(f"Updating instance groups for cluster: {request.model_dump_json(indent=2)}")
+    resp = await update_eks_cluster(request)
+    return resp
+
+
+@app.get('/v1/cluster_status/{cluster_id}', dependencies=[Depends(check_api_key)])
+async def handle_get_cluster_status(cluster_id: str):
+    """Get current cluster status from AWS."""
+    logger.info(f"Getting cluster status: {cluster_id}")
+    status = get_eks_cluster_status(cluster_id)
+    return CommonResponse(
+        response_id=str(uuid.uuid4()),
+        response={
+            'statusCode': 200,
+            'body': {
+                'cluster_id': cluster_id,
+                'status': status.value
+            }
+        }
+    )
+
+
+@app.post('/v1/list_cluster_nodes', dependencies=[Depends(check_api_key)])
+async def handle_list_cluster_nodes(request: ListClusterNodesRequest):
+    """List nodes/instances in a HyperPod cluster."""
+    logger.info(f"Listing cluster nodes for cluster: {request.cluster_id}")
+    resp = await list_eks_cluster_nodes(request)
+    return resp
+
+
+@app.get('/v1/cluster_instance_types/{cluster_id}', dependencies=[Depends(check_api_key)])
+async def handle_get_cluster_instance_types(cluster_id: str):
+    """Get available instance types from a HyperPod cluster."""
+    logger.info(f"Getting cluster instance types for cluster: {cluster_id}")
+    instance_types = await get_eks_cluster_instance_types(cluster_id)
+    return CommonResponse(
+        response_id=str(uuid.uuid4()),
+        response={
+            'statusCode': 200,
+            'body': {
+                'cluster_id': cluster_id,
+                'instance_types': instance_types
+            }
+        }
+    )
+
+
 @app.post('/v1/chat/completions',dependencies=[Depends(check_api_key)])
 async def handle_inference(request:InferenceRequest):
     # logger.info(request)
+
+    # Get endpoint info to check if it's HyperPod
+    endpoint_info = get_endpoint_info(request.endpoint_name)
+
+    if endpoint_info and endpoint_info.get('deployment_target') == 'hyperpod':
+        # HyperPod endpoint - use HTTP invocation
+        return await handle_hyperpod_inference(request, endpoint_info)
+
     engine = get_endpoint_engine(request.endpoint_name)
     # logger.info(f"engine:{engine}")
     #engine不是'auto','vllm'，则使用lmi
@@ -308,6 +506,116 @@ async def handle_inference(request:InferenceRequest):
             return CommonResponse(response_id=id,response=response)
         else:
             return StreamingResponse(stream_generator(request), media_type="text/event-stream")
+
+
+async def handle_hyperpod_inference(request: InferenceRequest, endpoint_info: dict):
+    """Handle inference for HyperPod endpoints via HTTP."""
+    import json as json_module
+    from inference.hyperpod_inference import invoke_hyperpod_endpoint, invoke_hyperpod_endpoint_stream, get_hyperpod_endpoint_url
+
+    logger.info(f"[HyperPod Inference] Starting inference for endpoint: {request.endpoint_name}")
+    logger.info(f"[HyperPod Inference] Endpoint info: deployment_target={endpoint_info.get('deployment_target')}, "
+                f"hyperpod_cluster_id={endpoint_info.get('hyperpod_cluster_id')}")
+
+    # Parse extra_config to get cluster info
+    extra_config = endpoint_info.get('extra_config')
+    if isinstance(extra_config, str):
+        try:
+            extra_config = json_module.loads(extra_config)
+            # Handle potential double-encoding
+            if isinstance(extra_config, str):
+                extra_config = json_module.loads(extra_config)
+        except:
+            extra_config = {}
+    extra_config = extra_config or {}
+
+    eks_cluster_name = extra_config.get('eks_cluster_name')
+    namespace = extra_config.get('namespace', 'default')
+
+    if not eks_cluster_name:
+        # Try to get from cluster database
+        from db_management.database import DatabaseWrapper
+        db = DatabaseWrapper()
+        hyperpod_cluster_id = endpoint_info.get('hyperpod_cluster_id')
+        if hyperpod_cluster_id:
+            cluster_info = db.get_cluster_by_id(hyperpod_cluster_id)
+            if cluster_info:
+                eks_cluster_name = cluster_info.eks_cluster_name
+
+    if not eks_cluster_name:
+        logger.error(f"[HyperPod Inference] Could not determine EKS cluster name for endpoint {request.endpoint_name}")
+        return CommonResponse(
+            response_id=request.id or str(uuid.uuid4()),
+            response={"error": "Could not determine EKS cluster name for endpoint"}
+        )
+
+    logger.info(f"[HyperPod Inference] Using EKS cluster: {eks_cluster_name}, namespace: {namespace}")
+
+    # Get and log the endpoint URL
+    try:
+        url_info = get_hyperpod_endpoint_url(
+            eks_cluster_name=eks_cluster_name,
+            endpoint_name=request.endpoint_name,
+            namespace=namespace
+        )
+        if url_info:
+            logger.info(f"[HyperPod Inference] Endpoint URL: {url_info.get('full_url')}")
+            logger.info(f"[HyperPod Inference] ALB Host: {url_info.get('endpoint_url')}")
+        else:
+            logger.warning(f"[HyperPod Inference] Could not get URL info for endpoint {request.endpoint_name}")
+    except Exception as e:
+        logger.warning(f"[HyperPod Inference] Error getting URL info: {e}")
+
+    # Build payload
+    payload = {
+        "model": request.model_name or endpoint_info.get('model_name', ''),
+        "messages": [{"role": m.get('role', 'user'), "content": m.get('content', '')} for m in request.messages],
+        "stream": request.stream,
+        "max_tokens": request.params.get('max_new_tokens', request.params.get('max_tokens', 256)),
+        "temperature": request.params.get('temperature', 0.1),
+        "top_p": request.params.get('top_p', 0.9),
+    }
+
+    try:
+        if not request.stream:
+            response = invoke_hyperpod_endpoint(
+                eks_cluster_name=eks_cluster_name,
+                endpoint_name=request.endpoint_name,
+                payload=payload,
+                namespace=namespace,
+                stream=False
+            )
+            return CommonResponse(
+                response_id=request.id or str(uuid.uuid4()),
+                response=response
+            )
+        else:
+            # Streaming response
+            async def hyperpod_stream_generator():
+                try:
+                    for line in invoke_hyperpod_endpoint_stream(
+                        eks_cluster_name=eks_cluster_name,
+                        endpoint_name=request.endpoint_name,
+                        payload=payload,
+                        namespace=namespace
+                    ):
+                        # SSE spec requires double newline (\n\n) to separate events
+                        if line.startswith('data: '):
+                            yield line + '\n\n'
+                        else:
+                            yield f"data: {line}\n\n"
+                except Exception as e:
+                    logger.error(f"HyperPod streaming error: {e}")
+                    yield f"data: {json_module.dumps({'error': str(e)})}\n\n"
+
+            return StreamingResponse(hyperpod_stream_generator(), media_type="text/event-stream")
+
+    except Exception as e:
+        logger.error(f"HyperPod inference error: {e}")
+        return CommonResponse(
+            response_id=request.id or str(uuid.uuid4()),
+            response={"error": str(e)}
+        )
 
 
 def create_price_api_server():

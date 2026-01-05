@@ -1,0 +1,43 @@
+{
+    "ClusterName": "my-hyperpod-autoscaling-cluster",
+    "Orchestrator": {
+        "Eks": {
+            "ClusterArn": "arn:aws:eks:us-west-2:123456789012:cluster/my-eks-cluster"
+        }
+    },
+    "InstanceGroups": [
+        {
+            "InstanceGroupName": "base-gpu-workers",
+            "InstanceType": "ml.g5.xlarge",
+            "InstanceCount": 1,
+            "MinInstanceCount": 1,
+            "LifeCycleConfig": {
+                "SourceS3Uri": "s3://sagemaker-bucket/lifecycle-scripts/",
+                "OnCreate": "on_create.sh"
+            },
+            "ExecutionRole": "arn:aws:iam::123456789012:role/hyperpod-execution-role",
+            "ThreadsPerCore": 1,
+            "OnStartDeepHealthChecks": [
+                "InstanceStress",
+                "InstanceConnectivity"
+            ]
+        }
+    ],
+    "VpcConfig": {
+        "SecurityGroupIds": ["sg-xxx"],
+        "Subnets": ["subnet-xxx", "subnet-yyy"]
+    },
+    "NodeRecovery": "Automatic",
+    "NodeProvisioningMode": "Continuous",
+    "AutoScaling": {
+        "AutoScalerType": "Karpenter",
+        "Mode": "Enabled"
+    },
+    "ClusterRole": "arn:aws:iam::123456789012:role/hyperpod-autoscaling-role",
+    "Tags": [
+        {
+            "Key": "Feature",
+            "Value": "Autoscaling"
+        }
+    ]
+}
