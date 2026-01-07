@@ -1,32 +1,35 @@
-
 #!/bin/bash
-#安装miniconda
-echo "install miniconda...."
-wget  https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-chmod +x  Miniconda3-latest-Linux-x86_64.sh
-./Miniconda3-latest-Linux-x86_64.sh  -b -f -p ../miniconda3
-source  ../miniconda3/bin/activate
-conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
-conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
-conda create -n py311 python=3.11 -y
-conda activate py311
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# 定义要添加的内容
+# 安装 uv
+echo "Installing uv..."
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 添加 uv 到 PATH
+export PATH="$HOME/.local/bin:$PATH"
+
+# 创建 Python 3.12 虚拟环境
+echo "Creating Python 3.12 virtual environment with uv..."
+uv venv --python 3.12 "${SCRIPT_DIR}/.venv"
+
+# 激活虚拟环境
+# source "${SCRIPT_DIR}/.venv/bin/activate"
+
+# 配置 pip 使用清华镜像源
 PIP_INDEX="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
+uv pip config set global.index-url "$PIP_INDEX"
 
-pip config set global.index-url "$PIP_INDEX" &&     pip config set global.extra-index-url "$PIP_INDEX" 
 # 安装 requirements
-echo "install requirements....."
-pip install -r requirements.txt
+echo "Installing requirements with uv..."
+uv pip install -r requirements.txt --index-url "$PIP_INDEX"
 
-##设置默认aws region
-sudo apt install awscli
+# 设置默认 aws region
+sudo apt install awscli -y
 aws configure set region cn-northwest-1
 
-
-# 安装Docker
+# 安装 Docker
 sudo apt-get update
-sudo apt install python3-pip git -y && pip3 install -U awscli && pip install pyyaml==5.3.1
+sudo apt install git -y && uv pip install -U awscli && uv pip install pyyaml==5.3.1
 sudo apt install docker.io -y
 # Configure components
 sudo systemctl enable docker && sudo systemctl start docker && sudo usermod -aG docker $USER
@@ -36,9 +39,9 @@ sudo chmod 666 /var/run/docker.sock
 DOCKER_CONFIG="/etc/docker/daemon.json"
 sudo mkdir -p /etc/docker
 sudo tee "$DOCKER_CONFIG" > /dev/null <<EOT
-{ 
-  "registry-mirrors" : 
-    [ 
+{
+  "registry-mirrors" :
+    [
         "https://mirror-docker.bosicloud.com",
         "https://docker.registry.cyou",
         "https://docker-cf.registry.cyou",
@@ -63,7 +66,7 @@ echo "Docker configuration added to $DOCKER_CONFIG"
 sudo systemctl restart docker
 echo "Docker service restarted"
 
-#在backend目录下执行以下命令启动mysql容器
+# 在 backend 目录下执行以下命令启动 mysql 容器
 docker run -d \
   --name hub-mysql \
   -p 3306:3306 \
@@ -72,17 +75,18 @@ docker run -d \
   -e MYSQL_USER=llmdata \
   -e MYSQL_PASSWORD=llmdata \
   -v mysql-data:/var/lib/mysql \
-  -v $(pwd)/scripts:/opt/data \
+  -v "${SCRIPT_DIR}/scripts:/opt/data" \
   --restart always \
   mysql:8.0
 
 sleep 30
 
 # 创建数据库并导入数据
-echo "create database and import data....."
-cd scripts 
+echo "Creating database and importing data..."
+cd "${SCRIPT_DIR}/scripts"
 docker exec hub-mysql sh -c "mysql -u root -p1234560 -D llm  < /opt/data/mysql_setup.sql"
 sleep 5
 docker exec hub-mysql sh -c "mysql -u root -p1234560 -D llm < /opt/data/init_cluster_table.sql"
-# 删除flash-attn，中国区安装超时
-sed -i '/^flash_attn==/d' /home/ubuntu/llm_model_hub/backend/docker/requirements_deps.txt
+
+# 删除 flash-attn，中国区安装超时
+sed -i '/^flash_attn==/d' "${SCRIPT_DIR}/docker/requirements_deps.txt"

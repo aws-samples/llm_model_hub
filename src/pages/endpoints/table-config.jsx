@@ -52,6 +52,13 @@ const getAlbUrl = (item) => {
   return config.alb_url || config.endpoint_url || null;
 };
 
+// Helper function to get HyperPod cluster name from item's extra_config
+const getHyperpodCluster = (item) => {
+  if (item.deployment_target !== 'hyperpod') return null;
+  const config = parseExtraConfig(item);
+  return config.eks_cluster_name || null;
+};
+
 // Custom copy function with fallback for non-secure contexts
 const copyToClipboard = async (text) => {
   // Try modern Clipboard API first
@@ -171,7 +178,7 @@ const rawColumns = [
   {
     id: 'id',
     sortingField: 'id',
-    header: 'ID',
+    header: 'Training Job ID',
     cell: item => (
       <div>
         <Link href={`/jobs/${item.job_id}`}>{item.job_id}</Link>
@@ -206,6 +213,16 @@ const rawColumns = [
     header: 'Target',
     minWidth: 100,
     isRowHeader: true,
+  },
+  {
+    id: 'hyperpod_cluster',
+    header: 'Cluster',
+    cell: item => {
+      const cluster = getHyperpodCluster(item);
+      if (!cluster) return '-';
+      return cluster;
+    },
+    minWidth: 120,
   },
   {
     id: 'network_access',
@@ -348,10 +365,11 @@ export const COLUMN_DEFINITIONS = rawColumns.map(column => ({ ...column, ariaLab
 export const serverSideErrorsStore = new Map();
 
 const CONTENT_DISPLAY_OPTIONS = [
-  { id: 'id', label: 'ID', alwaysVisible: true },
+  { id: 'id', label: 'Training Job ID', alwaysVisible: true },
   { id: 'status', label: 'Status' },
   { id: 'endpoint_name', label: 'Endpoint name' },
   { id: 'deployment_target', label: 'Target' },
+  { id: 'hyperpod_cluster', label: 'Cluster' },
   { id: 'network_access', label: 'Network' },
   { id: 'api_key', label: 'API Key' },
   { id: 'alb_url', label: 'ALB URL' },
@@ -380,6 +398,7 @@ export const DEFAULT_PREFERENCES = {
     { id: 'status', visible: true },
     { id: 'endpoint_name', visible: true },
     { id: 'deployment_target', visible: true },
+    { id: 'hyperpod_cluster', visible: true },
     { id: 'network_access', visible: true },
     { id: 'api_key', visible: true },
     { id: 'alb_url', visible: true },

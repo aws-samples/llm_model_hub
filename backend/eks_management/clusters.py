@@ -35,6 +35,7 @@ from model.data_model import (
 from db_management.database import DatabaseWrapper
 from logger_config import setup_logger
 from utils.config import boto_sess, DEFAULT_REGION
+from eks_management.utils import get_occupied_nodes
 
 logger = setup_logger('eks_clusters.py', log_file='eks_clusters.log')
 database = DatabaseWrapper()
@@ -701,6 +702,7 @@ async def list_cluster_nodes(request: ListClusterNodesRequest) -> ListClusterNod
     List nodes/instances in a HyperPod cluster.
 
     Uses SageMaker list_cluster_nodes API to get instance details.
+    Also checks kubernetes to determine if nodes are occupied by inference workloads.
     """
     cluster = database.get_cluster_by_id(request.cluster_id)
 
@@ -714,6 +716,7 @@ async def list_cluster_nodes(request: ListClusterNodesRequest) -> ListClusterNod
     try:
         executor = ClusterJobExecutor(request.cluster_id)
         cluster_name = cluster.cluster_name
+        eks_cluster_name = cluster.eks_cluster_name
 
         # Use SageMaker list_cluster_nodes API
         nodes = []
@@ -740,6 +743,16 @@ async def list_cluster_nodes(request: ListClusterNodesRequest) -> ListClusterNod
             if not next_token:
                 break
 
+        # Get occupied nodes from kubernetes (nodes running inference pods)
+        _, node_occupancy = get_occupied_nodes(eks_cluster_name)
+
+        # Update nodes with occupancy info
+        for node in nodes:
+            k8s_node_name = f'hyperpod-{node.instance_id}'
+            if k8s_node_name in node_occupancy:
+                node.is_occupied = True
+                node.occupied_by = node_occupancy[k8s_node_name]
+
         return ListClusterNodesResponse(
             response_id=str(uuid.uuid4()),
             nodes=nodes,
@@ -755,23 +768,26 @@ async def list_cluster_nodes(request: ListClusterNodesRequest) -> ListClusterNod
         )
 
 
-async def get_cluster_instance_types(cluster_id: str) -> List[str]:
+async def get_cluster_instance_types(cluster_id: str) -> Dict[str, Any]:
     """
-    Get available instance types from a HyperPod cluster.
+    Get available instance types from a HyperPod cluster with instance group info.
 
-    Returns a list of unique instance types available in the cluster.
+    Returns a dict with:
+    - instance_types: list of unique instance type strings (for backward compatibility)
+    - instance_type_details: list of dicts with instance_type, instance_groups, and availability info
     """
     cluster = database.get_cluster_by_id(cluster_id)
 
     if not cluster:
-        return []
+        return {'instance_types': [], 'instance_type_details': []}
 
     try:
         executor = ClusterJobExecutor(cluster_id)
         cluster_name = cluster.cluster_name
+        eks_cluster_name = cluster.eks_cluster_name
 
-        # Use SageMaker list_cluster_nodes API to get instance types
-        instance_types = set()
+        # Track instance group info: {group_name: {instance_type, total_count, node_names}}
+        instance_group_info: Dict[str, Dict[str, Any]] = {}
         next_token = None
 
         while True:
@@ -783,18 +799,62 @@ async def get_cluster_instance_types(cluster_id: str) -> List[str]:
 
             for node in response.get('ClusterNodeSummaries', []):
                 instance_type = node.get('InstanceType', '')
-                if instance_type:
-                    instance_types.add(instance_type)
+                instance_group_name = node.get('InstanceGroupName', '')
+                instance_id = node.get('InstanceId', '')
+
+                if instance_group_name and instance_type:
+                    if instance_group_name not in instance_group_info:
+                        instance_group_info[instance_group_name] = {
+                            'instance_type': instance_type,
+                            'total_count': 0,
+                            'node_names': []
+                        }
+                    instance_group_info[instance_group_name]['total_count'] += 1
+                    # Node name in k8s is typically hyperpod-<instance_id>
+                    instance_group_info[instance_group_name]['node_names'].append(f'hyperpod-{instance_id}')
 
             next_token = response.get('NextToken')
             if not next_token:
                 break
 
-        return sorted(list(instance_types))
+        # Get occupied nodes from kubernetes (nodes running inference pods)
+        occupied_nodes, _ = get_occupied_nodes(eks_cluster_name)
+
+        # Build detailed list with availability info
+        instance_type_details = []
+        available_instance_types = set()
+
+        for group_name, info in instance_group_info.items():
+            instance_type = info['instance_type']
+            total_count = info['total_count']
+            node_names = info['node_names']
+
+            # Calculate available count (nodes not occupied by inference pods)
+            occupied_count = sum(1 for n in node_names if n in occupied_nodes)
+            available_count = total_count - occupied_count
+
+            instance_type_details.append({
+                'instance_type': instance_type,
+                'instance_groups': [group_name],
+                'total_count': total_count,
+                'available_count': available_count,
+                'is_available': available_count > 0
+            })
+
+            if available_count > 0:
+                available_instance_types.add(instance_type)
+
+        # Sort by instance_type
+        instance_type_details.sort(key=lambda x: x['instance_type'])
+
+        return {
+            'instance_types': sorted(list(available_instance_types)),  # Only available types
+            'instance_type_details': instance_type_details  # All details including unavailable
+        }
 
     except Exception as e:
         logger.error(f"Failed to get cluster instance types: {e}")
-        return []
+        return {'instance_types': [], 'instance_type_details': []}
 
 
 async def delete_cluster(request: DeleteClusterRequest) -> CommonResponse:

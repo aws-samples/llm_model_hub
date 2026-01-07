@@ -1,16 +1,23 @@
 #!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="${SCRIPT_DIR}/.."
+
 git stash
 git pull
 git submodule update
-cd /home/ubuntu/llm_model_hub/backend/docker/
+
+cd "${SCRIPT_DIR}/docker/"
 bash build_and_push.sh
-cd /home/ubuntu/llm_model_hub/backend/docker_easyr1/
+
+cd "${SCRIPT_DIR}/docker_easyr1/"
 bash build_and_push.sh
-cd /home/ubuntu/llm_model_hub/backend/
-source ../miniconda3/bin/activate py311
-pip install -r requirements.txt
-cd /home/ubuntu/llm_model_hub/backend/byoc/
+
+cd "${SCRIPT_DIR}"
+uv pip install -r requirements.txt
+
+cd "${SCRIPT_DIR}/byoc/"
 bash build_and_push.sh
 bash build_and_push_sglang.sh
+
 pm2 restart all
 echo "upgrade success"

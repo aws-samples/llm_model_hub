@@ -291,7 +291,7 @@ def deploy_engine(job_id:str,engine:str,instance_type:str,enable_lora:bool,model
         env={
             "SM_SGLANG_SERVED_MODEL_NAME": model_name,  # Tell SGLang to serve under the original model name
             "SM_SGLANG_TP_SIZE": extra_params.get('tensor_parallel_size', str(get_auto_tensor_parallel_size(instance_type))),
-            "SM_SGLANG_MEM_FRACTION_STATIC": extra_params.get("mem_fraction_static", "0.8"),
+            "SM_SGLANG_MEM_FRACTION_STATIC": extra_params.get("mem_fraction_static", "0.9"),
             "HF_TOKEN": os.environ.get('HUGGING_FACE_HUB_TOKEN'),
         }
         # Only set model-path if using S3 model (non-default), otherwise let it use HF model

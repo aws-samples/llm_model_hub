@@ -667,3 +667,265 @@ If an endpoint is stuck with `Ready: False`, manually trigger a rollout:
 ```bash
 KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl rollout restart deployment <endpoint-name>
 ```
+
+
+## 14. HyperPod Missing Default Values for extra_params (Model OOM)
+
+### Issue
+Deploying VL (Vision-Language) models like Qwen3-VL to HyperPod fails with OOM error:
+```
+ValueError: To serve at least one request with the models's max seq len (262144),
+28.00 GiB KV cache is needed, which is larger than the available KV cache memory (13.69 GiB).
+The estimated maximum model length is 128128.
+```
+
+The model container keeps crashing and restarting because vLLM tries to allocate KV cache for the full context length (262144 tokens) which exceeds GPU memory.
+
+### Root Cause
+Comparing `deploy_engine()` (SageMaker) vs `deploy_hyperpod_with_hf_download_sync()` (HyperPod):
+
+**SageMaker deployment has defaults:**
+```python
+"SM_VLLM_MAX_MODEL_LEN": extra_params.get('max_model_len', "12288"),  # ✅ Default 12288
+"SM_VLLM_TENSOR_PARALLEL_SIZE": extra_params.get('tensor_parallel_size', str(get_auto_tensor_parallel_size(instance_type))),
+"SM_VLLM_MAX_NUM_SEQS": extra_params.get('max_num_seqs', '256'),  # ✅ Default 256
+"SM_SGLANG_MEM_FRACTION_STATIC": extra_params.get("mem_fraction_static", "0.8"),  # ✅ Default 0.8
+```
+
+**HyperPod deployment had NO defaults:**
+```python
+max_model_len=extra_params.get('max_model_len'),  # ❌ No default!
+gpu_memory_utilization=extra_params.get('mem_fraction_static'),  # ❌ No default!
+```
+
+Without `max_model_len`, vLLM uses the model's full context length (262144 for Qwen3-VL), causing OOM on smaller GPUs.
+
+### Solution
+
+**1. `backend/inference/hyperpod_deployment.py`**: Add default values matching SageMaker deployment:
+
+```python
+result = deploy_to_hyperpod_advanced(
+    ...
+    max_model_len=extra_params.get('max_model_len', 12288),  # Default 12288 like SageMaker
+    enable_prefix_caching=extra_params.get('enable_prefix_caching', False),
+    gpu_memory_utilization=extra_params.get('mem_fraction_static', 0.9),  # Default 0.9
+    chat_template=extra_params.get('chat_template'),
+    tool_call_parser=extra_params.get('tool_call_parser'),
+    # New parameters added:
+    limit_mm_per_prompt=extra_params.get('limit_mm_per_prompt'),
+    enforce_eager=extra_params.get('enforce_eager', False),
+    max_num_seqs=extra_params.get('max_num_seqs')
+)
+```
+
+**2. `backend/inference/hyperpod_inference.py`**: Add new function parameters:
+
+```python
+def deploy_to_hyperpod_advanced(
+    ...
+    # vLLM-specific parameters (added)
+    limit_mm_per_prompt: Optional[str] = None,  # vLLM: --limit-mm-per-prompt
+    enforce_eager: bool = False,                 # vLLM: --enforce-eager
+    max_num_seqs: Optional[int] = None          # vLLM: --max-num-seqs
+) -> Dict[str, Any]:
+```
+
+And use them in container args:
+```python
+if limit_mm_per_prompt:
+    args.extend(["--limit-mm-per-prompt", limit_mm_per_prompt])
+if enforce_eager:
+    args.append("--enforce-eager")
+if max_num_seqs:
+    args.extend(["--max-num-seqs", str(max_num_seqs)])
+```
+
+### Parameter Comparison Table
+
+| Parameter | SageMaker Default | HyperPod Default (Fixed) |
+|-----------|-------------------|-------------------------|
+| `max_model_len` | 12288 | 12288 |
+| `tensor_parallel_size` | auto | auto |
+| `max_num_seqs` | 256 | (no default) |
+| `mem_fraction_static` | 0.8 | 0.9 |
+| `enable_prefix_caching` | false | false |
+| `enforce_eager` | false | false |
+| `limit_mm_per_prompt` | (no default) | (no default) |
+| `chat_template` | (no default) | (no default) |
+| `tool_call_parser` | (no default) | (no default) |
+
+### Verification
+After the fix, deploying Qwen3-VL-2B shows:
+```
+non-default args: {..., 'max_model_len': 12288, ...}
+```
+
+Instead of the model's full context length (262144).
+
+
+## 15. Public ALB Ingress Recreation Stuck with 409 Conflict
+
+### Issue
+When enabling public ALB for a HyperPod endpoint, the `recreate_ingress_with_scheme()` function gets stuck:
+1. Ingress deletion times out after 180 seconds
+2. New Ingress creation fails with `409 Conflict: object is being deleted`
+3. HyperPod operator recreates the Ingress with original `internal` scheme
+4. Endpoint remains with internal ALB despite requesting public ALB
+
+Logs show:
+```
+Ingress alb-xxx is terminating, waiting... (175s elapsed)
+Ingress alb-xxx deletion timed out after 180s, proceeding anyway...
+Creating new Ingress alb-xxx with internet-facing scheme...
+HTTP response: 409 "object is being deleted: ingresses already exists"
+```
+
+### Root Cause
+The ALB Ingress Controller uses a **finalizer** (`ingress.k8s.aws/resources`) to ensure AWS resources are cleaned up before the Kubernetes Ingress object is deleted. The cleanup process involves:
+
+1. Deleting the ALB load balancer
+2. Deleting listener rules
+3. Deleting target groups
+4. Deleting security groups
+
+If target group deletion times out (e.g., targets still draining), the finalizer blocks the Ingress deletion indefinitely. Our code times out and tries to create a new Ingress, which fails with 409 because the old one still exists (marked for deletion but not removed due to the finalizer).
+
+### Solution
+**`backend/inference/hyperpod_inference.py`**: Modified `recreate_ingress_with_scheme()` to:
+
+1. **Remove the finalizer before deletion** - This allows immediate deletion without waiting for AWS resource cleanup:
+```python
+if existing_ingress.metadata.finalizers:
+    logger.info(f"Removing finalizers from Ingress {ingress_name} to allow immediate deletion...")
+    try:
+        networking_api.patch_namespaced_ingress(
+            name=ingress_name,
+            namespace=ingress_namespace,
+            body={"metadata": {"finalizers": None}}
+        )
+        logger.info(f"Finalizers removed from Ingress {ingress_name}")
+    except Exception as patch_e:
+        logger.warning(f"Failed to remove finalizers: {patch_e}, proceeding with deletion anyway")
+```
+
+2. **Add retry logic for 409 conflicts** - In case the Ingress is still terminating:
+```python
+max_create_retries = 5
+create_retry_delay = 5
+for create_attempt in range(max_create_retries):
+    try:
+        logger.info(f"Creating new Ingress... (attempt {create_attempt + 1}/{max_create_retries})")
+        networking_api.create_namespaced_ingress(namespace=ingress_namespace, body=new_ingress)
+        break
+    except ApiException as create_e:
+        if create_e.status == 409 and create_attempt < max_create_retries - 1:
+            logger.warning(f"409 conflict, retrying in {create_retry_delay}s...")
+            time_module.sleep(create_retry_delay)
+            create_retry_delay = min(create_retry_delay * 2, 30)  # Exponential backoff
+        else:
+            raise create_e
+```
+
+3. **Reduced wait timeouts** - Since finalizers are removed, deletion is much faster (60s vs 180s)
+
+### Note on AWS Resource Cleanup
+By removing the finalizer, we skip the ALB controller's AWS resource cleanup. This is safe because:
+- A new ALB with different resources will be created for the new Ingress
+- Orphaned AWS resources (old ALB, target groups) will be cleaned up by AWS or manually
+
+### Workaround for Stuck Ingresses
+If an Ingress is stuck in `Terminating` state, manually remove the finalizer:
+```bash
+KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl patch ingress <ingress-name> \
+  -n hyperpod-inference-system --type=json \
+  -p='[{"op": "remove", "path": "/metadata/finalizers"}]'
+```
+
+
+## 16. Database Shows Internal ALB URL After Public ALB Recreation
+
+### Issue
+Endpoint is deployed with public ALB enabled. The public ALB is successfully provisioned and working, but the playground shows an error:
+```
+Failed to resolve 'internal-k8s-hyperpod-albqwen3-d8ad7ac4de-852231201-1767773231.us-east-1.elb.amazonaws.com'
+```
+
+The database contains the **internal** ALB URL despite public ALB being configured and functional.
+
+### Root Cause
+A timing issue between the cluster processor and the public ALB recreation:
+
+**Timeline:**
+1. HyperPod operator creates deployment with **internal** ALB (default scheme)
+2. Model pod becomes Ready, endpoint transitions to `INSERVICE`
+3. `cluster_processor.py` detects `INSERVICE` and updates database with current ALB URL (internal)
+4. Background thread in `hyperpod_deployment.py` recreates Ingress with **public** (internet-facing) scheme
+5. Public ALB is provisioned successfully
+6. **Database still has old internal ALB URL** (never updated after step 5)
+
+```python
+# cluster_processor.py (line ~1512) - updates DB when endpoint becomes INSERVICE
+extra_config['alb_url'] = url_info.get('full_url', '')       # Gets internal ALB
+extra_config['endpoint_url'] = url_info.get('endpoint_url', '')
+database.update_endpoint_status(endpoint_name, EndpointStatus.INSERVICE, json.dumps(extra_config))
+```
+
+The public ALB recreation in `hyperpod_deployment.py` happens **after** the endpoint is already `INSERVICE`, so the database URL is never updated with the correct public ALB hostname.
+
+### Solution
+**`backend/inference/hyperpod_deployment.py`**: Update the database with the new public ALB URL after successful ALB configuration:
+
+```python
+if alb_result.get('success'):
+    alb_hostname = alb_result.get('alb_hostname')
+    logger.info(f"[HyperPod Deploy Background] Public ALB configured: {alb_hostname}")
+    alb_configured = True
+
+    # Update database with the new public ALB URL
+    if alb_hostname:
+        try:
+            import json as json_module
+            extra_config_data['alb_url'] = f"https://{alb_hostname}/v1/chat/completions"
+            extra_config_data['endpoint_url'] = alb_hostname
+            database.update_endpoint_status(
+                endpoint_name=endpoint_name,
+                endpoint_status=EndpointStatus.CREATING,  # Keep current status
+                extra_config=json_module.dumps(extra_config_data)
+            )
+            logger.info(f"[HyperPod Deploy Background] Database updated with public ALB URL: {alb_hostname}")
+        except Exception as db_e:
+            logger.warning(f"[HyperPod Deploy Background] Failed to update database with ALB URL: {db_e}")
+    break
+```
+
+This ensures the database is updated with the correct public ALB URL regardless of whether the cluster processor already updated it with the internal URL.
+
+### Workaround for Existing Endpoints
+Manually update the database with the correct public ALB URL:
+
+1. Get the current public ALB hostname:
+```bash
+KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl get ingress -n hyperpod-inference-system -o jsonpath='{.items[*].status.loadBalancer.ingress[0].hostname}'
+```
+
+2. Update the database:
+```sql
+UPDATE llm.EP_TABLE
+SET extra_config = JSON_SET(
+    extra_config,
+    '$.alb_url', 'https://<public-alb-hostname>/v1/chat/completions',
+    '$.endpoint_url', '<public-alb-hostname>'
+)
+WHERE endpoint_name = '<endpoint-name>';
+```
+
+Or using Python:
+```python
+import json
+# Get current extra_config
+extra_config = json.loads(endpoint.extra_config)
+extra_config['alb_url'] = f'https://{public_alb_hostname}/v1/chat/completions'
+extra_config['endpoint_url'] = public_alb_hostname
+database.update_endpoint_status(endpoint_name, EndpointStatus.INSERVICE, json.dumps(extra_config))
+```

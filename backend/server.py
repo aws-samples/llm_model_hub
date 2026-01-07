@@ -464,14 +464,16 @@ async def handle_list_cluster_nodes(request: ListClusterNodesRequest):
 async def handle_get_cluster_instance_types(cluster_id: str):
     """Get available instance types from a HyperPod cluster."""
     logger.info(f"Getting cluster instance types for cluster: {cluster_id}")
-    instance_types = await get_eks_cluster_instance_types(cluster_id)
+    result = await get_eks_cluster_instance_types(cluster_id)
+    # result is a dict with 'instance_types' and 'instance_type_details' keys
     return CommonResponse(
         response_id=str(uuid.uuid4()),
         response={
             'statusCode': 200,
             'body': {
                 'cluster_id': cluster_id,
-                'instance_types': instance_types
+                'instance_types': result.get('instance_types', []),
+                'instance_type_details': result.get('instance_type_details', [])
             }
         }
     )

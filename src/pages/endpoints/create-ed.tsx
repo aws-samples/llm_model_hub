@@ -109,7 +109,7 @@ const DEPLOYMENT_TARGETS: RadioGroupProps.RadioButtonDefinition[] = [
 ]
 
 const defaultData = {
-  instance_type: 'ml.g5.2xlarge',
+  instance_type: '',
   engine: 'vllm',
   enable_lora: false,
   model_name: undefined,
@@ -119,7 +119,8 @@ const defaultData = {
   extra_params:{enable_prefix_caching:true},
   deployment_target: 'sagemaker',
   hyperpod_cluster_id: undefined,
-  availableInstanceTypes: [] as string[],  // Available instance types from selected HyperPod cluster
+  availableInstanceTypes: [] as string[],  // Available instance types from selected HyperPod cluster (for backward compatibility)
+  instanceTypeDetails: [] as Array<{ instance_type: string; instance_groups: string[] }>,  // Detailed instance type info with instance groups
   hyperpod_config: {
     replicas: 1,
     namespace: 'default',
@@ -208,31 +209,81 @@ const SelectModelName = ({ data, setData, readOnly }: SelectModelProps) => {
   )
 }
 const SelectInstanceType = ({ data, setData, readOnly }: SelectInstanceTypeProps) => {
-  const [selectOption, setSelectOption] = useState<SelectProps.Option | null>(INSTANCE_TYPES[3]);
+  const [selectOption, setSelectOption] = useState<SelectProps.Option | null>(null);
 
-  // Filter instance types based on deployment target and available types
-  const availableOptions = React.useMemo(() => {
-    if (data.deployment_target === 'hyperpod' && data.availableInstanceTypes?.length > 0) {
-      // Only show instance types available in the selected HyperPod cluster
-      return INSTANCE_TYPES.filter(opt => data.availableInstanceTypes.includes(opt.value));
+  // Build options based on deployment target
+  const availableOptions: SelectProps.Option[] = React.useMemo(() => {
+    if (data.deployment_target === 'hyperpod') {
+      // For HyperPod, use instanceTypeDetails to show instance groups and availability
+      if (data.instanceTypeDetails?.length > 0) {
+        return data.instanceTypeDetails.map((detail: {
+          instance_type: string;
+          instance_groups: string[];
+          total_count?: number;
+          available_count?: number;
+          is_available?: boolean;
+        }) => {
+          const isAvailable = detail.is_available !== false && (detail.available_count === undefined || detail.available_count > 0);
+          const tags: string[] = [];
+
+          // Add instance group info
+          if (detail.instance_groups?.length > 0) {
+            detail.instance_groups.forEach((group: string) => tags.push(`Group: ${group}`));
+          }
+
+          // Add availability info
+          if (detail.available_count !== undefined && detail.total_count !== undefined) {
+            tags.push(`Available: ${detail.available_count}/${detail.total_count}`);
+          }
+
+          return {
+            label: detail.instance_type,
+            value: detail.instance_type,
+            tags: tags.length > 0 ? tags : undefined,
+            disabled: !isAvailable,
+            description: !isAvailable ? 'No available instances' : undefined
+          };
+        });
+      }
+      // Fallback to availableInstanceTypes (backward compatibility)
+      if (data.availableInstanceTypes?.length > 0) {
+        return data.availableInstanceTypes.map((instType: string) => ({
+          label: instType,
+          value: instType
+        }));
+      }
+      return [];
     }
+    // For SageMaker, use predefined INSTANCE_TYPES
     return INSTANCE_TYPES;
-  }, [data.deployment_target, data.availableInstanceTypes]);
+  }, [data.deployment_target, data.instanceTypeDetails, data.availableInstanceTypes]);
 
-  // Update selection when available options change
+  // Reset selection when switching deployment target or when HyperPod instance types change
   React.useEffect(() => {
-    if (data.deployment_target === 'hyperpod' && data.availableInstanceTypes?.length > 0) {
-      const currentValue = selectOption?.value;
-      if (!data.availableInstanceTypes.includes(currentValue)) {
-        // Current selection is not available, auto-select first available
-        const firstAvailable = availableOptions[0];
-        if (firstAvailable) {
-          setSelectOption(firstAvailable);
-          setData((pre: any) => ({ ...pre, instance_type: firstAvailable.value }));
+    if (data.deployment_target === 'hyperpod') {
+      // When switching to HyperPod, clear selection until cluster is selected and instance types loaded
+      if (!data.availableInstanceTypes?.length) {
+        setSelectOption(null);
+        setData((pre: any) => ({ ...pre, instance_type: '' }));
+      } else {
+        // Instance types loaded, auto-select first if current selection is invalid
+        const currentValue = selectOption?.value;
+        if (!data.availableInstanceTypes.includes(currentValue)) {
+          const firstAvailable = availableOptions[0];
+          if (firstAvailable) {
+            setSelectOption(firstAvailable);
+            setData((pre: any) => ({ ...pre, instance_type: firstAvailable.value }));
+          }
         }
       }
+    } else {
+      // When switching to SageMaker, clear selection if current is not in SageMaker list
+      if (selectOption && !INSTANCE_TYPES.some(opt => opt.value === selectOption.value)) {
+        setSelectOption(null);
+        setData((pre: any) => ({ ...pre, instance_type: '' }));
+      }
     }
-  }, [data.availableInstanceTypes, data.deployment_target]);
+  }, [data.deployment_target, data.availableInstanceTypes, availableOptions]);
 
   return (
     <Select
@@ -362,7 +413,7 @@ const SetExtraSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
         <Input
           readOnly={readOnly}
           value={memFrac}
-          placeholder={"0.8"}
+          placeholder={"0.9"}
           onChange={({ detail }) => {
             setMemFrac(detail.value);
             setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,mem_fraction_static: detail.value }  }))
@@ -469,10 +520,13 @@ const SelectHyperPodCluster = ({ data, setData, readOnly }: ClusterSelectorProps
     setLoadingInstanceTypes(true);
     try {
       const response = await remoteGet(`cluster_instance_types/${clusterId}`);
-      const instanceTypes = response?.response?.body?.instance_types || [];
+      const body = response?.response?.body || {};
+      const instanceTypes = body.instance_types || [];
+      const instanceTypeDetails = body.instance_type_details || [];
       setData((pre: any) => ({
         ...pre,
         availableInstanceTypes: instanceTypes,
+        instanceTypeDetails: instanceTypeDetails,
         // Auto-select the first available instance type if current selection is invalid
         instance_type: instanceTypes.length > 0 && !instanceTypes.includes(pre.instance_type)
           ? instanceTypes[0]
@@ -480,7 +534,7 @@ const SelectHyperPodCluster = ({ data, setData, readOnly }: ClusterSelectorProps
       }));
     } catch (error) {
       console.log('Failed to load instance types:', error);
-      setData((pre: any) => ({ ...pre, availableInstanceTypes: [] }));
+      setData((pre: any) => ({ ...pre, availableInstanceTypes: [], instanceTypeDetails: [] }));
     }
     setLoadingInstanceTypes(false);
   };
@@ -878,6 +932,7 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
           readOnly={readOnly}
           value={value1}
           type="number"
+          placeholder='12'
           inputMode="numeric"
           onChange={({ detail }) => {
             setValue1(detail.value);
@@ -1083,6 +1138,30 @@ export const DeployModelModal = ({
           <SetDeploymentTarget data={data} setData={setData} readOnly={false} />
         </FormField>
 
+        {/* SageMaker: Instance type and count right after deployment target */}
+        {data.deployment_target === 'sagemaker' && (
+          <>
+            <FormField
+              label={t("instance_type")}
+              stretch={false}
+              errorText={errors.instance_type}
+              i18nStrings={{ errorIconAriaLabel: 'Error' }}
+            >
+              <SelectInstanceType data={data} setData={setData} readOnly={false} />
+            </FormField>
+
+            <FormField
+              label={t("instance_qty")}
+              description={t("instance_qty_desc")}
+              stretch={false}
+              errorText={errors.instance_count}
+              i18nStrings={{ errorIconAriaLabel: 'Error' }}
+            >
+              <SetInstanceQty data={data} setData={setData} readOnly={false} />
+            </FormField>
+          </>
+        )}
+
         {data.deployment_target === 'hyperpod' && (
           <>
             <FormField
@@ -1094,11 +1173,12 @@ export const DeployModelModal = ({
             </FormField>
 
             <FormField
-              label={t("namespace")}
+              label={t("instance_type")}
               stretch={false}
-              description={t("namespace_desc")}
+              errorText={errors.instance_type}
+              i18nStrings={{ errorIconAriaLabel: 'Error' }}
             >
-              <SetHyperPodNamespace data={data} setData={setData} readOnly={false} />
+              <SelectInstanceType data={data} setData={setData} readOnly={false} />
             </FormField>
 
             <FormField
@@ -1170,28 +1250,6 @@ export const DeployModelModal = ({
             stretch={false}
           >
             <InputS3Path data={data} setData={setData} readOnly={modelNameReadOnly} />
-          </FormField>
-        )}
-
-        <FormField
-          label={t("instance_type")}
-          stretch={false}
-          errorText={errors.instance_type}
-          i18nStrings={{ errorIconAriaLabel: 'Error' }}
-        >
-          <SelectInstanceType data={data} setData={setData} readOnly={false} />
-        </FormField>
-
-        {/* Instance count is only for SageMaker deployments - HyperPod uses replicas */}
-        {data.deployment_target === 'sagemaker' && (
-          <FormField
-            label={t("instance_qty")}
-            description={t("instance_qty_desc")}
-            stretch={false}
-            errorText={errors.instance_count}
-            i18nStrings={{ errorIconAriaLabel: 'Error' }}
-          >
-            <SetInstanceQty data={data} setData={setData} readOnly={false} />
           </FormField>
         )}
 

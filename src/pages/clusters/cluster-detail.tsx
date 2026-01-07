@@ -65,6 +65,8 @@ interface ClusterNode {
   instance_group_name: string;
   instance_type?: string;
   launch_time?: string;
+  is_occupied?: boolean;
+  occupied_by?: string;
 }
 
 interface ClusterData {
@@ -139,7 +141,7 @@ function parseArnInfo(arn: string | undefined): { accountId: string; region: str
 function getDefaultLifecycleScriptUri(cluster: ClusterData): string {
   const arnInfo = parseArnInfo(cluster.hyperpod_cluster_arn || cluster.eks_cluster_arn);
   if (arnInfo) {
-    return `s3://llm-modelhub-hyperpod-${arnInfo.accountId}-${arnInfo.region}/hyperpod-scripts/`;
+    return `s3://llm-modelhub-hyperpod-${arnInfo.accountId}-${arnInfo.region}/LifecycleScripts/base-config/`;
   }
   return '-';
 }
@@ -597,6 +599,25 @@ function ClusterDetailContent() {
                       },
                     },
                     {
+                      id: 'available_count',
+                      header: 'Available',
+                      cell: (item: InstanceGroup) => {
+                        if (nodesLoading) {
+                          return <Spinner size="normal" />;
+                        }
+                        const groupNodes = clusterNodes.filter(
+                          node => node.instance_group_name === item.name
+                        );
+                        const availableCount = groupNodes.filter(node => !node.is_occupied).length;
+                        const totalCount = groupNodes.length;
+                        return (
+                          <StatusIndicator type={availableCount > 0 ? 'success' : 'warning'}>
+                            {availableCount} / {totalCount}
+                          </StatusIndicator>
+                        );
+                      },
+                    },
+                    {
                       id: 'min_instance_count',
                       header: 'Min Count',
                       cell: (item: InstanceGroup) => item.min_instance_count ?? '-',
@@ -709,6 +730,20 @@ function ClusterDetailContent() {
                       id: 'launch_time',
                       header: 'Created',
                       cell: (item: ClusterNode) => item.launch_time ? new Date(item.launch_time).toLocaleString() : '-',
+                    },
+                    {
+                      id: 'is_occupied',
+                      header: 'Status',
+                      cell: (item: ClusterNode) => (
+                        <StatusIndicator type={item.is_occupied ? 'warning' : 'success'}>
+                          {item.is_occupied ? 'Occupied' : 'Available'}
+                        </StatusIndicator>
+                      ),
+                    },
+                    {
+                      id: 'occupied_by',
+                      header: 'Occupied By',
+                      cell: (item: ClusterNode) => item.occupied_by || '-',
                     },
                   ]}
                   empty={

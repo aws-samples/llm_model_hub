@@ -399,6 +399,8 @@ class ClusterNodeInfo(BaseModel):
     private_ip_address: Optional[str] = None
     threads_per_core: Optional[int] = None
     placement: Optional[Dict[str, Any]] = None
+    is_occupied: Optional[bool] = False  # Whether the node is occupied by an inference workload
+    occupied_by: Optional[str] = None  # Name of the endpoint/workload occupying this node
 
 class ListClusterNodesResponse(BaseModel):
     """Response for listing cluster nodes"""

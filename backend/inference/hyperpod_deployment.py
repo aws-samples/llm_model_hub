@@ -265,6 +265,7 @@ def deploy_hyperpod_with_hf_download_sync(
                 )
 
             # Deploy with advanced configuration
+            # Use same default values as SageMaker deployment for consistency
             result = deploy_to_hyperpod_advanced(
                 eks_cluster_name=eks_cluster_name,
                 endpoint_name=endpoint_name,
@@ -281,8 +282,14 @@ def deploy_hyperpod_with_hf_download_sync(
                 intelligent_routing=intelligent_routing_config,
                 api_key_config=api_key_config,
                 tensor_parallel_size=extra_params.get('tensor_parallel_size'),
-                max_model_len=extra_params.get('max_model_len'),
-                enable_prefix_caching=extra_params.get('enable_prefix_caching', False)
+                max_model_len=extra_params.get('max_model_len', 12288),  # Default 12288 like SageMaker
+                enable_prefix_caching=extra_params.get('enable_prefix_caching', False),
+                gpu_memory_utilization=extra_params.get('mem_fraction_static', 0.9),  # Default 0.9
+                chat_template=extra_params.get('chat_template'),
+                tool_call_parser=extra_params.get('tool_call_parser'),
+                limit_mm_per_prompt=extra_params.get('limit_mm_per_prompt'),
+                enforce_eager=extra_params.get('enforce_eager', False),
+                max_num_seqs=extra_params.get('max_num_seqs')
             )
         else:
             # Deploy with basic configuration
@@ -346,8 +353,24 @@ def deploy_hyperpod_with_hf_download_sync(
                         )
 
                         if alb_result.get('success'):
-                            logger.info(f"[HyperPod Deploy Background] Public ALB configured: {alb_result.get('alb_hostname')}")
+                            alb_hostname = alb_result.get('alb_hostname')
+                            logger.info(f"[HyperPod Deploy Background] Public ALB configured: {alb_hostname}")
                             alb_configured = True
+
+                            # Update database with the new public ALB URL
+                            if alb_hostname:
+                                try:
+                                    import json as json_module
+                                    extra_config_data['alb_url'] = f"https://{alb_hostname}/v1/chat/completions"
+                                    extra_config_data['endpoint_url'] = alb_hostname
+                                    database.update_endpoint_status(
+                                        endpoint_name=endpoint_name,
+                                        endpoint_status=EndpointStatus.CREATING,  # Keep current status
+                                        extra_config=json_module.dumps(extra_config_data)
+                                    )
+                                    logger.info(f"[HyperPod Deploy Background] Database updated with public ALB URL: {alb_hostname}")
+                                except Exception as db_e:
+                                    logger.warning(f"[HyperPod Deploy Background] Failed to update database with ALB URL: {db_e}")
                             break
                         else:
                             error = alb_result.get('error', 'Unknown error')
@@ -599,6 +622,7 @@ def deploy_endpoint_hyperpod(
                 logger.info(f"API key authentication enabled: source={api_key_config.source}")
 
             # Deploy with advanced configuration
+            # Use same default values as SageMaker deployment for consistency
             result = deploy_to_hyperpod_advanced(
                 eks_cluster_name=eks_cluster_name,
                 endpoint_name=endpoint_name,
@@ -615,11 +639,14 @@ def deploy_endpoint_hyperpod(
                 intelligent_routing=intelligent_routing_config,
                 api_key_config=api_key_config,
                 tensor_parallel_size=extra_params.get('tensor_parallel_size'),
-                max_model_len=extra_params.get('max_model_len'),
+                max_model_len=extra_params.get('max_model_len', 12288),  # Default 12288 like SageMaker
                 enable_prefix_caching=extra_params.get('enable_prefix_caching', False),
-                gpu_memory_utilization=extra_params.get('mem_fraction_static'),
+                gpu_memory_utilization=extra_params.get('mem_fraction_static', 0.9),  # Default 0.9
                 chat_template=extra_params.get('chat_template'),
-                tool_call_parser=extra_params.get('tool_call_parser')
+                tool_call_parser=extra_params.get('tool_call_parser'),
+                limit_mm_per_prompt=extra_params.get('limit_mm_per_prompt'),
+                enforce_eager=extra_params.get('enforce_eager', False),
+                max_num_seqs=extra_params.get('max_num_seqs')
             )
         else:
             # Deploy with basic configuration

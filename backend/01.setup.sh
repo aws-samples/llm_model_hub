@@ -1,30 +1,34 @@
 #!/bin/bash
-#安装miniconda
-echo "install miniconda...."
-wget  https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-chmod +x  Miniconda3-latest-Linux-x86_64.sh
-./Miniconda3-latest-Linux-x86_64.sh  -b -f -p ../miniconda3
-source  ../miniconda3/bin/activate
-conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
-conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
-conda create -n py311 python=3.11 -y
-conda activate py311
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# 安装 uv
+echo "Installing uv..."
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 添加 uv 到 PATH
+export PATH="$HOME/.local/bin:$PATH"
+
+# 创建 Python 3.12 虚拟环境
+echo "Creating Python 3.12 virtual environment with uv..."
+uv venv --python 3.12 "${SCRIPT_DIR}/.venv"
+
+# 激活虚拟环境
+# source .venv/bin/activate
 
 # 安装 requirements
-# sudo apt install -y python3-numpy
-echo "install requirements....."
-pip install -r requirements.txt
+echo "Installing requirements with uv..."
+uv pip install -r requirements.txt
 
-# 安装Docker
+# 安装 Docker
 sudo apt-get update
-sudo apt install python3-pip git -y && pip3 install -U awscli && pip install pyyaml==5.3.1
+sudo apt install  git -y && uv pip install -U awscli && uv pip install pyyaml==5.3.1
 sudo apt install docker.io -y
 # Configure components
 sudo systemctl enable docker && sudo systemctl start docker && sudo usermod -aG docker $USER
 
 sudo chmod 666 /var/run/docker.sock
 
-#在backend目录下执行以下命令启动mysql容器
+# 在 backend 目录下执行以下命令启动 mysql 容器
 docker run -d \
   --name hub-mysql \
   -p 3306:3306 \
@@ -40,8 +44,8 @@ docker run -d \
 sleep 60
 
 # 创建数据库并导入数据
-echo "create database and import data....."
-cd scripts 
+echo "Creating database and importing data..."
+cd scripts
 docker exec hub-mysql sh -c "mysql -u root -p1234560 -D llm  < /opt/data/mysql_setup.sql"
 sleep 5
 docker exec hub-mysql sh -c "mysql -u root -p1234560 -D llm < /opt/data/init_cluster_table.sql"

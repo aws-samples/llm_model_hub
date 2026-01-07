@@ -1453,7 +1453,11 @@ def deploy_to_hyperpod_advanced(
     # Additional vLLM/SGLang parameters
     gpu_memory_utilization: Optional[float] = None,  # vLLM: --gpu-memory-utilization, SGLang: --mem-fraction-static
     chat_template: Optional[str] = None,
-    tool_call_parser: Optional[str] = None
+    tool_call_parser: Optional[str] = None,
+    # vLLM-specific parameters
+    limit_mm_per_prompt: Optional[str] = None,  # vLLM: --limit-mm-per-prompt (e.g., "image=2,video=1")
+    enforce_eager: bool = False,  # vLLM: --enforce-eager (disable CUDA graph)
+    max_num_seqs: Optional[int] = None  # vLLM: --max-num-seqs (max concurrent sequences)
 ) -> Dict[str, Any]:
     """
     Deploy a model to HyperPod EKS cluster with advanced configuration options.
@@ -1703,6 +1707,12 @@ def deploy_to_hyperpod_advanced(
             args.extend(["--chat-template", chat_template])
         if tool_call_parser:
             args.extend(["--tool-call-parser", tool_call_parser])
+        if limit_mm_per_prompt:
+            args.extend(["--limit-mm-per-prompt", limit_mm_per_prompt])
+        if enforce_eager:
+            args.append("--enforce-eager")
+        if max_num_seqs:
+            args.extend(["--max-num-seqs", str(max_num_seqs)])
         worker_spec["args"] = args
 
     # Build spec
@@ -2484,15 +2494,32 @@ def recreate_ingress_with_scheme(
 
         ingress_spec = existing_ingress.spec
 
+        # Remove finalizers first to allow immediate deletion
+        # The ALB controller's finalizer (ingress.k8s.aws/resources) blocks deletion until
+        # it cleans up AWS resources (ALB, target groups, etc.), which can take a long time
+        # or fail entirely. By removing the finalizer first, we allow immediate deletion.
+        # The AWS resources will be cleaned up eventually, and a new ALB will be created.
+        if existing_ingress.metadata.finalizers:
+            logger.info(f"Removing finalizers from Ingress {ingress_name} to allow immediate deletion...")
+            try:
+                networking_api.patch_namespaced_ingress(
+                    name=ingress_name,
+                    namespace=ingress_namespace,
+                    body={"metadata": {"finalizers": None}}
+                )
+                logger.info(f"Finalizers removed from Ingress {ingress_name}")
+            except Exception as patch_e:
+                logger.warning(f"Failed to remove finalizers: {patch_e}, proceeding with deletion anyway")
+
         # Delete the existing Ingress
         logger.info(f"Deleting existing Ingress {ingress_name} in {ingress_namespace} to recreate with {scheme} scheme...")
         networking_api.delete_namespaced_ingress(name=ingress_name, namespace=ingress_namespace)
 
-        # Wait for the ingress to be fully deleted (not just marked for deletion)
-        # The ingress may stay in "Terminating" state while the ALB controller cleans up resources
+        # Wait for the ingress to be fully deleted
+        # Since we removed the finalizer, this should be quick
         logger.info(f"Waiting for Ingress {ingress_name} to be fully deleted...")
-        max_wait_seconds = max(wait_for_cleanup, 180)  # At least 3 minutes
-        poll_interval = 5
+        max_wait_seconds = max(wait_for_cleanup, 60)  # 1 minute should be enough without finalizers
+        poll_interval = 2
         for i in range(max_wait_seconds // poll_interval):
             try:
                 ing = networking_api.read_namespaced_ingress(name=ingress_name, namespace=ingress_namespace)
@@ -2512,9 +2539,9 @@ def recreate_ingress_with_scheme(
         else:
             logger.warning(f"Ingress {ingress_name} deletion timed out after {max_wait_seconds}s, proceeding anyway...")
 
-        # Additional short wait for ALB resources cleanup
-        logger.info(f"Waiting additional 10s for ALB resources cleanup...")
-        time_module.sleep(10)
+        # Additional short wait for any remaining cleanup
+        logger.info(f"Waiting additional 5s for cleanup...")
+        time_module.sleep(5)
 
         # Recreate the Ingress with the correct scheme
         new_ingress = client.V1Ingress(
@@ -2529,8 +2556,27 @@ def recreate_ingress_with_scheme(
             spec=ingress_spec
         )
 
-        logger.info(f"Creating new Ingress {ingress_name} in {ingress_namespace} with {scheme} scheme...")
-        networking_api.create_namespaced_ingress(namespace=ingress_namespace, body=new_ingress)
+        # Create with retry logic for 409 conflicts
+        # The old Ingress might still be terminating even after we removed the finalizer
+        max_create_retries = 5
+        create_retry_delay = 5
+        for create_attempt in range(max_create_retries):
+            try:
+                logger.info(f"Creating new Ingress {ingress_name} in {ingress_namespace} with {scheme} scheme (attempt {create_attempt + 1}/{max_create_retries})...")
+                networking_api.create_namespaced_ingress(namespace=ingress_namespace, body=new_ingress)
+                logger.info(f"Ingress {ingress_name} created successfully")
+                break
+            except ApiException as create_e:
+                if create_e.status == 409 and create_attempt < max_create_retries - 1:
+                    # Conflict - old Ingress still exists, wait and retry
+                    logger.warning(f"Ingress creation got 409 conflict, old Ingress may still be terminating. Retrying in {create_retry_delay}s...")
+                    time_module.sleep(create_retry_delay)
+                    create_retry_delay = min(create_retry_delay * 2, 30)  # Exponential backoff up to 30s
+                else:
+                    raise create_e
+        else:
+            # If we exhausted retries, raise an error
+            raise Exception(f"Failed to create Ingress after {max_create_retries} attempts due to conflicts")
 
         # Wait for the new ALB to be provisioned
         logger.info(f"Waiting for new ALB to be provisioned...")

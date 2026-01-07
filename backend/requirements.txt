@@ -14,4 +14,4 @@ sentencepiece
 modelscope
 tiktoken
 kubernetes
-boto3>=1.42.6
+boto3>=1.42.2

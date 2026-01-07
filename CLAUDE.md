@@ -18,20 +18,22 @@ npm test           # Run tests
 ### Backend (Python/FastAPI)
 ```bash
 # Activate environment first
-source miniconda3/bin/activate py311
-conda activate py311
+source .venv/bin/activate
 
 # Start backend services (from backend/ directory)
 bash 02.start_backend.sh
 
 # Or manually:
-pm2 start server.py --name "modelhub-server" --interpreter ../miniconda3/envs/py311/bin/python3 -- --host 0.0.0.0 --port 8000
-pm2 start processing_engine/main.py --name "modelhub-engine" --interpreter ../miniconda3/envs/py311/bin/python3
+pm2 start server.py --name "modelhub-server" --interpreter ../.venv/bin/python3 -- --host 0.0.0.0 --port 8000
+pm2 start processing_engine/main.py --name "modelhub-engine" --interpreter ../.venv/bin/python3
 
 # Service management
 pm2 list           # Check running processes
 pm2 restart all    # Restart all services
 pm2 logs           # View logs
+
+# Install dependencies with uv
+uv pip install -r requirements.txt
 ```
 
 ### User Management
@@ -67,7 +69,7 @@ bash 03.upgrade.sh         # One-click upgrade (v1.0.6+)
 - **Shared:** `src/pages/commons/` - Auth hooks, navigation, reusable components
 
 ### Backend (`backend/`)
-- **FastAPI server** (`server.py`) on port 8000 with Bearer token auth
+- **FastAPI server** (`server.py`) on port 8000 with Bearer token auth (Python 3.12, managed by uv)
 - **Processing engine** (`processing_engine/main.py`) - Background job management
 - **Key modules:**
   - `training/` - SageMaker training job orchestration
