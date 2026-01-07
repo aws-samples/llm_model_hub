@@ -128,6 +128,7 @@ const defaultData = {
     min_replicas: 1,
     max_replicas: 10,
     enable_kv_cache: false,
+    enable_l2_cache: false,  // Disabled by default due to HyperPod operator bug (lmcache-config volume mount error)
     kv_cache_backend: 'tieredstorage',
     enable_intelligent_routing: false,
     routing_strategy: 'prefixaware',
@@ -220,6 +221,7 @@ const SelectInstanceType = ({ data, setData, readOnly }: SelectInstanceTypeProps
           instance_type: string;
           instance_groups: string[];
           total_count?: number;
+          running_count?: number;
           available_count?: number;
           is_available?: boolean;
         }) => {
@@ -231,9 +233,25 @@ const SelectInstanceType = ({ data, setData, readOnly }: SelectInstanceTypeProps
             detail.instance_groups.forEach((group: string) => tags.push(`Group: ${group}`));
           }
 
-          // Add availability info
-          if (detail.available_count !== undefined && detail.total_count !== undefined) {
+          // Add availability info (Available/Running/Total)
+          if (detail.available_count !== undefined && detail.running_count !== undefined && detail.total_count !== undefined) {
+            // Show: Available X / Running Y / Total Z
+            tags.push(`Available: ${detail.available_count}/${detail.running_count} running`);
+            if (detail.running_count < detail.total_count) {
+              tags.push(`${detail.total_count - detail.running_count} pending`);
+            }
+          } else if (detail.available_count !== undefined && detail.total_count !== undefined) {
             tags.push(`Available: ${detail.available_count}/${detail.total_count}`);
+          }
+
+          // Build description for unavailable instances
+          let description: string | undefined;
+          if (!isAvailable) {
+            if (detail.running_count !== undefined && detail.running_count === 0) {
+              description = 'No running instances (all pending)';
+            } else {
+              description = 'No available instances';
+            }
           }
 
           return {
@@ -241,7 +259,7 @@ const SelectInstanceType = ({ data, setData, readOnly }: SelectInstanceTypeProps
             value: detail.instance_type,
             tags: tags.length > 0 ? tags : undefined,
             disabled: !isAvailable,
-            description: !isAvailable ? 'No available instances' : undefined
+            description: description
           };
         });
       }
@@ -296,8 +314,8 @@ const SelectInstanceType = ({ data, setData, readOnly }: SelectInstanceTypeProps
       options={availableOptions}
       selectedAriaLabel="Selected"
       placeholder={data.deployment_target === 'hyperpod' && availableOptions.length === 0
-        ? "Select a cluster first"
-        : "Select instance type"
+        ? t("select_cluster_first")
+        : t("select_instance_type")
       }
     />
   )
@@ -551,7 +569,7 @@ const SelectHyperPodCluster = ({ data, setData, readOnly }: ClusterSelectorProps
       onLoadItems={handleLoadClusters}
       disabled={readOnly || loadingInstanceTypes}
       selectedOption={selectOption}
-      placeholder={loadingInstanceTypes ? "Loading instance types..." : "Select a HyperPod cluster"}
+      placeholder={loadingInstanceTypes ? t("loading_instance_types") : t("select_hyperpod_cluster")}
       onChange={({ detail }) => {
         setSelectOption(detail.selectedOption);
         const clusterId = detail.selectedOption?.value;
@@ -667,6 +685,7 @@ const SetHyperPodAutoscaling = ({ data, setData, readOnly }: SelectQuantTypeProp
 // HyperPod KV Cache Configuration
 const SetHyperPodKVCache = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   const [enabled, setEnabled] = useState<boolean>(false);
+  const [enableL2, setEnableL2] = useState<boolean>(false);  // Disabled by default due to operator bug
   const [backend, setBackend] = useState<SelectProps.Option | null>(KV_CACHE_BACKENDS[0]);
 
   return (
@@ -685,21 +704,39 @@ const SetHyperPodKVCache = ({ data, setData, readOnly }: SelectQuantTypeProps) =
         {t("enable_kv_cache")}
       </Toggle>
       {enabled && (
-        <FormField label={t("kv_cache_backend")}>
-          <Select
-            disabled={readOnly}
-            selectedOption={backend}
+        <SpaceBetween size="s">
+          <Toggle
+            readOnly={readOnly}
+            disabled={true}  // Temporarily disabled due to HyperPod operator bug (lmcache-config volume mount error)
+            checked={enableL2}
             onChange={({ detail }) => {
-              setBackend(detail.selectedOption);
+              setEnableL2(detail.checked);
               setData((pre: any) => ({
                 ...pre,
-                hyperpod_config: { ...pre.hyperpod_config, kv_cache_backend: detail.selectedOption?.value || 'tieredstorage' }
+                hyperpod_config: { ...pre.hyperpod_config, enable_l2_cache: detail.checked }
               }))
             }}
-            options={KV_CACHE_BACKENDS}
-            selectedAriaLabel="Selected"
-          />
-        </FormField>
+          >
+            {t("enable_l2_cache")} (Temporarily disabled)
+          </Toggle>
+          {enableL2 && (
+            <FormField label={t("kv_cache_backend")}>
+              <Select
+                disabled={readOnly}
+                selectedOption={backend}
+                onChange={({ detail }) => {
+                  setBackend(detail.selectedOption);
+                  setData((pre: any) => ({
+                    ...pre,
+                    hyperpod_config: { ...pre.hyperpod_config, kv_cache_backend: detail.selectedOption?.value || 'tieredstorage' }
+                  }))
+                }}
+                options={KV_CACHE_BACKENDS}
+                selectedAriaLabel="Selected"
+              />
+            </FormField>
+          )}
+        </SpaceBetween>
       )}
     </SpaceBetween>
   )
@@ -1060,7 +1097,7 @@ export const DeployModelModal = ({
             ...item,
             {
               type: "success",
-              content: `Create Endpoint Name:${res.response.endpoint_name}`,
+              content: `${t("create_endpoint_success")}:${res.response.endpoint_name}`,
               dismissible: true,
               dismissLabel: "Dismiss message",
               onDismiss: () =>
@@ -1079,7 +1116,7 @@ export const DeployModelModal = ({
             ...item,
             {
               type: "error",
-              content: `Create Endpoint failed:${res.response.endpoint_name}`,
+              content: `${t("create_endpoint_failed")}:${res.response.endpoint_name}`,
               dismissible: true,
               dismissLabel: "Dismiss message",
               onDismiss: () =>
@@ -1099,7 +1136,7 @@ export const DeployModelModal = ({
           ...item,
           {
             type: "error",
-            content: `Create Endpoint failed:${err}`,
+            content: `${t("create_endpoint_failed")}:${err}`,
             dismissible: true,
             dismissLabel: "Dismiss message",
             onDismiss: () =>

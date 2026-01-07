@@ -929,3 +929,99 @@ extra_config['alb_url'] = f'https://{public_alb_hostname}/v1/chat/completions'
 extra_config['endpoint_url'] = public_alb_hostname
 database.update_endpoint_status(endpoint_name, EndpointStatus.INSERVICE, json.dumps(extra_config))
 ```
+
+
+## 17. KV Cache Enabled Causes "lmcache-config" Volume Mount Error
+
+### Issue
+Deploying HyperPod endpoint with **KV cache enabled** (L1 or L2 cache) fails with:
+```
+ERROR: Deployment.apps "endpoint-name" is invalid:
+spec.template.spec.containers[0].volumeMounts[2].name: Not found: "lmcache-config"
+```
+
+The deployment is never created. Only the router pod runs, but no model pod is scheduled.
+
+### Root Cause
+This is a **bug in the HyperPod Inference Operator**. When KV cache is enabled via `kvCacheSpec`:
+```yaml
+kvCacheSpec:
+  enableL1Cache: true
+  enableL2Cache: true
+  l2CacheSpec:
+    l2CacheBackend: tieredstorage
+```
+
+The operator adds a volume mount for `lmcache-config` to the model container:
+```yaml
+volumeMounts:
+- name: lmcache-config    # <-- Referenced here
+  mountPath: /etc/lmcache
+```
+
+But the operator **never defines the corresponding volume** in the pod spec:
+```yaml
+volumes:
+- name: model-weights
+  ...
+- name: sidecar-config
+  ...
+# lmcache-config volume is MISSING!
+```
+
+Kubernetes validation fails because the volume mount references a non-existent volume.
+
+### Solution
+
+**Immediate Workaround**: Disable KV cache by patching the InferenceEndpointConfig CRD:
+```bash
+KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl patch inferenceendpointconfig <endpoint-name> \
+  --type='merge' -p='{"spec":{"kvCacheSpec":{"enableL1Cache":false,"enableL2Cache":false}}}'
+```
+
+The operator will detect the change and successfully create the deployment without the problematic volume mount.
+
+**Permanent Fix**: This requires an update to the HyperPod Inference Operator from AWS. The operator needs to:
+1. Define the `lmcache-config` ConfigMap with the appropriate LMCache configuration
+2. Add the corresponding volume definition to the pod spec
+
+### Prevention
+Until AWS fixes the operator, disable KV cache in the deployment code:
+
+**`backend/inference/hyperpod_inference.py`** or **`backend/inference/hyperpod_deployment.py`**:
+```python
+# Temporarily disable KV cache due to operator bug (lmcache-config volume not defined)
+# TODO: Re-enable when AWS fixes the HyperPod Inference Operator
+if enable_kv_cache:
+    logger.warning("KV cache is temporarily disabled due to HyperPod operator bug (lmcache-config volume mount error)")
+    enable_kv_cache = False
+```
+
+Or in the CRD spec generation:
+```python
+# Don't add kvCacheSpec until operator bug is fixed
+# kv_cache_spec = {
+#     "enableL1Cache": True,
+#     "enableL2Cache": True,
+#     ...
+# }
+```
+
+### Verification
+After disabling KV cache, verify the deployment is created:
+```bash
+# Check deployment exists
+KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl get deployment -n default | grep <endpoint-name>
+
+# Check pod is running
+KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl get pods -n default | grep <endpoint-name>
+
+# Should show 3/3 Running (model + sidecar + otel)
+```
+
+### Affected Configurations
+This bug affects any deployment with:
+- `enableL1Cache: true` OR
+- `enableL2Cache: true`
+
+Regardless of the `l2CacheBackend` setting (tieredstorage, redis, etc.).
