@@ -15,10 +15,11 @@ if [[ $region =~ ^cn ]]; then
     suffix="com.cn"
 fi
 
-VERSION=0.9.4.cb4cdb4
+
+VERSION=0.9.4.68119e5
 inference_image=llm-modelhub-llamafactory
 public_ecr_uri=public.ecr.aws/f8g1z3n8
-inference_fullname=${public_ecr_uri}/${inference_image}:latest
+inference_fullname=${public_ecr_uri}/${inference_image}:${VERSION}
 
 # Login to AWS Public ECR
 aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
@@ -36,12 +37,12 @@ fi
 # Add variables for build arguments pytorch-training:2.5.1-gpu-py311-cu124-ubuntu22.04-sagemaker
 # https://github.com/aws/deep-learning-containers/blob/master/available_images.md
 if [[ $region =~ ^cn ]]; then
-    BASE_IMAGE="727897471807.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.6.0-gpu-py312-cu126-ubuntu22.04-sagemaker"
+    BASE_IMAGE="727897471807.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.8.0-gpu-py312-cu129-ubuntu22.04-sagemaker"
     PIP_INDEX="https://mirrors.aliyun.com/pypi/simple"
-    sed -i '/^RUN pip install "unsloth[cu126-torch260]/d' /home/ubuntu/llm_model_hub/backend/docker/Dockerfile
+    sed -i '/^RUN uv pip install --system unsloth/d' /home/ubuntu/llm_model_hub/backend/docker/Dockerfile
 
 else
-    BASE_IMAGE="763104351884.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.6.0-gpu-py312-cu126-ubuntu22.04-sagemaker"
+    BASE_IMAGE="763104351884.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.8.0-gpu-py312-cu129-ubuntu22.04-sagemaker"
     PIP_INDEX="https://pypi.org/simple"
 fi
 

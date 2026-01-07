@@ -19,9 +19,12 @@ fi
 account=$(aws sts  get-caller-identity --query Account --output text)
 partition=$(aws sts get-caller-identity --query 'Arn' --output text | cut -d: -f2)
 
-SGL_VERSION=v0.5.6.post1-cu129-amd64
-# Public ECR image
-public_ecr_image=public.ecr.aws/f8g1z3n8/llm-modelhub-byoc-sglang:${SGL_VERSION}
+SGL_VERSION=0.5.6
+# Public ECR image 
+# https://gallery.ecr.aws/deep-learning-containers/
+public_ecr_image=public.ecr.aws/deep-learning-containers/sglang:${SGL_VERSION}-gpu-py312-cu129-ubuntu22.04-sagemaker-v1.9-2026-01-06-21-53-51-soci
+hp_sglang_image=public.ecr.aws/deep-learning-containers/sglang:${SGL_VERSION}-gpu-py312
+
 
 # Private ECR configuration
 inference_image=sagemaker_endpoint/sglang
@@ -64,6 +67,12 @@ docker tag ${public_ecr_image} ${inference_fullname}
 docker push ${inference_fullname}
 echo ${inference_fullname}
 # 删除 .env 文件中的 sglang_image= 这一行
-sed -i '/^sglang_image=/d' /home/ubuntu/llm_model_hub/backend/.env
-echo "" >> /home/ubuntu/llm_model_hub/backend/.env
-echo "sglang_image=${inference_fullname}" >> /home/ubuntu/llm_model_hub/backend/.env
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/../.env"
+
+sed -i '/^sglang_image=/d' "${ENV_FILE}"
+# echo "" >> "${ENV_FILE}"
+echo "sglang_image=${inference_fullname}" >> "${ENV_FILE}"
+sed -i '/^hp_sglang_image=/d' "${ENV_FILE}"
+# echo "" >> "${ENV_FILE}"
+echo "hp_sglang_image=${hp_sglang_image}" >> "${ENV_FILE}"

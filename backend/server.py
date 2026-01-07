@@ -551,6 +551,15 @@ async def handle_hyperpod_inference(request: InferenceRequest, endpoint_info: di
 
     logger.info(f"[HyperPod Inference] Using EKS cluster: {eks_cluster_name}, namespace: {namespace}")
 
+    # Get API key from extra_config if API key authentication is enabled
+    api_key = None
+    if extra_config.get('enable_api_key'):
+        api_key = extra_config.get('api_key')
+        if api_key:
+            logger.info(f"[HyperPod Inference] API key authentication enabled for endpoint {request.endpoint_name}")
+        else:
+            logger.warning(f"[HyperPod Inference] API key authentication is enabled but no API key found in config for endpoint {request.endpoint_name}")
+
     # Get and log the endpoint URL
     try:
         url_info = get_hyperpod_endpoint_url(
@@ -567,8 +576,16 @@ async def handle_hyperpod_inference(request: InferenceRequest, endpoint_info: di
         logger.warning(f"[HyperPod Inference] Error getting URL info: {e}")
 
     # Build payload
+    # For HyperPod endpoints, extract served model name (last part after '/')
+    # This matches the --served-model-name argument passed to the inference engine
+    raw_model_name = request.model_name or endpoint_info.get('model_name', '')
+    if "/" in raw_model_name:
+        served_model_name = raw_model_name.split("/")[-1]
+    else:
+        served_model_name = raw_model_name
+
     payload = {
-        "model": request.model_name or endpoint_info.get('model_name', ''),
+        "model": served_model_name,
         "messages": [{"role": m.get('role', 'user'), "content": m.get('content', '')} for m in request.messages],
         "stream": request.stream,
         "max_tokens": request.params.get('max_new_tokens', request.params.get('max_tokens', 256)),
@@ -583,7 +600,8 @@ async def handle_hyperpod_inference(request: InferenceRequest, endpoint_info: di
                 endpoint_name=request.endpoint_name,
                 payload=payload,
                 namespace=namespace,
-                stream=False
+                stream=False,
+                api_key=api_key
             )
             return CommonResponse(
                 response_id=request.id or str(uuid.uuid4()),
@@ -597,7 +615,8 @@ async def handle_hyperpod_inference(request: InferenceRequest, endpoint_info: di
                         eks_cluster_name=eks_cluster_name,
                         endpoint_name=request.endpoint_name,
                         payload=payload,
-                        namespace=namespace
+                        namespace=namespace,
+                        api_key=api_key
                     ):
                         # SSE spec requires double newline (\n\n) to separate events
                         if line.startswith('data: '):

@@ -316,8 +316,8 @@ i18n
             mem_fraction_static:'mem-fraction-static',
             mem_fraction_static_desc:'Default is 0.7, can be increased if no OOM during inference',
             max_model_len:'max-model-len',
-            max_model_len_desc_sglang:'Maximum model context length, default is the maximum length in model config file',
-            max_model_len_desc_vllm:'Maximum model context length, cannot exceed kv cache size, default 12288',
+            max_model_len_desc_sglang:'Maximum model context length (in k), default is the maximum length in model config file',
+            max_model_len_desc_vllm:'Maximum model context length (in k), e.g. 32 = 32k = 32768 tokens. Default 12k',
             tensor_parallel_size:'tensor-parallel-size',
             tensor_parallel_size_desc:'Tensor parallelism degree, default is the number of GPUs on the instance',
             chat_template:'chat-template',
@@ -345,7 +345,49 @@ i18n
             spot_risk_high:'High',
             spot_risk_unknown:'Unknown',
             spot_not_available:'Spot pricing not available for this instance type',
-            spot_select_instance:'Select an instance type and enable spot to view pricing'
+            spot_select_instance:'Select an instance type and enable spot to view pricing',
+            // Deployment target
+            deployment_target:'Deployment Target',
+            deployment_target_desc:'Select where to deploy the model endpoint: SageMaker Endpoint (managed service) or HyperPod Cluster (self-managed Kubernetes)',
+            // HyperPod cluster settings
+            hyperpod_cluster:'HyperPod Cluster',
+            hyperpod_cluster_desc:'Select an active HyperPod cluster for deployment. Only clusters with ACTIVE status are shown.',
+            namespace:'Kubernetes Namespace',
+            namespace_desc:'Kubernetes namespace for the deployment. Use "default" if unsure.',
+            replicas:'Replicas',
+            replicas_desc:'Number of model replicas to deploy. More replicas provide higher availability and throughput.',
+            // Auto-scaling
+            autoscaling:'Auto-scaling',
+            autoscaling_desc:'Automatically scale replicas based on metrics. Scales up during high load and down during low usage.',
+            enable_autoscaling:'Enable Auto-scaling',
+            min_replicas:'Min Replicas',
+            max_replicas:'Max Replicas',
+            // KV Cache
+            kv_cache:'KV Cache',
+            kv_cache_desc:'Enable distributed KV cache for optimized inference. Only works with vLLM.',
+            enable_kv_cache:'Enable KV Cache',
+            kv_cache_backend:'KV Cache Backend',
+            // Intelligent Routing
+            intelligent_routing:'Intelligent Routing',
+            intelligent_routing_desc:'Enable intelligent request routing across replicas for optimized cache hit rates and load balancing.',
+            enable_intelligent_routing:'Enable Intelligent Routing',
+            routing_strategy:'Routing Strategy',
+            // Public ALB
+            public_alb:'Public ALB',
+            public_alb_desc:'Configure the load balancer to be internet-facing. Allows access from outside the VPC.',
+            use_public_alb:'Use Public ALB (Internet-Facing)',
+            public_alb_warning:'Warning: Enabling public ALB exposes the endpoint to the internet. Ensure proper authentication is configured.',
+            public_alb_requires_routing:'Public ALB requires Intelligent Routing to be enabled. The ALB is created through Ingress resources which are only provisioned when intelligent routing is configured.',
+            public_alb_routing_disabled_error:'Cannot enable Public ALB: Please enable Intelligent Routing first.',
+            // API Key Authentication
+            api_key_auth:'API Key Authentication',
+            api_key_auth_desc:'Enable API key authentication to secure your endpoint. Strongly recommended for public ALB.',
+            enable_api_key:'Enable API Key',
+            api_key_source:'API Key Source',
+            custom_api_key:'Custom API Key',
+            custom_api_key_desc:'Enter your own API key. Must be at least 16 characters for security.',
+            secrets_manager_secret:'AWS Secrets Manager Secret',
+            secrets_manager_secret_desc:'Name of the secret in AWS Secrets Manager (e.g., vllm/api-key). The secret should contain the API key value.'
         }
       },
       zh:{
@@ -649,8 +691,8 @@ i18n
             mem_fraction_static:'mem-fraction-static',
             mem_fraction_static_desc:'默认使用0.7，如果推理过程中没有OOM，可以提高',
             max_model_len:'max-model-len',
-            max_model_len_desc_sglang:'模型上下文最大长度，默认值模型config文件中最大长度',
-            max_model_len_desc_vllm:'模型上下文最大长度，不能超过kv cache的size，默认值12288',
+            max_model_len_desc_sglang:'模型上下文最大长度（单位k），默认值模型config文件中最大长度',
+            max_model_len_desc_vllm:'模型上下文最大长度（单位k），例如 32 = 32k = 32768 tokens。默认12k',
             tensor_parallel_size:'tensor-parallel-size',
             tensor_parallel_size_desc:'tensor并行度，默认是实例的GPU数量',
             chat_template:'chat-template',
@@ -678,7 +720,49 @@ i18n
             spot_risk_high:'高',
             spot_risk_unknown:'未知',
             spot_not_available:'该实例类型无Spot定价信息',
-            spot_select_instance:'选择实例类型并启用Spot以查看价格'
+            spot_select_instance:'选择实例类型并启用Spot以查看价格',
+            // 部署目标
+            deployment_target:'部署目标',
+            deployment_target_desc:'选择模型端点的部署位置：SageMaker Endpoint（托管服务）或 HyperPod Cluster（自管理 Kubernetes）',
+            // HyperPod 集群设置
+            hyperpod_cluster:'HyperPod 集群',
+            hyperpod_cluster_desc:'选择用于部署的活跃 HyperPod 集群。仅显示状态为 ACTIVE 的集群。',
+            namespace:'Kubernetes 命名空间',
+            namespace_desc:'部署的 Kubernetes 命名空间。如不确定，请使用 "default"。',
+            replicas:'副本数',
+            replicas_desc:'部署的模型副本数量。更多副本可提供更高的可用性和吞吐量。',
+            // 自动扩缩容
+            autoscaling:'自动扩缩容',
+            autoscaling_desc:'根据指标自动调整副本数量。高负载时扩容，低负载时缩容。',
+            enable_autoscaling:'启用自动扩缩容',
+            min_replicas:'最小副本数',
+            max_replicas:'最大副本数',
+            // KV 缓存
+            kv_cache:'KV 缓存',
+            kv_cache_desc:'启用分布式 KV 缓存以优化推理。仅对vLLM生效',
+            enable_kv_cache:'启用 KV 缓存',
+            kv_cache_backend:'KV 缓存后端',
+            // 智能路由
+            intelligent_routing:'智能路由',
+            intelligent_routing_desc:'启用跨副本的智能请求路由，优化缓存命中率和负载均衡。',
+            enable_intelligent_routing:'启用智能路由',
+            routing_strategy:'路由策略',
+            // 公网 ALB
+            public_alb:'公网 ALB',
+            public_alb_desc:'配置负载均衡器为面向互联网。允许从 VPC 外部访问。',
+            use_public_alb:'使用公网 ALB（面向互联网）',
+            public_alb_warning:'警告：启用公网 ALB 会将端点暴露到互联网。请确保已配置适当的身份验证。',
+            public_alb_requires_routing:'公网 ALB 需要启用智能路由。ALB 通过 Ingress 资源创建，而 Ingress 仅在配置智能路由时才会被创建。',
+            public_alb_routing_disabled_error:'无法启用公网 ALB：请先启用智能路由。',
+            // API Key 认证
+            api_key_auth:'API Key 认证',
+            api_key_auth_desc:'启用 API Key 认证以保护您的端点。强烈建议在使用公网 ALB 时启用。',
+            enable_api_key:'启用 API Key',
+            api_key_source:'API Key 来源',
+            custom_api_key:'自定义 API Key',
+            custom_api_key_desc:'输入您自己的 API Key。为安全起见，长度至少 16 个字符。',
+            secrets_manager_secret:'AWS Secrets Manager 密钥',
+            secrets_manager_secret_desc:'AWS Secrets Manager 中的密钥名称（例如：vllm/api-key）。密钥应包含 API Key 值。'
 
         }
       }

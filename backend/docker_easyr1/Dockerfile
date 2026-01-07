@@ -32,16 +32,16 @@ ARG PIP_INDEX
 
 
 # Uninstall nv-pytorch fork
-RUN pip uninstall -y torch torchvision torchaudio \
-    pytorch-quantization pytorch-triton torch-tensorrt \
-    transformer-engine flash-attn apex megatron-core \
-    xgboost opencv grpcio
+# RUN pip uninstall -y torch torchvision torchaudio \
+#     pytorch-quantization pytorch-triton torch-tensorrt \
+#     transformer-engine flash-attn apex megatron-core \
+#     xgboost opencv grpcio
 
 # Remove nv file
-RUN rm -rf /workspace
+# RUN rm -rf /workspace
 
 # Fix cv2
-RUN rm -rf /usr/local/lib/python3.10/dist-packages/cv2
+# RUN rm -rf /usr/local/lib/python3.10/dist-packages/cv2
 
 # Install torch-2.8.0+cu128 + vllm-0.11.0
 RUN pip install --no-cache-dir "vllm==0.11.0" "torch==2.8.0" "torchvision==0.23.0" "torchaudio==2.8.0" tensordict torchdata \

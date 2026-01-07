@@ -166,8 +166,14 @@ class DatabaseWrapper(BaseModel):
                               ):
         with self.connection_pool.get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(f"UPDATE {EP_TABLE} SET endpoint_status = %s,endpoint_delete_time = %s, extra_config = %s WHERE endpoint_name = %s", 
-                               (endpoint_status.value,endpoint_delete_time,extra_config,endpoint_name))
+                # Only update extra_config if it's explicitly provided (not None)
+                # This prevents overwriting existing extra_config when just updating status
+                if extra_config is not None:
+                    cursor.execute(f"UPDATE {EP_TABLE} SET endpoint_status = %s, endpoint_delete_time = %s, extra_config = %s WHERE endpoint_name = %s",
+                                   (endpoint_status.value, endpoint_delete_time, extra_config, endpoint_name))
+                else:
+                    cursor.execute(f"UPDATE {EP_TABLE} SET endpoint_status = %s, endpoint_delete_time = %s WHERE endpoint_name = %s",
+                                   (endpoint_status.value, endpoint_delete_time, endpoint_name))
                 connection.commit()
     def delete_endpoint(self,  endpoint_name:str,) -> bool:
         with self.connection_pool.get_connection() as connection:

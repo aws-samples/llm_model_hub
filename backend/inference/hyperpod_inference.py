@@ -15,9 +15,9 @@ import boto3
 from typing import Dict, Any, Optional, Tuple, List
 from dataclasses import dataclass
 from dotenv import load_dotenv
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from utils.config import DEFAULT_IMAGES
+from logger_config import setup_logger
+logger = setup_logger('hyperpod_inference.py', log_file='hyperpod_inference.log', level=logging.INFO)
 
 # Import database for cluster info lookup
 import sys
@@ -32,16 +32,6 @@ INFERENCE_API_GROUP = "inference.sagemaker.aws.amazon.com"
 INFERENCE_API_VERSION = "v1"
 INFERENCE_ENDPOINT_PLURAL = "inferenceendpointconfigs"
 INFERENCE_ENDPOINT_KIND = "InferenceEndpointConfig"
-
-# Get HyperPod inference container images from environment variables
-HP_VLLM_IMAGE = os.getenv("hp_vllm_image", "763104351884.dkr.ecr.us-east-1.amazonaws.com/djl-inference:0.32.0-lmi14.0.0-cu124")
-HP_SGLANG_IMAGE = os.getenv("hp_sglang_image", "763104351884.dkr.ecr.us-east-1.amazonaws.com/djl-inference:0.32.0-lmi14.0.0-cu124")
-
-# HyperPod inference container images
-DEFAULT_IMAGES = {
-    "vllm": HP_VLLM_IMAGE,
-    "sglang": HP_SGLANG_IMAGE,
-}
 
 # GPU count mapping for instance types
 GPU_MAPPING = {
@@ -90,6 +80,673 @@ INSTANCE_RESOURCES = {
 
 # Default resources for unknown instance types (conservative values)
 DEFAULT_RESOURCES = {"cpu": "4", "memory": "16Gi"}
+
+
+# ==============================================================================
+# API Key Authentication Support
+# ==============================================================================
+
+def generate_api_key(prefix: str = "sk-") -> str:
+    """
+    Generate a secure random API key.
+
+    Args:
+        prefix: Prefix for the API key (default: "sk-")
+
+    Returns:
+        A secure random API key string
+    """
+    import secrets
+    # Generate 32 random bytes and encode as hex (64 chars)
+    random_part = secrets.token_hex(32)
+    return f"{prefix}{random_part}"
+
+
+def create_api_key_secret(
+    kubeconfig_path: str,
+    secret_name: str,
+    namespace: str,
+    api_key: str,
+    labels: Dict[str, str] = None
+) -> Dict[str, Any]:
+    """
+    Create a Kubernetes Secret containing the API key.
+
+    Args:
+        kubeconfig_path: Path to kubeconfig file
+        secret_name: Name for the Secret
+        namespace: Kubernetes namespace
+        api_key: The API key value
+        labels: Optional labels for the Secret
+
+    Returns:
+        Dict with result status
+    """
+    from kubernetes import client, config
+    from kubernetes.client.rest import ApiException
+    import base64
+
+    config.load_kube_config(config_file=kubeconfig_path)
+    core_api = client.CoreV1Api()
+
+    # Create Secret
+    secret = client.V1Secret(
+        api_version="v1",
+        kind="Secret",
+        metadata=client.V1ObjectMeta(
+            name=secret_name,
+            namespace=namespace,
+            labels=labels or {}
+        ),
+        type="Opaque",
+        string_data={
+            "api-key": api_key
+        }
+    )
+
+    try:
+        # Try to create, or update if exists
+        try:
+            core_api.create_namespaced_secret(namespace=namespace, body=secret)
+            logger.info(f"Created API key secret: {secret_name}")
+        except ApiException as e:
+            if e.status == 409:  # Already exists, update it
+                core_api.replace_namespaced_secret(name=secret_name, namespace=namespace, body=secret)
+                logger.info(f"Updated API key secret: {secret_name}")
+            else:
+                raise
+
+        return {"success": True, "secret_name": secret_name}
+    except ApiException as e:
+        logger.error(f"Failed to create API key secret: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def configure_router_api_key(
+    kubeconfig_path: str,
+    endpoint_name: str,
+    api_key_secret_name: str,
+    source_namespace: str = "default",
+    router_namespace: str = "hyperpod-inference-system",
+    max_retries: int = 10,
+    retry_delay: int = 10,
+    patch_verify_retries: int = 5,
+    patch_verify_delay: int = 30
+) -> Dict[str, Any]:
+    """
+    Configure the intelligent routing router with API key authentication.
+
+    When API key authentication is enabled for vLLM, the router also needs
+    the API key to authenticate with the backend. This function:
+    1. Copies the API key secret to the router's namespace
+    2. Waits for router deployment and pods to be ready
+    3. Patches the router deployment to use the secret
+    4. Verifies and re-applies the patch if the operator resets it
+
+    Note: The HyperPod operator continuously reconciles the router deployment,
+    which can reset our patches. This function includes retry logic to handle
+    operator reconciliation and ensure the API key configuration persists.
+
+    Args:
+        kubeconfig_path: Path to kubeconfig file
+        endpoint_name: Name of the endpoint
+        api_key_secret_name: Name of the API key secret
+        source_namespace: Namespace where the secret exists (usually 'default')
+        router_namespace: Namespace where the router runs ('hyperpod-inference-system')
+        max_retries: Maximum retries waiting for router deployment
+        retry_delay: Delay between retries in seconds
+        patch_verify_retries: Number of times to verify/re-apply the patch
+        patch_verify_delay: Delay between patch verification attempts
+
+    Returns:
+        Dict with result status
+    """
+    from kubernetes import client, config
+    from kubernetes.client.rest import ApiException
+    import time
+
+    config.load_kube_config(config_file=kubeconfig_path)
+    core_api = client.CoreV1Api()
+    apps_api = client.AppsV1Api()
+
+    resource_name = endpoint_name.lower().replace("_", "-")[:63]
+    router_deployment_name = f"{resource_name}-{source_namespace}-router"
+
+    def check_vllm_api_key_configured(deployment) -> bool:
+        """Check if VLLM_API_KEY is properly configured with secretKeyRef."""
+        containers = deployment.spec.template.spec.containers
+        for container in containers:
+            if 'router' in container.name.lower():
+                if container.env:
+                    for env_var in container.env:
+                        if env_var.name == "VLLM_API_KEY":
+                            # Check if it has the correct secretKeyRef
+                            if (env_var.value_from and
+                                env_var.value_from.secret_key_ref and
+                                env_var.value_from.secret_key_ref.name == api_key_secret_name):
+                                return True
+                            # Found VLLM_API_KEY but it's empty or wrong secretKeyRef
+                            return False
+                break
+        return False
+
+    def apply_api_key_patch(deployment) -> bool:
+        """Apply the API key patch to the router deployment. Returns True if patch applied."""
+        containers = deployment.spec.template.spec.containers
+        router_container_idx = None
+        vllm_api_key_idx = None
+
+        for i, container in enumerate(containers):
+            if 'router' in container.name.lower():
+                router_container_idx = i
+                if container.env:
+                    for j, env_var in enumerate(container.env):
+                        if env_var.name == "VLLM_API_KEY":
+                            vllm_api_key_idx = j
+                            break
+                break
+
+        if router_container_idx is None:
+            logger.warning("Router container not found in deployment")
+            return False
+
+        # Build the patch - always use replace if VLLM_API_KEY exists
+        if vllm_api_key_idx is not None:
+            patch = [{
+                "op": "replace",
+                "path": f"/spec/template/spec/containers/{router_container_idx}/env/{vllm_api_key_idx}",
+                "value": {
+                    "name": "VLLM_API_KEY",
+                    "valueFrom": {
+                        "secretKeyRef": {
+                            "name": api_key_secret_name,
+                            "key": "api-key"
+                        }
+                    }
+                }
+            }]
+        else:
+            patch = [{
+                "op": "add",
+                "path": f"/spec/template/spec/containers/{router_container_idx}/env/-",
+                "value": {
+                    "name": "VLLM_API_KEY",
+                    "valueFrom": {
+                        "secretKeyRef": {
+                            "name": api_key_secret_name,
+                            "key": "api-key"
+                        }
+                    }
+                }
+            }]
+
+        apps_api.patch_namespaced_deployment(
+            name=router_deployment_name,
+            namespace=router_namespace,
+            body=patch
+        )
+        return True
+
+    try:
+        # Step 1: Copy the API key secret to the router's namespace
+        logger.info(f"[Router Config] Copying API key secret to {router_namespace} namespace")
+        try:
+            source_secret = core_api.read_namespaced_secret(
+                name=api_key_secret_name,
+                namespace=source_namespace
+            )
+
+            router_secret = client.V1Secret(
+                api_version="v1",
+                kind="Secret",
+                metadata=client.V1ObjectMeta(
+                    name=api_key_secret_name,
+                    namespace=router_namespace,
+                    labels=source_secret.metadata.labels or {}
+                ),
+                type="Opaque",
+                data=source_secret.data
+            )
+
+            try:
+                core_api.create_namespaced_secret(namespace=router_namespace, body=router_secret)
+                logger.info(f"[Router Config] Created API key secret in {router_namespace}: {api_key_secret_name}")
+            except ApiException as e:
+                if e.status == 409:  # Already exists
+                    core_api.replace_namespaced_secret(
+                        name=api_key_secret_name,
+                        namespace=router_namespace,
+                        body=router_secret
+                    )
+                    logger.info(f"[Router Config] Updated API key secret in {router_namespace}: {api_key_secret_name}")
+                else:
+                    raise
+        except ApiException as e:
+            logger.error(f"[Router Config] Failed to copy API key secret: {e}")
+            return {"success": False, "error": f"Failed to copy secret: {e}"}
+
+        # Step 2: Wait for router deployment to be created
+        logger.info(f"[Router Config] Waiting for router deployment: {router_deployment_name}")
+        router_found = False
+        for attempt in range(max_retries):
+            try:
+                deployment = apps_api.read_namespaced_deployment(
+                    name=router_deployment_name,
+                    namespace=router_namespace
+                )
+                router_found = True
+                logger.info(f"[Router Config] Found router deployment: {router_deployment_name}")
+                break
+            except ApiException as e:
+                if e.status == 404:
+                    logger.info(f"[Router Config] Router deployment not found yet, waiting... (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(retry_delay)
+                else:
+                    raise
+
+        if not router_found:
+            logger.warning(f"[Router Config] Router deployment {router_deployment_name} not found after {max_retries} retries")
+            return {
+                "success": False,
+                "error": f"Router deployment not found: {router_deployment_name}",
+                "message": "Intelligent routing may not be enabled or deployment is still in progress"
+            }
+
+        # Step 3: Wait for router pods to be ready (indicates operator finished initial setup)
+        logger.info(f"[Router Config] Waiting for router pods to be ready...")
+        pods_ready = False
+        for attempt in range(max_retries):
+            try:
+                pods = core_api.list_namespaced_pod(
+                    namespace=router_namespace,
+                    label_selector=f"app={router_deployment_name}"
+                )
+                if pods.items:
+                    running_pods = [p for p in pods.items if p.status.phase == "Running"]
+                    if running_pods:
+                        pods_ready = True
+                        logger.info(f"[Router Config] Router pods are running ({len(running_pods)} pods)")
+                        break
+                logger.info(f"[Router Config] Waiting for router pods... (attempt {attempt + 1}/{max_retries})")
+                time.sleep(retry_delay)
+            except ApiException as e:
+                logger.warning(f"[Router Config] Error checking pods: {e}")
+                time.sleep(retry_delay)
+
+        if not pods_ready:
+            logger.warning(f"[Router Config] Router pods not ready, proceeding with patch anyway")
+
+        # Step 4: Apply patch and verify with retries
+        # The HyperPod operator may reset our patch during reconciliation,
+        # so we verify and re-apply multiple times until we see consecutive successes
+        patch_successful = False
+        consecutive_successes = 0
+        required_consecutive_successes = 3  # Require 3 consecutive checks to confirm stability
+
+        for verify_attempt in range(patch_verify_retries):
+            try:
+                # Re-read deployment to get current state
+                deployment = apps_api.read_namespaced_deployment(
+                    name=router_deployment_name,
+                    namespace=router_namespace
+                )
+
+                # Check if already configured correctly
+                if check_vllm_api_key_configured(deployment):
+                    consecutive_successes += 1
+                    logger.info(f"[Router Config] VLLM_API_KEY correctly configured (attempt {verify_attempt + 1}, consecutive: {consecutive_successes}/{required_consecutive_successes})")
+                    if consecutive_successes >= required_consecutive_successes:
+                        patch_successful = True
+                        logger.info(f"[Router Config] Patch stable after {required_consecutive_successes} consecutive checks")
+                        break
+                    time.sleep(patch_verify_delay)
+                    continue
+                else:
+                    # Reset counter if patch was undone
+                    if consecutive_successes > 0:
+                        logger.warning(f"[Router Config] Operator reset the patch (was {consecutive_successes} consecutive successes)")
+                    consecutive_successes = 0
+
+                # Apply the patch
+                logger.info(f"[Router Config] Applying API key patch (attempt {verify_attempt + 1}/{patch_verify_retries})")
+                if apply_api_key_patch(deployment):
+                    logger.info(f"[Router Config] Patched router deployment with API key")
+
+                    # Wait a bit and verify
+                    time.sleep(5)
+                    deployment = apps_api.read_namespaced_deployment(
+                        name=router_deployment_name,
+                        namespace=router_namespace
+                    )
+                    if check_vllm_api_key_configured(deployment):
+                        consecutive_successes = 1  # Start counting consecutive successes
+                        logger.info(f"[Router Config] Patch verified (consecutive: {consecutive_successes}/{required_consecutive_successes})")
+                    else:
+                        logger.warning(f"[Router Config] Patch may have been reset by operator, will retry...")
+                else:
+                    logger.warning(f"[Router Config] Failed to apply patch")
+
+                # Wait before next verification attempt
+                if verify_attempt < patch_verify_retries - 1:
+                    time.sleep(patch_verify_delay)
+
+            except ApiException as e:
+                logger.error(f"[Router Config] Error during patch attempt {verify_attempt + 1}: {e}")
+                if verify_attempt < patch_verify_retries - 1:
+                    time.sleep(patch_verify_delay)
+
+        if patch_successful:
+            return {
+                "success": True,
+                "router_deployment": router_deployment_name,
+                "message": "Router configured with API key authentication"
+            }
+        else:
+            return {
+                "success": False,
+                "router_deployment": router_deployment_name,
+                "error": "Patch applied but may have been reset by operator",
+                "message": "Router API key configuration may need manual verification"
+            }
+
+    except ApiException as e:
+        logger.error(f"[Router Config] Failed to configure router API key: {e}")
+        return {"success": False, "error": str(e)}
+    except Exception as e:
+        logger.error(f"[Router Config] Unexpected error configuring router API key: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def patch_readiness_probe_timeout(
+    kubeconfig_path: str,
+    endpoint_name: str,
+    namespace: str = "default",
+    timeout_seconds: int = 5,
+    max_retries: int = 30,
+    retry_delay: int = 10
+) -> Dict[str, Any]:
+    """
+    Patch the model deployment to increase the readiness probe timeout.
+
+    The HyperPod operator sets a default readiness probe timeout of 1 second,
+    which can be too short for some models (especially SGLang). This function
+    patches the deployment to use a longer timeout.
+
+    IMPORTANT: After patching, this function deletes existing pods to force
+    the rollout. This is necessary because:
+    1. The patch creates a new ReplicaSet with the updated timeout
+    2. But the new pods can't start (GPU is used by old pods)
+    3. Old pods continue running with 1s timeout and eventually fail
+    4. Deleting old pods allows new pods to acquire GPU resources
+
+    Args:
+        kubeconfig_path: Path to kubeconfig file
+        endpoint_name: Name of the endpoint
+        namespace: Kubernetes namespace where deployment exists
+        timeout_seconds: New timeout value in seconds (default: 5)
+        max_retries: Maximum retries waiting for deployment
+        retry_delay: Delay between retries in seconds
+
+    Returns:
+        Dict with result status
+    """
+    from kubernetes import client, config
+    from kubernetes.client.rest import ApiException
+    import time
+
+    config.load_kube_config(config_file=kubeconfig_path)
+    apps_api = client.AppsV1Api()
+    core_api = client.CoreV1Api()
+
+    resource_name = endpoint_name.lower().replace("_", "-")[:63]
+
+    try:
+        # Wait for deployment to be created
+        logger.info(f"[Readiness Patch] Waiting for deployment: {resource_name}")
+        deployment = None
+        for attempt in range(max_retries):
+            try:
+                deployment = apps_api.read_namespaced_deployment(
+                    name=resource_name,
+                    namespace=namespace
+                )
+                logger.info(f"[Readiness Patch] Found deployment: {resource_name}")
+                break
+            except ApiException as e:
+                if e.status == 404:
+                    logger.info(f"[Readiness Patch] Deployment not found yet, waiting... (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(retry_delay)
+                else:
+                    raise
+
+        if deployment is None:
+            logger.warning(f"[Readiness Patch] Deployment {resource_name} not found after {max_retries} retries")
+            return {
+                "success": False,
+                "error": f"Deployment not found: {resource_name}"
+            }
+
+        # Find the model container (usually index 1, after init container runs)
+        # The model container typically has the readiness probe
+        containers = deployment.spec.template.spec.containers
+        patched = False
+
+        for i, container in enumerate(containers):
+            if container.readiness_probe and container.readiness_probe.timeout_seconds:
+                current_timeout = container.readiness_probe.timeout_seconds
+                if current_timeout < timeout_seconds:
+                    logger.info(f"[Readiness Patch] Patching container {container.name} readiness timeout from {current_timeout}s to {timeout_seconds}s")
+                    patch = [{
+                        "op": "replace",
+                        "path": f"/spec/template/spec/containers/{i}/readinessProbe/timeoutSeconds",
+                        "value": timeout_seconds
+                    }]
+                    apps_api.patch_namespaced_deployment(
+                        name=resource_name,
+                        namespace=namespace,
+                        body=patch
+                    )
+                    patched = True
+                    logger.info(f"[Readiness Patch] Successfully patched readiness probe timeout for {container.name}")
+
+        if patched:
+            # Delete existing pods to force rollout with new timeout
+            # This is necessary because:
+            # 1. New pods can't start (GPU occupied by old pods)
+            # 2. Old pods have wrong timeout and will eventually fail readiness
+            logger.info(f"[Readiness Patch] Deleting existing pods to force rollout...")
+            try:
+                pods = core_api.list_namespaced_pod(
+                    namespace=namespace,
+                    label_selector=f"app={resource_name}"
+                )
+                for pod in pods.items:
+                    logger.info(f"[Readiness Patch] Deleting pod {pod.metadata.name} to force rollout")
+                    core_api.delete_namespaced_pod(
+                        name=pod.metadata.name,
+                        namespace=namespace,
+                        grace_period_seconds=0  # Force immediate termination
+                    )
+                logger.info(f"[Readiness Patch] Deleted {len(pods.items)} pod(s), new pods will start with timeout={timeout_seconds}s")
+            except Exception as e:
+                logger.warning(f"[Readiness Patch] Failed to delete pods (rollout may be delayed): {e}")
+
+            return {
+                "success": True,
+                "deployment": resource_name,
+                "timeout_seconds": timeout_seconds,
+                "message": f"Readiness probe timeout increased to {timeout_seconds}s"
+            }
+        else:
+            logger.info(f"[Readiness Patch] No containers needed patching or timeout already >= {timeout_seconds}s")
+            return {
+                "success": True,
+                "deployment": resource_name,
+                "message": "No patching needed"
+            }
+
+    except ApiException as e:
+        logger.error(f"[Readiness Patch] Failed to patch deployment: {e}")
+        return {"success": False, "error": str(e)}
+    except Exception as e:
+        logger.error(f"[Readiness Patch] Unexpected error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def create_external_secret(
+    kubeconfig_path: str,
+    external_secret_name: str,
+    namespace: str,
+    secrets_manager_secret_name: str,
+    target_secret_name: str,
+    region: str,
+    service_account_name: str = "default"
+) -> Dict[str, Any]:
+    """
+    Create an ExternalSecret to fetch API key from AWS Secrets Manager.
+
+    This requires External Secrets Operator to be installed on the cluster.
+
+    Args:
+        kubeconfig_path: Path to kubeconfig file
+        external_secret_name: Name for the ExternalSecret resource
+        namespace: Kubernetes namespace
+        secrets_manager_secret_name: Name of the secret in AWS Secrets Manager
+        target_secret_name: Name of the K8s Secret to create
+        region: AWS region
+        service_account_name: Service account for IRSA authentication
+
+    Returns:
+        Dict with result status
+    """
+    from kubernetes import client, config
+    from kubernetes.client.rest import ApiException
+
+    config.load_kube_config(config_file=kubeconfig_path)
+    custom_api = client.CustomObjectsApi()
+
+    # First, create or ensure SecretStore exists
+    secret_store_name = "aws-secrets-manager"
+    secret_store = {
+        "apiVersion": "external-secrets.io/v1beta1",
+        "kind": "SecretStore",
+        "metadata": {
+            "name": secret_store_name,
+            "namespace": namespace
+        },
+        "spec": {
+            "provider": {
+                "aws": {
+                    "service": "SecretsManager",
+                    "region": region,
+                    "auth": {
+                        "jwt": {
+                            "serviceAccountRef": {
+                                "name": service_account_name
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    try:
+        # Create SecretStore if not exists
+        try:
+            custom_api.create_namespaced_custom_object(
+                group="external-secrets.io",
+                version="v1beta1",
+                namespace=namespace,
+                plural="secretstores",
+                body=secret_store
+            )
+            logger.info(f"Created SecretStore: {secret_store_name}")
+        except ApiException as e:
+            if e.status != 409:  # Ignore if already exists
+                logger.warning(f"Failed to create SecretStore: {e}")
+    except Exception as e:
+        logger.warning(f"External Secrets Operator may not be installed: {e}")
+
+    # Create ExternalSecret
+    external_secret = {
+        "apiVersion": "external-secrets.io/v1beta1",
+        "kind": "ExternalSecret",
+        "metadata": {
+            "name": external_secret_name,
+            "namespace": namespace
+        },
+        "spec": {
+            "refreshInterval": "1h",
+            "secretStoreRef": {
+                "name": secret_store_name,
+                "kind": "SecretStore"
+            },
+            "target": {
+                "name": target_secret_name,
+                "creationPolicy": "Owner"
+            },
+            "data": [
+                {
+                    "secretKey": "api-key",
+                    "remoteRef": {
+                        "key": secrets_manager_secret_name
+                    }
+                }
+            ]
+        }
+    }
+
+    try:
+        try:
+            custom_api.create_namespaced_custom_object(
+                group="external-secrets.io",
+                version="v1beta1",
+                namespace=namespace,
+                plural="externalsecrets",
+                body=external_secret
+            )
+            logger.info(f"Created ExternalSecret: {external_secret_name}")
+        except ApiException as e:
+            if e.status == 409:  # Already exists, update it
+                custom_api.replace_namespaced_custom_object(
+                    group="external-secrets.io",
+                    version="v1beta1",
+                    namespace=namespace,
+                    plural="externalsecrets",
+                    name=external_secret_name,
+                    body=external_secret
+                )
+                logger.info(f"Updated ExternalSecret: {external_secret_name}")
+            else:
+                raise
+
+        return {
+            "success": True,
+            "external_secret_name": external_secret_name,
+            "target_secret_name": target_secret_name
+        }
+    except ApiException as e:
+        logger.error(f"Failed to create ExternalSecret: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@dataclass
+class ApiKeyConfig:
+    """API Key authentication configuration for HyperPod inference endpoints."""
+    enabled: bool = False
+    source: str = "auto"  # 'auto', 'custom', 'secrets_manager'
+    custom_api_key: str = ""
+    secrets_manager_secret_name: str = ""
+
+    def get_api_key_or_generate(self) -> str:
+        """Get the API key, generating one if source is 'auto'."""
+        if self.source == "auto":
+            return generate_api_key()
+        elif self.source == "custom":
+            return self.custom_api_key
+        else:
+            return ""  # Will be fetched from Secrets Manager
 
 
 # ==============================================================================
@@ -374,7 +1031,8 @@ def deploy_to_hyperpod(
         env_vars.append({"name": "HUGGING_FACE_HUB_TOKEN", "value": hf_token})
         env_vars.append({"name": "HF_TOKEN", "value": hf_token})
 
-    container_port = 8000  # vLLM/SGLang default port
+    # vLLM uses port 8000, SGLang DLC uses port 8080
+    container_port = 8080 if engine.lower() == "sglang" else 8000
     gpu_count = _get_gpu_count(instance_type)
     instance_resources = _get_instance_resources(instance_type)
 
@@ -406,6 +1064,34 @@ def deploy_to_hyperpod(
         "name": "model-weights",
         "mountPath": "/opt/ml/model"
     }
+
+    # Extract a clean served model name for the inference engine
+    # This allows users to reference the model by a friendly name instead of /opt/ml/model
+    if "/" in model_name:
+        # HuggingFace format: "Qwen/Qwen3-4B-Instruct" -> "Qwen3-4B-Instruct"
+        served_model_name = model_name.split("/")[-1]
+    else:
+        served_model_name = model_name
+
+    # Override container command to include --served-model-name
+    # The HyperPod DLC containers have a fixed CMD that ignores args, so we must use command
+    if engine.lower() == "sglang":
+        worker_spec["command"] = ["python3", "-m", "sglang.launch_server"]
+        worker_spec["args"] = [
+            "--port", str(container_port),
+            "--host", "0.0.0.0",
+            "--model-path", "/opt/ml/model",
+            "--served-model-name", served_model_name,
+            "--enable-metrics"  # Required for vLLM router to scrape metrics and keep backend registered
+        ]
+    else:  # vllm
+        worker_spec["command"] = ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+        worker_spec["args"] = [
+            "--port", str(container_port),
+            "--host", "0.0.0.0",
+            "--model", "/opt/ml/model",
+            "--served-model-name", served_model_name
+        ]
 
     # Build spec
     spec = {
@@ -758,11 +1444,16 @@ def deploy_to_hyperpod_advanced(
     autoscaling: Optional[AutoScalingConfig] = None,
     kv_cache: Optional[KVCacheConfig] = None,
     intelligent_routing: Optional[IntelligentRoutingConfig] = None,
+    api_key_config: Optional[ApiKeyConfig] = None,
     # Extra parameters
     extra_env_vars: Optional[Dict[str, str]] = None,
     tensor_parallel_size: Optional[int] = None,
     max_model_len: Optional[int] = None,
-    enable_prefix_caching: bool = False
+    enable_prefix_caching: bool = False,
+    # Additional vLLM/SGLang parameters
+    gpu_memory_utilization: Optional[float] = None,  # vLLM: --gpu-memory-utilization, SGLang: --mem-fraction-static
+    chat_template: Optional[str] = None,
+    tool_call_parser: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Deploy a model to HyperPod EKS cluster with advanced configuration options.
@@ -771,6 +1462,7 @@ def deploy_to_hyperpod_advanced(
     - Auto-scaling based on CloudWatch metrics via KEDA
     - KV Cache configuration for optimized inference
     - Intelligent routing for request distribution
+    - API Key authentication for vLLM/SGLang endpoints
 
     Args:
         eks_cluster_name: EKS cluster name for the HyperPod cluster
@@ -786,10 +1478,14 @@ def deploy_to_hyperpod_advanced(
         autoscaling: Auto-scaling configuration
         kv_cache: KV Cache configuration
         intelligent_routing: Intelligent routing configuration
+        api_key_config: API Key authentication configuration
         extra_env_vars: Additional environment variables
         tensor_parallel_size: Tensor parallel size (auto-detected if not specified)
         max_model_len: Maximum model length
         enable_prefix_caching: Enable prefix caching (vllm only)
+        gpu_memory_utilization: GPU memory utilization (0.0-1.0), maps to --gpu-memory-utilization (vLLM) or --mem-fraction-static (SGLang)
+        chat_template: Custom chat template path
+        tool_call_parser: Tool call parser (e.g., hermes, llama3_json)
 
     Returns:
         Dict with deployment result including status
@@ -872,8 +1568,64 @@ def deploy_to_hyperpod_advanced(
         for key, value in extra_env_vars.items():
             env_vars.append({"name": key, "value": str(value)})
 
-    container_port = 8000  # vLLM/SGLang default port
+    # vLLM uses port 8000, SGLang DLC uses port 8080
+    container_port = 8080 if engine.lower() == "sglang" else 8000
     resource_name = endpoint_name.lower().replace("_", "-")[:63]
+
+    # Handle API Key authentication
+    api_key_secret_name = None
+    generated_api_key = None
+    if api_key_config and api_key_config.enabled:
+        api_key_secret_name = f"{resource_name}-api-key"
+
+        if api_key_config.source == "secrets_manager":
+            # Create ExternalSecret for AWS Secrets Manager
+            ext_secret_result = create_external_secret(
+                kubeconfig_path=kubeconfig_path,
+                external_secret_name=f"{resource_name}-ext-secret",
+                namespace=namespace,
+                secrets_manager_secret_name=api_key_config.secrets_manager_secret_name,
+                target_secret_name=api_key_secret_name,
+                region=region
+            )
+            if not ext_secret_result.get("success"):
+                logger.warning(f"Failed to create ExternalSecret: {ext_secret_result.get('error')}")
+        else:
+            # Generate or use custom API key
+            generated_api_key = api_key_config.get_api_key_or_generate()
+            secret_result = create_api_key_secret(
+                kubeconfig_path=kubeconfig_path,
+                secret_name=api_key_secret_name,
+                namespace=namespace,
+                api_key=generated_api_key,
+                labels={"modelhub.aws/endpoint-name": endpoint_name}
+            )
+            if not secret_result.get("success"):
+                logger.warning(f"Failed to create API key secret: {secret_result.get('error')}")
+
+    # Add API key environment variable if enabled
+    # vLLM uses VLLM_API_KEY environment variable for --api-key
+    # SGLang also supports API key via environment variable
+    # NOTE: We use plain value instead of secretKeyRef because the HyperPod operator
+    # copies env vars from worker to router but doesn't properly copy secretKeyRef.
+    # Using plain value allows the operator to copy the API key to the router.
+    if api_key_secret_name and generated_api_key:
+        # Use plain value so operator copies it to router
+        env_vars.append({
+            "name": "VLLM_API_KEY",
+            "value": generated_api_key
+        })
+    elif api_key_secret_name:
+        # Fallback to secretKeyRef for secrets_manager case (less common)
+        env_vars.append({
+            "name": "VLLM_API_KEY",
+            "valueFrom": {
+                "secretKeyRef": {
+                    "name": api_key_secret_name,
+                    "key": "api-key"
+                }
+            }
+        })
 
     # Build worker spec with instance-appropriate resources
     worker_spec = {
@@ -900,6 +1652,58 @@ def deploy_to_hyperpod_advanced(
         "name": "model-weights",
         "mountPath": "/opt/ml/model"
     }
+
+    # Extract a clean served model name for the inference engine
+    # This allows users to reference the model by a friendly name instead of /opt/ml/model
+    if "/" in model_name:
+        # HuggingFace format: "Qwen/Qwen3-4B-Instruct" -> "Qwen3-4B-Instruct"
+        served_model_name = model_name.split("/")[-1]
+    else:
+        served_model_name = model_name
+
+    # Override container command to include --served-model-name and optional parameters
+    # The HyperPod DLC containers have a fixed CMD that ignores args, so we must use command
+    if engine.lower() == "sglang":
+        worker_spec["command"] = ["python3", "-m", "sglang.launch_server"]
+        args = [
+            "--port", str(container_port),
+            "--host", "0.0.0.0",
+            "--model-path", "/opt/ml/model",
+            "--served-model-name", served_model_name,
+            "--enable-metrics"  # Required for vLLM router to scrape metrics and keep backend registered
+        ]
+        # Add optional SGLang parameters
+        if tensor_parallel_size:
+            args.extend(["--tp-size", str(tensor_parallel_size)])
+        if max_model_len:
+            args.extend(["--context-length", str(max_model_len)])
+        if gpu_memory_utilization is not None:
+            args.extend(["--mem-fraction-static", str(gpu_memory_utilization)])
+        if chat_template:
+            args.extend(["--chat-template", chat_template])
+        worker_spec["args"] = args
+    else:  # vllm
+        worker_spec["command"] = ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+        args = [
+            "--port", str(container_port),
+            "--host", "0.0.0.0",
+            "--model", "/opt/ml/model",
+            "--served-model-name", served_model_name
+        ]
+        # Add optional vLLM parameters
+        if tensor_parallel_size:
+            args.extend(["--tensor-parallel-size", str(tensor_parallel_size)])
+        if max_model_len:
+            args.extend(["--max-model-len", str(max_model_len)])
+        if enable_prefix_caching:
+            args.append("--enable-prefix-caching")
+        if gpu_memory_utilization is not None:
+            args.extend(["--gpu-memory-utilization", str(gpu_memory_utilization)])
+        if chat_template:
+            args.extend(["--chat-template", chat_template])
+        if tool_call_parser:
+            args.extend(["--tool-call-parser", tool_call_parser])
+        worker_spec["args"] = args
 
     # Build spec
     spec = {
@@ -950,7 +1754,7 @@ def deploy_to_hyperpod_advanced(
             body=body
         )
         logger.info(f"Created InferenceEndpointConfig with advanced config: {resource_name}")
-        return {
+        result = {
             "success": True,
             "resource_name": resource_name,
             "namespace": namespace,
@@ -958,9 +1762,80 @@ def deploy_to_hyperpod_advanced(
             "features": {
                 "autoscaling": autoscaling is not None,
                 "kv_cache": kv_cache is not None,
-                "intelligent_routing": intelligent_routing is not None
+                "intelligent_routing": intelligent_routing is not None,
+                "api_key_auth": api_key_config is not None and api_key_config.enabled
             }
         }
+        # Include generated API key in response (only for auto-generated keys)
+        # This allows the frontend to display it to the user once
+        if generated_api_key and api_key_config and api_key_config.source == "auto":
+            result["api_key"] = generated_api_key
+            result["api_key_warning"] = "Save this API key securely. It will not be shown again."
+
+        # Configure router with API key for secrets_manager case only
+        # For auto/custom API key sources, we use plain value in the CRD which the operator
+        # automatically copies to the router. For secrets_manager, we need to manually
+        # configure the router since the CRD uses secretKeyRef which the operator doesn't copy.
+        # This is done in a background thread since the router deployment is created asynchronously.
+        needs_router_config = (
+            intelligent_routing and
+            api_key_config and
+            api_key_config.enabled and
+            api_key_secret_name and
+            not generated_api_key  # Only needed for secrets_manager case (no generated key)
+        )
+        if needs_router_config:
+            import threading
+            def configure_router_background():
+                try:
+                    logger.info(f"[Router Config] Starting background configuration of router API key for {endpoint_name}")
+                    router_result = configure_router_api_key(
+                        kubeconfig_path=kubeconfig_path,
+                        endpoint_name=endpoint_name,
+                        api_key_secret_name=api_key_secret_name,
+                        source_namespace=namespace,
+                        router_namespace="hyperpod-inference-system",
+                        max_retries=18,  # Wait up to 3 minutes for router deployment
+                        retry_delay=10,
+                        patch_verify_retries=15,  # Verify/re-apply patch up to 15 times (~7.5 min)
+                        patch_verify_delay=30    # 30 seconds between verifications
+                    )
+                    if router_result.get("success"):
+                        logger.info(f"[Router Config] Successfully configured router with API key for {endpoint_name}")
+                    else:
+                        logger.warning(f"[Router Config] Failed to configure router API key: {router_result.get('error')}")
+                except Exception as e:
+                    logger.error(f"[Router Config] Exception configuring router API key: {e}")
+
+            thread = threading.Thread(target=configure_router_background, daemon=True)
+            thread.start()
+            logger.info(f"[Router Config] Started background thread to configure router API key for {endpoint_name}")
+        elif intelligent_routing and api_key_config and api_key_config.enabled and generated_api_key:
+            logger.info(f"[Router Config] Using plain value for VLLM_API_KEY - operator will copy to router automatically")
+
+        # Patch readiness probe timeout in background (HyperPod operator defaults to 1s which is too short)
+        import threading
+        def patch_readiness_background():
+            try:
+                logger.info(f"[Readiness Patch] Starting background patch for {endpoint_name}")
+                patch_result = patch_readiness_probe_timeout(
+                    kubeconfig_path=kubeconfig_path,
+                    endpoint_name=endpoint_name,
+                    namespace=namespace,
+                    timeout_seconds=5
+                )
+                if patch_result.get("success"):
+                    logger.info(f"[Readiness Patch] Successfully patched: {patch_result.get('message')}")
+                else:
+                    logger.warning(f"[Readiness Patch] Failed: {patch_result.get('error')}")
+            except Exception as e:
+                logger.error(f"[Readiness Patch] Exception: {e}")
+
+        readiness_thread = threading.Thread(target=patch_readiness_background, daemon=True)
+        readiness_thread.start()
+        logger.info(f"[Readiness Patch] Started background thread to patch readiness probe for {endpoint_name}")
+
+        return result
     except ApiException as e:
         # Log detailed error information for debugging
         logger.error(f"Failed to create InferenceEndpointConfig (advanced): status={e.status}, reason={e.reason}")
@@ -1288,7 +2163,8 @@ def invoke_hyperpod_endpoint(
     namespace: str = "default",
     region: str = None,
     stream: bool = False,
-    timeout: int = 120
+    timeout: int = 120,
+    api_key: str = None
 ) -> Dict[str, Any]:
     """
     Invoke a HyperPod inference endpoint via HTTP.
@@ -1301,6 +2177,7 @@ def invoke_hyperpod_endpoint(
         region: AWS region
         stream: Whether to use streaming response
         timeout: Request timeout in seconds
+        api_key: Optional API key for authentication
 
     Returns:
         Response from the endpoint
@@ -1328,6 +2205,11 @@ def invoke_hyperpod_endpoint(
     headers = {
         "Content-Type": "application/json"
     }
+
+    # Add API key to Authorization header if provided
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+        logger.info(f"Using API key authentication for endpoint {endpoint_name}")
 
     try:
         if stream:
@@ -1365,10 +2247,20 @@ def invoke_hyperpod_endpoint_stream(
     payload: Dict[str, Any],
     namespace: str = "default",
     region: str = None,
-    timeout: int = 120
+    timeout: int = 120,
+    api_key: str = None
 ):
     """
     Invoke a HyperPod inference endpoint with streaming response.
+
+    Args:
+        eks_cluster_name: EKS cluster name
+        endpoint_name: Name of the endpoint
+        payload: Request payload (OpenAI-compatible format)
+        namespace: Kubernetes namespace
+        region: AWS region
+        timeout: Request timeout in seconds
+        api_key: Optional API key for authentication
 
     Yields:
         Chunks of the streaming response
@@ -1396,6 +2288,11 @@ def invoke_hyperpod_endpoint_stream(
     headers = {
         "Content-Type": "application/json"
     }
+
+    # Add API key to Authorization header if provided
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+        logger.info(f"Using API key authentication for endpoint {endpoint_name}")
 
     # Ensure stream is enabled in payload
     payload["stream"] = True
@@ -1591,9 +2488,33 @@ def recreate_ingress_with_scheme(
         logger.info(f"Deleting existing Ingress {ingress_name} in {ingress_namespace} to recreate with {scheme} scheme...")
         networking_api.delete_namespaced_ingress(name=ingress_name, namespace=ingress_namespace)
 
-        # Wait for the ALB and target group to be cleaned up
-        logger.info(f"Waiting {wait_for_cleanup}s for ALB cleanup...")
-        time_module.sleep(wait_for_cleanup)
+        # Wait for the ingress to be fully deleted (not just marked for deletion)
+        # The ingress may stay in "Terminating" state while the ALB controller cleans up resources
+        logger.info(f"Waiting for Ingress {ingress_name} to be fully deleted...")
+        max_wait_seconds = max(wait_for_cleanup, 180)  # At least 3 minutes
+        poll_interval = 5
+        for i in range(max_wait_seconds // poll_interval):
+            try:
+                ing = networking_api.read_namespaced_ingress(name=ingress_name, namespace=ingress_namespace)
+                # Check if it has a deletion timestamp (being deleted)
+                if ing.metadata.deletion_timestamp:
+                    logger.info(f"Ingress {ingress_name} is terminating, waiting... ({i * poll_interval}s elapsed)")
+                else:
+                    logger.info(f"Ingress {ingress_name} still exists without deletion timestamp, waiting...")
+                time_module.sleep(poll_interval)
+            except ApiException as poll_e:
+                if poll_e.status == 404:
+                    logger.info(f"Ingress {ingress_name} has been fully deleted after {i * poll_interval}s")
+                    break
+                else:
+                    logger.warning(f"Error checking ingress status: {poll_e}")
+                    time_module.sleep(poll_interval)
+        else:
+            logger.warning(f"Ingress {ingress_name} deletion timed out after {max_wait_seconds}s, proceeding anyway...")
+
+        # Additional short wait for ALB resources cleanup
+        logger.info(f"Waiting additional 10s for ALB resources cleanup...")
+        time_module.sleep(10)
 
         # Recreate the Ingress with the correct scheme
         new_ingress = client.V1Ingress(

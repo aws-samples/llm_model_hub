@@ -99,12 +99,8 @@ const INSTANCE_TYPES: SelectProps.Option[] = [
 ]
 
 const ENGINE: RadioGroupProps.RadioButtonDefinition[] = [
-  { label: 'Auto', value: 'auto' },
-  { label: 'vllm', value: 'vllm' },
-  { label: 'sglang', value: 'sglang' },
-  // { label: 'lmi-dist', value: 'lmi-dist' },
-  // { label: 'trt-llm', value: 'trt-llm' },
-  // { label: 'HF accelerate', value: 'scheduler' },
+  { label: 'vLLM', value: 'vllm' },
+  { label: 'SGLang', value: 'sglang' },
 ]
 
 const DEPLOYMENT_TARGETS: RadioGroupProps.RadioButtonDefinition[] = [
@@ -114,7 +110,7 @@ const DEPLOYMENT_TARGETS: RadioGroupProps.RadioButtonDefinition[] = [
 
 const defaultData = {
   instance_type: 'ml.g5.2xlarge',
-  engine: 'auto',
+  engine: 'vllm',
   enable_lora: false,
   model_name: undefined,
   quantize: '',
@@ -134,7 +130,12 @@ const defaultData = {
     kv_cache_backend: 'tieredstorage',
     enable_intelligent_routing: false,
     routing_strategy: 'prefixaware',
-    use_public_alb: false
+    use_public_alb: false,
+    // API Key authentication (required when public ALB is enabled)
+    enable_api_key: false,
+    api_key_source: 'auto',  // 'auto' (auto-generate), 'custom', 'secrets_manager'
+    custom_api_key: '',
+    secrets_manager_secret_name: ''
   }
 }
 
@@ -148,6 +149,12 @@ const ROUTING_STRATEGIES: SelectProps.Option[] = [
 const KV_CACHE_BACKENDS: SelectProps.Option[] = [
   { label: 'Tiered Storage (Recommended)', value: 'tieredstorage', description: 'Distributed tiered storage cache' },
   { label: 'Redis', value: 'redis', description: 'Redis-based distributed cache' },
+]
+
+const API_KEY_SOURCES: SelectProps.Option[] = [
+  { label: 'Auto Generate (Recommended)', value: 'auto', description: 'Automatically generate a secure API key' },
+  { label: 'Custom API Key', value: 'custom', description: 'Provide your own API key' },
+  { label: 'AWS Secrets Manager', value: 'secrets_manager', description: 'Use existing secret from AWS Secrets Manager' },
 ]
 
 const instanceCalculator = process.env.REACT_APP_CALCULATOR;
@@ -355,7 +362,7 @@ const SetExtraSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
         <Input
           readOnly={readOnly}
           value={memFrac}
-          placeholder={"0.7"}
+          placeholder={"0.8"}
           onChange={({ detail }) => {
             setMemFrac(detail.value);
             setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,mem_fraction_static: detail.value }  }))
@@ -370,11 +377,16 @@ const SetExtraSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
         <Input
           readOnly={readOnly}
           value={contextLen}
+          type="number"
+          inputMode="numeric"
           onChange={({ detail }) => {
             setContextLen(detail.value);
-            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,context_length: detail.value }  }))
+            // Convert k to actual value (multiply by 1024)
+            const actualValue = detail.value ? String(parseInt(detail.value) * 1024) : '';
+            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,max_model_len: actualValue }  }))
           }}
         />
+        <Box variant="small" color="text-body-secondary">k (1k = 1024 tokens)</Box>
       </FormField>
       <FormField
         label={t("chat_template")}
@@ -560,11 +572,11 @@ const SetHyperPodAutoscaling = ({ data, setData, readOnly }: SelectQuantTypeProp
           }))
         }}
       >
-        {t("enable_autoscaling") || "Enable Auto-scaling"}
+        {t("enable_autoscaling")}
       </Toggle>
       {enabled && (
         <SpaceBetween size="s" direction="horizontal">
-          <FormField label={t("min_replicas") || "Min Replicas"}>
+          <FormField label={t("min_replicas")}>
             <Input
               readOnly={readOnly}
               value={minReplicas}
@@ -578,7 +590,7 @@ const SetHyperPodAutoscaling = ({ data, setData, readOnly }: SelectQuantTypeProp
               }}
             />
           </FormField>
-          <FormField label={t("max_replicas") || "Max Replicas"}>
+          <FormField label={t("max_replicas")}>
             <Input
               readOnly={readOnly}
               value={maxReplicas}
@@ -616,10 +628,10 @@ const SetHyperPodKVCache = ({ data, setData, readOnly }: SelectQuantTypeProps) =
           }))
         }}
       >
-        {t("enable_kv_cache") || "Enable KV Cache"}
+        {t("enable_kv_cache")}
       </Toggle>
       {enabled && (
-        <FormField label={t("kv_cache_backend") || "KV Cache Backend"}>
+        <FormField label={t("kv_cache_backend")}>
           <Select
             disabled={readOnly}
             selectedOption={backend}
@@ -657,10 +669,10 @@ const SetHyperPodIntelligentRouting = ({ data, setData, readOnly }: SelectQuantT
           }))
         }}
       >
-        {t("enable_intelligent_routing") || "Enable Intelligent Routing"}
+        {t("enable_intelligent_routing")}
       </Toggle>
       {enabled && (
-        <FormField label={t("routing_strategy") || "Routing Strategy"}>
+        <FormField label={t("routing_strategy")}>
           <Select
             disabled={readOnly}
             selectedOption={strategy}
@@ -682,41 +694,179 @@ const SetHyperPodIntelligentRouting = ({ data, setData, readOnly }: SelectQuantT
 
 const SetHyperPodPublicALB = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   const [enabled, setEnabled] = useState(data.hyperpod_config?.use_public_alb || false);
+  const [enableApiKey, setEnableApiKey] = useState(data.hyperpod_config?.enable_api_key || false);
+  const [apiKeySource, setApiKeySource] = useState<SelectProps.Option | null>(API_KEY_SOURCES[0]);
+  const [customApiKey, setCustomApiKey] = useState('');
+  const [secretName, setSecretName] = useState('');
+
+  // Check if intelligent routing is enabled
+  const intelligentRoutingEnabled = data.hyperpod_config?.enable_intelligent_routing || false;
+
+  // Auto-disable public ALB when intelligent routing is disabled
+  React.useEffect(() => {
+    if (enabled && !intelligentRoutingEnabled) {
+      setEnabled(false);
+      setData((pre: any) => ({
+        ...pre,
+        hyperpod_config: { ...pre.hyperpod_config, use_public_alb: false }
+      }));
+    }
+  }, [intelligentRoutingEnabled]);
+
+  // Auto-enable API key when public ALB is enabled
+  React.useEffect(() => {
+    if (enabled && !enableApiKey) {
+      setEnableApiKey(true);
+      setData((pre: any) => ({
+        ...pre,
+        hyperpod_config: { ...pre.hyperpod_config, enable_api_key: true }
+      }));
+    }
+  }, [enabled]);
 
   return (
     <SpaceBetween size="s">
+      {/* Show info alert when intelligent routing is disabled */}
+      {!intelligentRoutingEnabled && (
+        <Alert type="info">
+          {t("public_alb_requires_routing")}
+        </Alert>
+      )}
       <Toggle
         readOnly={readOnly}
+        disabled={!intelligentRoutingEnabled}
         checked={enabled}
         onChange={({ detail }) => {
+          // Prevent enabling if intelligent routing is disabled
+          if (detail.checked && !intelligentRoutingEnabled) {
+            return;
+          }
           setEnabled(detail.checked);
+          // Auto-enable API key when public ALB is enabled
+          const newEnableApiKey = detail.checked ? true : enableApiKey;
+          setEnableApiKey(newEnableApiKey);
           setData((pre: any) => ({
             ...pre,
-            hyperpod_config: { ...pre.hyperpod_config, use_public_alb: detail.checked }
+            hyperpod_config: {
+              ...pre.hyperpod_config,
+              use_public_alb: detail.checked,
+              enable_api_key: newEnableApiKey
+            }
           }))
         }}
       >
-        {t("use_public_alb") || "Use Public ALB (Internet-Facing)"}
+        {t("use_public_alb")}
       </Toggle>
       {enabled && (
-        <Alert type="warning">
-          {t("public_alb_warning") || "Warning: Enabling public ALB exposes the endpoint to the internet. Ensure proper authentication is configured."}
-        </Alert>
+        <SpaceBetween size="s">
+          <Alert type="warning">
+            {t("public_alb_warning")}
+          </Alert>
+
+          {/* API Key Configuration - strongly recommended for public ALB */}
+          <FormField
+            label={t("api_key_auth")}
+            description={t("api_key_auth_desc")}
+          >
+            <Toggle
+              readOnly={readOnly}
+              checked={enableApiKey}
+              onChange={({ detail }) => {
+                setEnableApiKey(detail.checked);
+                setData((pre: any) => ({
+                  ...pre,
+                  hyperpod_config: { ...pre.hyperpod_config, enable_api_key: detail.checked }
+                }))
+              }}
+            >
+              {t("enable_api_key")}
+            </Toggle>
+          </FormField>
+
+          {enableApiKey && (
+            <SpaceBetween size="s">
+              <FormField label={t("api_key_source")}>
+                <Select
+                  disabled={readOnly}
+                  selectedOption={apiKeySource}
+                  onChange={({ detail }) => {
+                    setApiKeySource(detail.selectedOption);
+                    setData((pre: any) => ({
+                      ...pre,
+                      hyperpod_config: { ...pre.hyperpod_config, api_key_source: detail.selectedOption?.value || 'auto' }
+                    }))
+                  }}
+                  options={API_KEY_SOURCES}
+                  selectedAriaLabel="Selected"
+                />
+              </FormField>
+
+              {apiKeySource?.value === 'custom' && (
+                <FormField
+                  label={t("custom_api_key")}
+                  description={t("custom_api_key_desc")}
+                >
+                  <Input
+                    readOnly={readOnly}
+                    value={customApiKey}
+                    type="password"
+                    placeholder="sk-xxxxxxxxxxxxxxxx"
+                    onChange={({ detail }) => {
+                      setCustomApiKey(detail.value);
+                      setData((pre: any) => ({
+                        ...pre,
+                        hyperpod_config: { ...pre.hyperpod_config, custom_api_key: detail.value }
+                      }))
+                    }}
+                  />
+                </FormField>
+              )}
+
+              {apiKeySource?.value === 'secrets_manager' && (
+                <FormField
+                  label={t("secrets_manager_secret")}
+                  description={t("secrets_manager_secret_desc")}
+                >
+                  <Input
+                    readOnly={readOnly}
+                    value={secretName}
+                    placeholder="vllm/api-key"
+                    onChange={({ detail }) => {
+                      setSecretName(detail.value);
+                      setData((pre: any) => ({
+                        ...pre,
+                        hyperpod_config: { ...pre.hyperpod_config, secrets_manager_secret_name: detail.value }
+                      }))
+                    }}
+                  />
+                </FormField>
+              )}
+            </SpaceBetween>
+          )}
+        </SpaceBetween>
       )}
     </SpaceBetween>
   )
 }
 
 const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
+  // const DEFAULT_MAX_MODEL_LEN = '12288';
   const [value1, setValue1] = useState<string>('');
   const [value2, setValue2] = useState<string>('');
   const [valueMaxNumSeqs, setMaxNumSeqs] = useState<string>('');
-
-  const [value3, setValue3] = useState<boolean>(true);
+  const DEFAULT_ENABLE_PROMPT_CACHE = true;
+  const [value3, setValue3] = useState<boolean>(DEFAULT_ENABLE_PROMPT_CACHE);
   const [value4, setValue4] = useState<boolean>(false);
-  const [value5, setValue5] = useState<string>('');
   const [toolCallParser, setToolCallParser] = useState<string>('');
-  const [template, setTemplate] = useState<string>('');
+
+
+  React.useEffect(() => {
+    setData((pre: any) => ({
+      ...pre,
+      extra_params: { ...pre.extra_params, enable_prefix_caching: DEFAULT_ENABLE_PROMPT_CACHE }
+    }));
+  }, []);
+
   return (
     <SpaceBetween size='xs'>
       <FormField
@@ -727,11 +877,16 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
         <Input
           readOnly={readOnly}
           value={value1}
+          type="number"
+          inputMode="numeric"
           onChange={({ detail }) => {
             setValue1(detail.value);
-            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,max_model_len: detail.value }  }))
+            // Convert k to actual value (multiply by 1024)
+            const actualValue = detail.value ? String(parseInt(detail.value) * 1024) : '';
+            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,max_model_len: actualValue }  }))
           }}
         />
+        <Box variant="small" color="text-body-secondary">k (1k = 1024 tokens)</Box>
       </FormField>
       <FormField
         label={t("tensor_parallel_size")}
@@ -743,26 +898,10 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
           value={value2}
           onChange={({ detail }) => {
             setValue2(detail.value);
-            setData((pre: any) => ({ ...pre,  extra_params:{...pre.extra_params,tensor_paralle_size: detail.value } }))
+            setData((pre: any) => ({ ...pre,  extra_params:{...pre.extra_params,tensor_parallel_size: detail.value } }))
           }}
         />
       </FormField>
-      {/* <FormField
-        label="chat-template"
-        description={<Box><Box>"对于多模态模型，需要填写此项，否则只能当作文本模型。</Box>
-          <Link external href={"https://docs.sglang.ai/backend/openai_api_vision.html#Chat-Template"} >有效值参考链接</Link></Box>}
-        stretch={false}
-      >
-        <Input
-          readOnly={readOnly}
-          value={template}
-          placeholder={"qwen2-vl"}
-          onChange={({ detail }) => {
-            setTemplate(detail.value);
-            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,chat_template: detail.value }  }))
-          }}
-        />
-      </FormField> */}
         <FormField
         label={t("tool_call_parser")}
         description={<Box><Box>{t("tool_call_parser_desc")}</Box>
@@ -811,21 +950,6 @@ const SetExtraParamsInput = ({ data, setData, readOnly }: SelectQuantTypeProps) 
           {t("enable")}
         </Toggle>
       </FormField>
-      {/* <FormField
-        label="limit-mm-per-prompt"
-        description="一个请求最大支持图片或者video数量，默认是image=1，设置值格式为 image=N,video=M"
-        stretch={false}
-      >
-        <Input
-          readOnly={readOnly}
-          value={value5}
-          placeholder='image=5,video=2'
-          onChange={({ detail }) => {
-            setValue5(detail.value);
-            setData((pre: any) => ({ ...pre,  extra_params:{...pre.extra_params,limit_mm_per_prompt: detail.value } }))
-          }}
-        />
-      </FormField> */}
       <FormField
         label={t("max_num_seqs")}
         description={t("max_num_seqs_desc")}
@@ -952,9 +1076,9 @@ export const DeployModelModal = ({
       header={t("deploy_model_endpoint")}
     ><SpaceBetween size="l">
         <FormField
-          label={t("deployment_target") || "Deployment Target"}
+          label={t("deployment_target")}
           stretch={false}
-          description={t("deployment_target_desc") || "Select where to deploy the model endpoint"}
+          description={t("deployment_target_desc")}
         >
           <SetDeploymentTarget data={data} setData={setData} readOnly={false} />
         </FormField>
@@ -962,57 +1086,57 @@ export const DeployModelModal = ({
         {data.deployment_target === 'hyperpod' && (
           <>
             <FormField
-              label={t("hyperpod_cluster") || "HyperPod Cluster"}
+              label={t("hyperpod_cluster")}
               stretch={false}
-              description={t("hyperpod_cluster_desc") || "Select an active HyperPod cluster for deployment"}
+              description={t("hyperpod_cluster_desc")}
             >
               <SelectHyperPodCluster data={data} setData={setData} readOnly={false} />
             </FormField>
 
             <FormField
-              label={t("namespace") || "Kubernetes Namespace"}
+              label={t("namespace")}
               stretch={false}
-              description={t("namespace_desc") || "Kubernetes namespace for the deployment (default: 'default')"}
+              description={t("namespace_desc")}
             >
               <SetHyperPodNamespace data={data} setData={setData} readOnly={false} />
             </FormField>
 
             <FormField
-              label={t("replicas") || "Replicas"}
+              label={t("replicas")}
               stretch={false}
-              description={t("replicas_desc") || "Number of model replicas to deploy"}
+              description={t("replicas_desc")}
             >
               <SetHyperPodReplicas data={data} setData={setData} readOnly={false} />
             </FormField>
 
             <FormField
-              label={t("autoscaling") || "Auto-scaling"}
+              label={t("autoscaling")}
               stretch={false}
-              description={t("autoscaling_desc") || "Automatically scale replicas based on CloudWatch metrics"}
+              description={t("autoscaling_desc")}
             >
               <SetHyperPodAutoscaling data={data} setData={setData} readOnly={false} />
             </FormField>
 
             <FormField
-              label={t("kv_cache") || "KV Cache"}
+              label={t("kv_cache")}
               stretch={false}
-              description={t("kv_cache_desc") || "Enable KV cache for optimized inference performance. Reduces time to first token by up to 40%."}
+              description={t("kv_cache_desc")}
             >
               <SetHyperPodKVCache data={data} setData={setData} readOnly={false} />
             </FormField>
 
             <FormField
-              label={t("intelligent_routing") || "Intelligent Routing"}
+              label={t("intelligent_routing")}
               stretch={false}
-              description={t("intelligent_routing_desc") || "Enable intelligent routing for optimized request distribution across replicas"}
+              description={t("intelligent_routing_desc")}
             >
               <SetHyperPodIntelligentRouting data={data} setData={setData} readOnly={false} />
             </FormField>
 
             <FormField
-              label={t("public_alb") || "Public ALB"}
+              label={t("public_alb")}
               stretch={false}
-              description={t("public_alb_desc") || "Configure the load balancer to be internet-facing (allows access from outside the VPC)"}
+              description={t("public_alb_desc")}
             >
               <SetHyperPodPublicALB data={data} setData={setData} readOnly={false} />
             </FormField>
@@ -1081,7 +1205,7 @@ export const DeployModelModal = ({
           <SetEngineType data={data} setData={setData} readOnly={false} />
         </FormField>
 
-        {data.engine === 'vllm' && 
+        {data.engine === 'vllm' &&
           <SetExtraParamsInput data={data} setData={setData} readOnly={false} />}
 
         {data.engine === 'sglang' && 

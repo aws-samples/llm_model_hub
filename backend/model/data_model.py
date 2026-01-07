@@ -173,6 +173,12 @@ class HyperPodDeployConfig(BaseModel):
     # ALB configuration
     use_public_alb: bool = False  # If True, configure ALB as internet-facing
 
+    # API Key authentication (required for public ALB)
+    enable_api_key: bool = False  # Enable API key authentication for vLLM/SGLang
+    api_key_source: str = "auto"  # "auto" (generate), "custom", "secrets_manager"
+    custom_api_key: Optional[str] = None  # Used when api_key_source is "custom"
+    secrets_manager_secret_name: Optional[str] = None  # Used when api_key_source is "secrets_manager"
+
 class DeployModelRequest(BaseModel):
     job_id:str
     model_name:Optional[str] = ''

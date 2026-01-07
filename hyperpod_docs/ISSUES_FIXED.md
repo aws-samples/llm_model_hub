@@ -1,0 +1,669 @@
+# HyperPod Issues and Solutions
+
+## 1. API Key + Intelligent Routing Returns 401/400
+
+### Issue
+Deploying HyperPod endpoint with both **API key authentication** and **intelligent routing** enabled causes:
+- Router logs: `401 Unauthorized` when scraping metrics from vLLM backends
+- Chat playground: `400 Bad Request` when invoking endpoint
+
+### Root Cause
+Two separate issues:
+
+1. **Backend not passing API key to vLLM endpoint:**
+   - `invoke_hyperpod_endpoint_stream()` in `server.py` missing `Authorization: Bearer <api_key>` header
+   - API key not stored in database `extra_config` during deployment
+
+2. **Router cannot access API key:**
+   - Router runs in `hyperpod-inference-system` namespace
+   - API key secret created in `default` namespace (Kubernetes secrets are namespace-scoped)
+   - Router's `VLLM_API_KEY` env var was empty, causing auth failures when calling `/v1/models`
+
+### Solution
+
+1. **`backend/inference/endpoint_management.py`:**
+   - Store API key in `extra_config` when deployment completes
+
+2. **`backend/inference/hyperpod_inference.py`:**
+   - Add `api_key` parameter to invoke functions with `Authorization: Bearer` header
+   - Add `configure_router_api_key()` function that:
+     - Copies API key secret from `default` to `hyperpod-inference-system` namespace
+     - Patches router deployment to mount secret and set `VLLM_API_KEY` env var
+   - Run router configuration in background thread after deployment
+
+3. **`backend/server.py`:**
+   - Extract API key from endpoint's `extra_config` and pass to invoke functions
+
+
+## 2. KVCacheSpec Error for SGLang Engine
+
+### Issue
+Deploying HyperPod endpoint with SGLang engine and KV cache enabled fails with:
+```
+KVCacheSpec can only be configured for vLLM model server at this moment
+```
+
+### Root Cause
+KVCacheSpec is only supported by vLLM in the HyperPod inference operator. SGLang doesn't support distributed KV cache.
+
+### Solution
+- **`backend/inference/endpoint_management.py`**: Added engine check before enabling KV cache
+- **`src/common/i18n.js`**: Updated KV cache description to indicate "Only works with vLLM"
+
+```python
+if enable_kv_cache:
+    if engine.lower() != 'vllm':
+        logger.warning(f"KV cache only supported for vLLM, not {engine}")
+    else:
+        # Configure KV cache...
+```
+
+
+## 3. Endpoint Name Exceeds 63 Characters
+
+### Issue
+Init container name `prefetch-{endpoint_name}-inf` exceeds Kubernetes 63-character limit:
+```
+prefetch-qwen3-4b-instruct-2507-2026-01-06-04-30-58-238-sgla-inf (64 chars)
+```
+
+### Root Cause
+Wrong calculation: "prefetch-" is 9 chars + "-inf" is 4 chars = 13 chars overhead, but code used 51 (63-12).
+
+### Solution
+**`backend/inference/endpoint_management.py`**: Changed `max_name_len` from 51 to 50.
+
+
+## 4. Public ALB Requires Intelligent Routing
+
+### Issue
+Endpoint shows "InService" but logs show infinite ALB configuration retry:
+```
+[Background ALB] ALB configuration attempt N failed: Ingress not found
+```
+
+### Root Cause
+HyperPod operator only creates Ingress (which provisions ALB) when `intelligentRoutingSpec` is configured. Without intelligent routing, no Ingress is created, so ALB configuration loop never completes.
+
+### Solution
+1. **Backend** (`endpoint_management.py`): Skip ALB configuration when intelligent routing is disabled
+2. **Frontend** (`create-ed.tsx`):
+   - Disable Public ALB toggle when Intelligent Routing is off
+   - Show info alert explaining the dependency
+   - Auto-disable Public ALB if user disables Intelligent Routing
+3. **i18n.js**: Added warning messages in English and Chinese
+
+
+## 5. SGLang Endpoint Readiness Probe Fails (Port Mismatch)
+
+### Issue
+SGLang endpoint pod shows `2/3` containers ready, readiness probe fails:
+```
+Readiness probe failed: Get "http://10.0.11.113:8000/health": connection refused
+```
+But SGLang logs show server running successfully on port 8080.
+
+### Root Cause
+- Code assumed both vLLM and SGLang use port 8000
+- vLLM DLC uses port **8000**
+- SGLang DLC uses port **8080**
+- Readiness probe configured for 8000, but SGLang listens on 8080
+
+### Solution
+**`backend/inference/hyperpod_inference.py`**: Set port based on engine type:
+```python
+# vLLM uses port 8000, SGLang DLC uses port 8080
+container_port = 8080 if engine.lower() == "sglang" else 8000
+```
+Fixed in both `deploy_to_hyperpod()` and `deploy_to_hyperpod_advanced()` functions.
+
+
+## 6. Readiness Probe Timeout Too Short (1 second)
+
+### Issue
+Model pod shows `2/3` containers ready with readiness probe failures:
+```
+Readiness probe failed: Get "http://10.0.11.253:8080/health": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+```
+The model is running fine internally, but the router shows "0 serving engines" and returns "Model not found" errors.
+
+### Root Cause
+- HyperPod Inference operator sets a default readiness probe timeout of **1 second**
+- SGLang health endpoint response time is approximately **1.007 seconds**
+- The 1-second timeout causes consistent probe failures
+- Kubernetes marks the pod as "Not Ready", so the router doesn't discover it
+
+### Explanation: What is a Readiness Probe?
+A **Readiness Probe** is a Kubernetes health check that determines if a pod is ready to receive traffic:
+- **Kubelet** executes the probe periodically (every 10 seconds by default)
+- If probe **succeeds**: Pod is added to Service endpoints, traffic is routed to it
+- If probe **fails**: Pod is removed from endpoints, no traffic is sent
+
+The HyperPod operator creates deployments with this default probe configuration:
+```yaml
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  timeoutSeconds: 1      # Too short!
+  periodSeconds: 10
+  failureThreshold: 3
+```
+
+### Solution
+**`backend/inference/hyperpod_inference.py`**:
+
+1. Added `patch_readiness_probe_timeout()` function that patches the deployment after creation to increase the timeout:
+```python
+def patch_readiness_probe_timeout(
+    kubeconfig_path: str,
+    endpoint_name: str,
+    namespace: str = "default",
+    timeout_seconds: int = 5,  # Increased from 1s to 5s
+    ...
+) -> Dict[str, Any]:
+    # Waits for deployment, finds containers with readiness probes,
+    # and patches timeoutSeconds to 5
+```
+
+2. Called the function in a background thread after deployment in `deploy_to_hyperpod_advanced()`:
+```python
+# Patch readiness probe timeout in background
+import threading
+def patch_readiness_background():
+    patch_result = patch_readiness_probe_timeout(
+        kubeconfig_path=kubeconfig_path,
+        endpoint_name=endpoint_name,
+        namespace=namespace,
+        timeout_seconds=5
+    )
+    ...
+
+readiness_thread = threading.Thread(target=patch_readiness_background, daemon=True)
+readiness_thread.start()
+```
+
+This ensures the readiness probe timeout is automatically increased to 5 seconds for all new deployments.
+
+
+## 7. Model Name Not Recognized by Router (ALB Returns "Model not found")
+
+### Issue
+ALB is working (returns responses), but requests fail with:
+```json
+{"error":"Model Qwen3-4B-Instruct-2507 not found or vLLM engine is sleeping."}
+```
+The model is running and accessible internally using `/opt/ml/model` as the model name.
+
+### Root Cause
+- SGLang/vLLM serve the model using the path where weights are mounted: `/opt/ml/model`
+- Users expect to call the model by its friendly name (e.g., `Qwen3-4B-Instruct-2507`)
+- The router discovers models by their served name, not by a user-defined alias
+- Without `--served-model-name` argument, the engine serves as `/opt/ml/model`
+
+Router logs show:
+```
+Discovered new serving engine ... running models: ['/opt/ml/model']
+```
+
+### Solution
+**`backend/inference/hyperpod_inference.py`**:
+
+Override the container command entirely using both `command` and `args` fields. The HyperPod DLC containers have a fixed CMD that ignores additional args, so we must specify the full command:
+
+```python
+# Extract a clean served model name for the inference engine
+if "/" in model_name:
+    served_model_name = model_name.split("/")[-1]
+else:
+    served_model_name = model_name
+
+# Override container command to include --served-model-name
+if engine.lower() == "sglang":
+    worker_spec["command"] = ["python3", "-m", "sglang.launch_server"]
+    worker_spec["args"] = [
+        "--port", str(container_port),
+        "--host", "0.0.0.0",
+        "--model-path", "/opt/ml/model",
+        "--served-model-name", served_model_name
+    ]
+else:  # vllm
+    worker_spec["command"] = ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+    worker_spec["args"] = [
+        "--port", str(container_port),
+        "--host", "0.0.0.0",
+        "--model", "/opt/ml/model",
+        "--served-model-name", served_model_name
+    ]
+```
+
+This change was applied to both `deploy_to_hyperpod()` and `deploy_to_hyperpod_advanced()` functions.
+
+### Workaround for Existing Endpoints
+For endpoints deployed before this fix, use `/opt/ml/model` as the model name in API calls:
+```bash
+curl -sk -X POST "https://<alb-url>/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "/opt/ml/model", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+
+## 8. Playground Returns 400 Bad Request (Model Name Mismatch in API Payload)
+
+### Issue
+Playground test fails with `400 Bad Request` even though direct ALB curl works:
+```
+ERROR:inference.hyperpod_inference:Failed to invoke HyperPod endpoint (streaming): 400 Client Error: Bad Request for url: https://<alb-url>/v1/chat/completions
+```
+
+Direct curl with correct model name works fine.
+
+### Root Cause
+The backend `server.py` sends the raw model name from the database (`Qwen/Qwen3-4B-Instruct-2507`) in the API payload, but the inference engine serves the model with the short name (`Qwen3-4B-Instruct-2507`) due to the `--served-model-name` argument added in Issue #7.
+
+The payload was built with:
+```python
+payload = {
+    "model": request.model_name or endpoint_info.get('model_name', ''),  # Returns "Qwen/Qwen3-4B-Instruct-2507"
+    ...
+}
+```
+
+But the model is served as `Qwen3-4B-Instruct-2507`, causing the router to return "Model not found" with a 400 error.
+
+### Solution
+**`backend/server.py`**: Extract the served model name when building the payload for HyperPod inference:
+
+```python
+# Build payload
+# For HyperPod endpoints, extract served model name (last part after '/')
+# This matches the --served-model-name argument passed to the inference engine
+raw_model_name = request.model_name or endpoint_info.get('model_name', '')
+if "/" in raw_model_name:
+    served_model_name = raw_model_name.split("/")[-1]
+else:
+    served_model_name = raw_model_name
+
+payload = {
+    "model": served_model_name,  # Now uses "Qwen3-4B-Instruct-2507"
+    ...
+}
+```
+
+This ensures consistency between:
+1. The model name in the deployment (`--served-model-name Qwen3-4B-Instruct-2507`)
+2. The model name in API requests (`"model": "Qwen3-4B-Instruct-2507"`)
+
+
+## 9. Network Shows "Private" Despite Public ALB Being Configured
+
+### Issue
+Endpoint is deployed with public ALB enabled and working, but the frontend shows "Private" in the Network column. The ALB is functional and accessible, but the UI doesn't reflect the correct network status.
+
+### Root Cause
+The `extra_config` field (which stores `use_public_alb`, `enable_intelligent_routing`, API key, etc.) is being overwritten to NULL when the `cluster_processor` updates the endpoint status to `INSERVICE`.
+
+The bug is in `database.update_endpoint_status()`:
+```python
+def update_endpoint_status(self, endpoint_name, endpoint_status, extra_config=None, ...):
+    cursor.execute("UPDATE EP_TABLE SET endpoint_status=%s, endpoint_delete_time=%s, extra_config=%s WHERE ...",
+                   (endpoint_status.value, endpoint_delete_time, extra_config, endpoint_name))
+```
+
+When `cluster_processor` calls `update_endpoint_status(endpoint_name, EndpointStatus.INSERVICE)` without passing `extra_config`, the default `None` value overwrites the existing `extra_config` in the database.
+
+**Timeline:**
+1. `deploy_endpoint_hyperpod()` creates endpoint with `extra_config={use_public_alb: true, ...}` and status `CREATING`
+2. `cluster_processor` detects the pod is running and calls `update_endpoint_status(name, INSERVICE)`
+3. The SQL UPDATE sets `extra_config=NULL` because parameter default is `None`
+4. Frontend reads `extra_config` as NULL, assumes `use_public_alb=false`, shows "Private"
+
+### Solution
+**`backend/db_management/database.py`**: Modified `update_endpoint_status()` to only update `extra_config` when it's explicitly provided:
+
+```python
+def update_endpoint_status(self, endpoint_name, endpoint_status, extra_config=None, endpoint_delete_time=None):
+    with self.connection_pool.get_connection() as connection:
+        with connection.cursor() as cursor:
+            # Only update extra_config if it's explicitly provided (not None)
+            # This prevents overwriting existing extra_config when just updating status
+            if extra_config is not None:
+                cursor.execute("UPDATE EP_TABLE SET endpoint_status=%s, endpoint_delete_time=%s, extra_config=%s WHERE endpoint_name=%s",
+                               (endpoint_status.value, endpoint_delete_time, extra_config, endpoint_name))
+            else:
+                cursor.execute("UPDATE EP_TABLE SET endpoint_status=%s, endpoint_delete_time=%s WHERE endpoint_name=%s",
+                               (endpoint_status.value, endpoint_delete_time, endpoint_name))
+            connection.commit()
+```
+
+### Workaround for Existing Endpoints
+Manually update the `extra_config` in the database:
+```sql
+UPDATE llm.EP_TABLE SET extra_config = '{"hyperpod_cluster_id": "...", "use_public_alb": true, ...}' WHERE endpoint_name = '...';
+```
+
+
+## 10. vLLM/SGLang Parameters Not Passed to HyperPod Deployment
+
+### Issue
+Frontend parameters for vLLM/SGLang (like `max-model-len`, `tensor-parallel-size`, `enable-prefix-caching`, `mem-fraction-static`, `chat-template`, `tool-call-parser`) were not being applied to HyperPod deployments.
+
+For example, deploying a model with `max-model-len: 12288` still caused OOM errors because the model tried to use its full context length (e.g., 131072 tokens for Llama 3.2).
+
+### Root Cause
+Two issues:
+
+1. **Backend only passed 3 parameters to `deploy_to_hyperpod_advanced()`:**
+   ```python
+   # endpoint_management.py only passed these:
+   tensor_parallel_size=extra_params.get('tensor_parallel_size'),
+   max_model_len=extra_params.get('max_model_len'),
+   enable_prefix_caching=extra_params.get('enable_prefix_caching', False)
+   ```
+   Missing: `gpu_memory_utilization`, `chat_template`, `tool_call_parser`
+
+2. **Container args were hardcoded without optional parameters:**
+   The `args` list in `hyperpod_inference.py` only included basic parameters:
+   ```python
+   worker_spec["args"] = [
+       "--port", str(container_port),
+       "--host", "0.0.0.0",
+       "--model", "/opt/ml/model",
+       "--served-model-name", served_model_name
+   ]
+   # Missing: --max-model-len, --tensor-parallel-size, --enable-prefix-caching, etc.
+   ```
+
+### Solution
+
+1. **`backend/inference/hyperpod_inference.py`**: Updated `deploy_to_hyperpod_advanced()` to add optional parameters to the container args:
+
+   ```python
+   # For vLLM:
+   args = ["--port", str(container_port), "--host", "0.0.0.0", ...]
+   if tensor_parallel_size:
+       args.extend(["--tensor-parallel-size", str(tensor_parallel_size)])
+   if max_model_len:
+       args.extend(["--max-model-len", str(max_model_len)])
+   if enable_prefix_caching:
+       args.append("--enable-prefix-caching")
+   if gpu_memory_utilization is not None:
+       args.extend(["--gpu-memory-utilization", str(gpu_memory_utilization)])
+   if chat_template:
+       args.extend(["--chat-template", chat_template])
+   if tool_call_parser:
+       args.extend(["--tool-call-parser", tool_call_parser])
+
+   # For SGLang (uses different parameter names):
+   if tensor_parallel_size:
+       args.extend(["--tp-size", str(tensor_parallel_size)])
+   if max_model_len:
+       args.extend(["--context-length", str(max_model_len)])
+   if gpu_memory_utilization is not None:
+       args.extend(["--mem-fraction-static", str(gpu_memory_utilization)])
+   if chat_template:
+       args.extend(["--chat-template", chat_template])
+   ```
+
+2. **`backend/inference/endpoint_management.py`**: Added missing parameters to the function call:
+
+   ```python
+   result = deploy_to_hyperpod_advanced(
+       ...
+       tensor_parallel_size=extra_params.get('tensor_parallel_size'),
+       max_model_len=extra_params.get('max_model_len'),
+       enable_prefix_caching=extra_params.get('enable_prefix_caching', False),
+       gpu_memory_utilization=extra_params.get('mem_fraction_static'),  # Added
+       chat_template=extra_params.get('chat_template'),                 # Added
+       tool_call_parser=extra_params.get('tool_call_parser')            # Added
+   )
+   ```
+
+### Parameter Mapping Reference
+
+| Frontend Field | vLLM Arg | SGLang Arg |
+|---------------|----------|------------|
+| `max_model_len` | `--max-model-len` | `--context-length` |
+| `tensor_parallel_size` | `--tensor-parallel-size` | `--tp-size` |
+| `enable_prefix_caching` | `--enable-prefix-caching` | N/A |
+| `mem_fraction_static` | `--gpu-memory-utilization` | `--mem-fraction-static` |
+| `chat_template` | `--chat-template` | `--chat-template` |
+| `tool_call_parser` | `--tool-call-parser` | N/A |
+
+### Additional Frontend Fixes
+
+1. **Default `max_model_len` not sent**: The input field was initialized with empty string and only set `extra_params.max_model_len` on user change. Fixed by:
+   - Initialize `value1` with default `'12288'`
+   - Add `useEffect` to set default value on component mount
+
+2. **Typo in parameter name**: `tensor_paralle_size` → `tensor_parallel_size`
+
+
+## 11. Router API Key Configuration Reset by Operator Reconciliation
+
+### Issue
+When deploying a HyperPod endpoint with both **API key authentication** and **intelligent routing** enabled, the router shows "0 serving engines" and returns "Model not found" errors. The model pod is running correctly with the API key, but the router cannot authenticate.
+
+Investigation shows the router deployment has an **empty** `VLLM_API_KEY` environment variable:
+```yaml
+env:
+- name: VLLM_API_KEY   # Empty - no value or secretKeyRef
+```
+
+Even though our code patches the deployment to add the secretKeyRef, the patch gets overwritten by operator reconciliation.
+
+### Root Cause
+The HyperPod Inference Operator copies environment variables from the **worker spec** (in the CRD) to the **router deployment**. However, there's a critical bug/limitation:
+
+**The operator only copies env vars with plain `value`, NOT `valueFrom.secretKeyRef`.**
+
+When we configured the CRD with:
+```yaml
+environmentVariables:
+- name: VLLM_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: endpoint-api-key
+      key: api-key
+```
+
+The operator copied the env var name (`VLLM_API_KEY`) to the router but left the value **empty** because it doesn't support `secretKeyRef` propagation.
+
+### Solution
+**`backend/inference/hyperpod_inference.py`**: Use plain `value` instead of `secretKeyRef` for the `VLLM_API_KEY` environment variable in the CRD:
+
+```python
+# Add API key environment variable if enabled
+# NOTE: We use plain value instead of secretKeyRef because the HyperPod operator
+# copies env vars from worker to router but doesn't properly copy secretKeyRef.
+# Using plain value allows the operator to copy the API key to the router.
+if api_key_secret_name and generated_api_key:
+    # Use plain value so operator copies it to router
+    env_vars.append({
+        "name": "VLLM_API_KEY",
+        "value": generated_api_key  # Plain value, not secretKeyRef
+    })
+elif api_key_secret_name:
+    # Fallback to secretKeyRef for secrets_manager case (less common)
+    env_vars.append({
+        "name": "VLLM_API_KEY",
+        "valueFrom": {
+            "secretKeyRef": {
+                "name": api_key_secret_name,
+                "key": "api-key"
+            }
+        }
+    })
+```
+
+The Kubernetes secret is still created (for reference), but the CRD uses the plain value to ensure the operator copies it to the router.
+
+### Verification
+After the fix, the router deployment correctly shows the API key:
+```yaml
+env:
+- name: VLLM_API_KEY
+  value: sk-7dc063a19f009218890bedc37c3e335587f3e839f709a0137320f34ae8ee0dde
+```
+
+And router logs show successful model discovery:
+```
+Scraping metrics from 1 serving engine(s)
+```
+
+### Workaround for Existing Endpoints
+For endpoints deployed before this fix, manually patch the CRD to use plain value:
+```bash
+kubectl patch inferenceendpointconfig <endpoint-name> --type='merge' \
+  -p='{"spec":{"worker":{"environmentVariables":[..., {"name":"VLLM_API_KEY","value":"<your-api-key>"}]}}}'
+```
+
+The operator will detect the change and update the router deployment with the correct API key.
+
+
+## 12. SGLang Backend Removed by vLLM Router After ~1 Minute
+
+### Issue
+SGLang endpoint with intelligent routing shows the model running correctly, but router logs show:
+```
+Scraping metrics from 1 serving engine(s)
+```
+Then after ~1 minute:
+```
+Scraping metrics from 0 serving engine(s)
+```
+The router discovers the SGLang backend but then removes it, causing "Model not found" errors.
+
+### Root Cause
+The vLLM router scrapes metrics from backends via the `/metrics` endpoint (Prometheus format). By default, SGLang does **not** expose the `/metrics` endpoint - it returns 404:
+
+```bash
+curl http://localhost:8080/metrics
+# Returns 404 Not Found
+```
+
+The router discovery flow:
+1. Router discovers backend via `/v1/models` endpoint ✓
+2. Router adds backend to serving pool ✓
+3. Router attempts to scrape `/metrics` for load balancing ✗ (404)
+4. After repeated failures, router removes "unhealthy" backend ✗
+
+### Solution
+**`backend/inference/hyperpod_inference.py`**: Add `--enable-metrics` flag to SGLang container args:
+
+```python
+if engine.lower() == "sglang":
+    worker_spec["command"] = ["python3", "-m", "sglang.launch_server"]
+    worker_spec["args"] = [
+        "--port", str(container_port),
+        "--host", "0.0.0.0",
+        "--model-path", "/opt/ml/model",
+        "--served-model-name", served_model_name,
+        "--enable-metrics"  # Required for vLLM router to scrape metrics and keep backend registered
+    ]
+```
+
+Applied to both `deploy_to_hyperpod()` and `deploy_to_hyperpod_advanced()` functions.
+
+### Verification
+After the fix, SGLang exposes metrics:
+```bash
+curl http://localhost:8080/metrics
+# Returns Prometheus metrics
+```
+
+And router logs consistently show:
+```
+Scraping metrics from 1 serving engine(s)
+```
+
+### Workaround for Existing Endpoints
+Redeploy the endpoint with the updated code. There is no way to add the `--enable-metrics` flag to an existing deployment without recreating it.
+
+
+## 13. Readiness Probe Patch Race Condition (Pod Not Ready, Router Shows 0 Engines)
+
+### Issue
+After deploying a HyperPod endpoint, the model container becomes `Ready: False` and the router shows "Scraping metrics from 0 serving engine(s)", causing 400 Bad Request errors in the playground.
+
+Symptoms:
+- Deployment shows `timeoutSeconds: 5` (patched correctly)
+- Running pod shows `timeout=1s` (old value)
+- Pod status: `2/3 Running` (model container not ready)
+- Router logs: `Serving engine ... is deleted`
+
+### Root Cause
+A race condition occurs between the HyperPod operator creating resources and our background patch:
+
+```
+Timeline:
+1. InferenceEndpointConfig CRD created
+2. HyperPod Operator creates:
+   - Deployment (readinessProbe.timeoutSeconds=1, hardcoded by operator)
+   - ReplicaSet-A (timeout=1s)
+   - Pod-A starts with timeout=1s
+3. Background thread patches Deployment (timeout=5s)
+4. Kubernetes rolling update creates ReplicaSet-B (timeout=5s)
+5. Pod-B created but PENDING (GPU occupied by Pod-A)
+6. Pod-A continues running with timeout=1s
+7. Pod-A readiness probe times out → Ready=False
+8. Router loses backend → 400 errors
+```
+
+The patch triggers a Kubernetes rolling update, but:
+- New pods can't start because GPU is used by old pods
+- Old pods continue with wrong timeout (1s) and eventually fail readiness
+- Deadlock: new pods need GPU resources, old pods won't release until replaced
+
+**Note:** The InferenceEndpointConfig CRD does not support configuring readiness probe timeout. The HyperPod operator hardcodes it to 1 second.
+
+### Solution
+**`backend/inference/hyperpod_inference.py`**: After patching the deployment, immediately delete existing pods to force the rollout:
+
+```python
+def patch_readiness_probe_timeout(...):
+    ...
+    if patched:
+        # Delete existing pods to force rollout with new timeout
+        # This is necessary because:
+        # 1. New pods can't start (GPU occupied by old pods)
+        # 2. Old pods have wrong timeout and will eventually fail readiness
+        logger.info(f"[Readiness Patch] Deleting existing pods to force rollout...")
+        try:
+            pods = core_api.list_namespaced_pod(
+                namespace=namespace,
+                label_selector=f"app={resource_name}"
+            )
+            for pod in pods.items:
+                logger.info(f"[Readiness Patch] Deleting pod {pod.metadata.name} to force rollout")
+                core_api.delete_namespaced_pod(
+                    name=pod.metadata.name,
+                    namespace=namespace,
+                    grace_period_seconds=0  # Force immediate termination
+                )
+            logger.info(f"[Readiness Patch] Deleted {len(pods.items)} pod(s), new pods will start with timeout={timeout_seconds}s")
+        except Exception as e:
+            logger.warning(f"[Readiness Patch] Failed to delete pods (rollout may be delayed): {e}")
+```
+
+This ensures:
+1. Old pods are immediately terminated
+2. GPU resources are released
+3. New pods with correct timeout=5s can start
+4. No race condition, router discovers backend properly
+
+### New Deployment Flow
+```
+1. CRD created → Operator creates Deployment (timeout=1s)
+2. Pod-A starts with timeout=1s
+3. Background thread patches Deployment to timeout=5s
+4. OLD PODS ARE DELETED IMMEDIATELY (new behavior)
+5. New pod starts with correct timeout=5s
+6. Router discovers backend, endpoint works
+```
+
+### Workaround for Existing Endpoints
+If an endpoint is stuck with `Ready: False`, manually trigger a rollout:
+```bash
+KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl rollout restart deployment <endpoint-name>
+```

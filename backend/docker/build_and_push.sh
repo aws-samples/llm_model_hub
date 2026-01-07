@@ -5,6 +5,9 @@ set -e
 # This script pulls the image from AWS Public ECR and copies it to private ECR for use by SageMaker.
 # SageMaker does not support Public ECR directly, so we need to copy to private ECR.
 
+# Parse command line arguments
+VERSION=0.9.4.68119e5
+
 # Get the current region
 TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
 region=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/region)
@@ -20,12 +23,11 @@ account=$(aws sts  get-caller-identity --query Account --output text)
 partition=$(aws sts get-caller-identity --query 'Arn' --output text | cut -d: -f2)
 
 # Public ECR image
-public_ecr_image=public.ecr.aws/f8g1z3n8/llm-modelhub-llamafactory:latest
+public_ecr_image=public.ecr.aws/f8g1z3n8/llm-modelhub-llamafactory:${VERSION}
 
 # Private ECR configuration
-VERSION=latest
 inference_image=sagemaker/llamafactory
-inference_fullname=${account}.dkr.ecr.${region}.amazonaws.${suffix}/${inference_image}:${VERSION}
+inference_fullname=${account}.dkr.ecr.${region}.amazonaws.${suffix}/${inference_image}:latest
 
 # If the repository doesn't exist in ECR, create it.
 aws  ecr describe-repositories --repository-names "${inference_image}" --region ${region} || aws ecr create-repository --repository-name "${inference_image}" --region ${region}

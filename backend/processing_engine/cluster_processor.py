@@ -1499,9 +1499,26 @@ def process_hyperpod_endpoint_status(endpoint_name: str, cluster_id: str, extra_
 
         # Update database based on status
         if status == 'INSERVICE':
+            # Fetch ALB URL and store in extra_config
+            try:
+                from inference.hyperpod_inference import get_hyperpod_endpoint_url
+                url_info = get_hyperpod_endpoint_url(
+                    eks_cluster_name=eks_cluster_name,
+                    endpoint_name=endpoint_name,
+                    namespace=namespace,
+                    region=DEFAULT_REGION
+                )
+                if url_info:
+                    extra_config['alb_url'] = url_info.get('full_url', '')
+                    extra_config['endpoint_url'] = url_info.get('endpoint_url', '')
+                    logger.info(f"HyperPod endpoint {endpoint_name} ALB URL: {url_info.get('full_url')}")
+            except Exception as e:
+                logger.warning(f"Failed to get ALB URL for {endpoint_name}: {e}")
+
             database.update_endpoint_status(
                 endpoint_name=endpoint_name,
-                endpoint_status=EndpointStatus.INSERVICE
+                endpoint_status=EndpointStatus.INSERVICE,
+                extra_config=json.dumps(extra_config) if extra_config else None
             )
             logger.info(f"HyperPod endpoint {endpoint_name} is now InService")
         elif status == 'FAILED':
