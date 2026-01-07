@@ -3,6 +3,7 @@
 import React from 'react';
 import { Button, Header, SpaceBetween } from '@cloudscape-design/components';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 interface FullPageHeaderProps {
   selectedItemsCount: number;
@@ -21,6 +22,7 @@ export function FullPageHeader({
   onRefresh,
   onInfoLinkClick,
 }: FullPageHeaderProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const isOnlyOneSelected = selectedItemsCount === 1;
   const selectedCluster = selectedItems[0];
@@ -34,7 +36,7 @@ export function FullPageHeader({
       counter={counter}
       info={onInfoLinkClick && (
         <Button variant="link" onClick={onInfoLinkClick}>
-          Info
+          {t('info')}
         </Button>
       )}
       actions={
@@ -44,18 +46,18 @@ export function FullPageHeader({
             disabled={!canDelete}
             onClick={onDelete}
           >
-            Delete
+            {t('delete')}
           </Button>
           <Button
             variant="primary"
             onClick={() => navigate('/clusters/create')}
           >
-            Create Cluster
+            {t('create_cluster')}
           </Button>
         </SpaceBetween>
       }
     >
-      HyperPod Clusters
+      {t('hyperpod_clusters')}
     </Header>
   );
 }

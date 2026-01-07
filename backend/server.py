@@ -33,6 +33,7 @@ from eks_management.clusters import (
     list_cluster_nodes as list_eks_cluster_nodes,
     get_cluster_instance_types as get_eks_cluster_instance_types,
 )
+from processing_engine.cluster_processor import sync_cluster_status_with_aws, sync_all_cluster_statuses
 from utils.get_factory_config import get_factory_config
 from utils.outputs import list_s3_objects
 from inference.endpoint_management import deploy_endpoint,delete_endpoint,get_endpoint_status,list_endpoints,deploy_endpoint_byoc,get_endpoint_engine,get_endpoint_info,deploy_endpoint_hyperpod,delete_endpoint_hyperpod
@@ -477,6 +478,74 @@ async def handle_get_cluster_instance_types(cluster_id: str):
             }
         }
     )
+
+
+@app.post('/v1/sync_cluster_status/{cluster_id}', dependencies=[Depends(check_api_key)])
+async def handle_sync_cluster_status(cluster_id: str):
+    """
+    Sync a single cluster's status with AWS.
+
+    This endpoint allows manually triggering a status sync for a specific cluster,
+    useful when database status is out of sync with AWS console.
+    """
+    logger.info(f"Syncing cluster status for: {cluster_id}")
+    try:
+        synced = sync_cluster_status_with_aws(cluster_id)
+        return CommonResponse(
+            response_id=str(uuid.uuid4()),
+            response={
+                'statusCode': 200,
+                'body': {
+                    'cluster_id': cluster_id,
+                    'synced': synced,
+                    'message': 'Cluster status synced with AWS' if synced else 'No status change needed'
+                }
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error syncing cluster status: {e}")
+        return CommonResponse(
+            response_id=str(uuid.uuid4()),
+            response={
+                'statusCode': 500,
+                'body': {
+                    'error': str(e)
+                }
+            }
+        )
+
+
+@app.post('/v1/sync_all_cluster_statuses', dependencies=[Depends(check_api_key)])
+async def handle_sync_all_cluster_statuses():
+    """
+    Sync all cluster statuses with AWS.
+
+    This endpoint allows manually triggering a status sync for all clusters,
+    useful for bulk recovery from status mismatches.
+    """
+    logger.info("Syncing all cluster statuses with AWS")
+    try:
+        sync_all_cluster_statuses()
+        return CommonResponse(
+            response_id=str(uuid.uuid4()),
+            response={
+                'statusCode': 200,
+                'body': {
+                    'message': 'All cluster statuses synced with AWS'
+                }
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error syncing all cluster statuses: {e}")
+        return CommonResponse(
+            response_id=str(uuid.uuid4()),
+            response={
+                'statusCode': 500,
+                'body': {
+                    'error': str(e)
+                }
+            }
+        )
 
 
 @app.post('/v1/chat/completions',dependencies=[Depends(check_api_key)])

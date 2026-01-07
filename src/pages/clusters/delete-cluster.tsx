@@ -11,6 +11,7 @@ import {
 } from '@cloudscape-design/components';
 import { deleteCluster } from './hooks';
 import { useSimpleNotifications } from '../commons/use-notifications';
+import { useTranslation } from 'react-i18next';
 
 interface DeleteClusterModalProps {
   visible: boolean;
@@ -25,6 +26,7 @@ export function DeleteClusterModal({
   selectedItems,
   onRefresh,
 }: DeleteClusterModalProps) {
+  const { t } = useTranslation();
   const [deleting, setDeleting] = useState(false);
   const [deleteVpc, setDeleteVpc] = useState(false);
   const { setNotificationItems } = useSimpleNotifications();
@@ -40,11 +42,11 @@ export function DeleteClusterModal({
         ...items,
         {
           type: 'success',
-          content: `Cluster "${cluster.cluster_name}" deletion initiated`,
+          content: `${t('cluster_delete_initiated')}: "${cluster.cluster_name}"`,
           dismissible: true,
           dismissLabel: 'Dismiss',
           onDismiss: () => setNotificationItems((items: any) =>
-            items.filter((item: any) => item.content !== `Cluster "${cluster.cluster_name}" deletion initiated`)
+            items.filter((item: any) => item.id !== `delete-${cluster.cluster_id}`)
           ),
           id: `delete-${cluster.cluster_id}`,
         },
@@ -56,11 +58,11 @@ export function DeleteClusterModal({
         ...items,
         {
           type: 'error',
-          content: `Failed to delete cluster: ${error}`,
+          content: `${t('cluster_delete_failed')}: ${error}`,
           dismissible: true,
           dismissLabel: 'Dismiss',
           onDismiss: () => setNotificationItems((items: any) =>
-            items.filter((item: any) => item.content !== `Failed to delete cluster: ${error}`)
+            items.filter((item: any) => item.id !== `delete-error-${cluster.cluster_id}`)
           ),
           id: `delete-error-${cluster.cluster_id}`,
         },
@@ -74,20 +76,20 @@ export function DeleteClusterModal({
     <Modal
       visible={visible}
       onDismiss={() => setVisible(false)}
-      header="Delete cluster"
+      header={t('delete_cluster')}
       closeAriaLabel="Close modal"
       footer={
         <Box float="right">
           <SpaceBetween direction="horizontal" size="xs">
             <Button variant="link" onClick={() => setVisible(false)}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button
               variant="primary"
               onClick={handleDelete}
               loading={deleting}
             >
-              Delete
+              {t('delete')}
             </Button>
           </SpaceBetween>
         </Box>
@@ -95,18 +97,17 @@ export function DeleteClusterModal({
     >
       <SpaceBetween size="m">
         <Box>
-          Are you sure you want to delete cluster{' '}
+          {t('confirm_delete_cluster')}{' '}
           <strong>{cluster?.cluster_name}</strong>?
         </Box>
         <Alert type="warning">
-          This action will delete the HyperPod cluster and associated resources.
-          This action cannot be undone.
+          {t('delete_cluster_warning')}
         </Alert>
         <Checkbox
           checked={deleteVpc}
           onChange={({ detail }) => setDeleteVpc(detail.checked)}
         >
-          Also delete associated VPC resources
+          {t('delete_vpc_resources')}
         </Checkbox>
       </SpaceBetween>
     </Modal>

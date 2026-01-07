@@ -531,6 +531,10 @@ class ClusterJobExecutor:
         node_provisioning_mode: str = "Continuous",
     ) -> Dict[str, Any]:
         """Update HyperPod cluster instance groups."""
+        # Validate: HyperPod clusters require at least 1 instance group
+        if not instance_groups or len(instance_groups) == 0:
+            raise ValueError("HyperPod clusters require at least 1 instance group. Cannot delete all instance groups.")
+
         # Build instance groups config
         instance_groups_config = []
         for ig in instance_groups:
@@ -801,17 +805,22 @@ async def get_cluster_instance_types(cluster_id: str) -> Dict[str, Any]:
                 instance_type = node.get('InstanceType', '')
                 instance_group_name = node.get('InstanceGroupName', '')
                 instance_id = node.get('InstanceId', '')
+                instance_status = node.get('InstanceStatus', {}).get('Status', 'Unknown')
 
                 if instance_group_name and instance_type:
                     if instance_group_name not in instance_group_info:
                         instance_group_info[instance_group_name] = {
                             'instance_type': instance_type,
                             'total_count': 0,
+                            'running_count': 0,  # Only count Running instances
                             'node_names': []
                         }
                     instance_group_info[instance_group_name]['total_count'] += 1
-                    # Node name in k8s is typically hyperpod-<instance_id>
-                    instance_group_info[instance_group_name]['node_names'].append(f'hyperpod-{instance_id}')
+                    # Only count instances that are Running as available
+                    if instance_status == 'Running':
+                        instance_group_info[instance_group_name]['running_count'] += 1
+                        # Node name in k8s is typically hyperpod-<instance_id>
+                        instance_group_info[instance_group_name]['node_names'].append(f'hyperpod-{instance_id}')
 
             next_token = response.get('NextToken')
             if not next_token:
@@ -827,17 +836,19 @@ async def get_cluster_instance_types(cluster_id: str) -> Dict[str, Any]:
         for group_name, info in instance_group_info.items():
             instance_type = info['instance_type']
             total_count = info['total_count']
-            node_names = info['node_names']
+            running_count = info['running_count']  # Only Running instances
+            node_names = info['node_names']  # Only contains Running instance node names
 
-            # Calculate available count (nodes not occupied by inference pods)
+            # Calculate available count (running nodes not occupied by inference pods)
             occupied_count = sum(1 for n in node_names if n in occupied_nodes)
-            available_count = total_count - occupied_count
+            available_count = running_count - occupied_count
 
             instance_type_details.append({
                 'instance_type': instance_type,
                 'instance_groups': [group_name],
                 'total_count': total_count,
-                'available_count': available_count,
+                'running_count': running_count,  # Running instances count
+                'available_count': available_count,  # Running and not occupied
                 'is_available': available_count > 0
             })
 
@@ -939,6 +950,16 @@ async def update_cluster(request: UpdateClusterRequest) -> CommonResponse:
     # If instance groups are being updated, call AWS API
     # Use 'is not None' to handle empty list case (when all groups are deleted)
     if request.instance_groups is not None and cluster_status_str == ClusterStatus.ACTIVE.value:
+        # Validate: HyperPod clusters require at least 1 instance group
+        if len(request.instance_groups) == 0:
+            return CommonResponse(
+                response_id=str(uuid.uuid4()),
+                response={
+                    'statusCode': 400,
+                    'body': 'Cannot delete all instance groups. HyperPod clusters require at least 1 instance group.'
+                }
+            )
+
         logger.info(f"Calling AWS API to update instance groups for cluster {cluster.cluster_name}, groups: {[ig.dict() for ig in request.instance_groups]}")
         try:
             executor = ClusterJobExecutor(request.cluster_id)
@@ -952,7 +973,7 @@ async def update_cluster(request: UpdateClusterRequest) -> CommonResponse:
             if not lifecycle_script_s3_uri:
                 # Create default bucket and script
                 bucket_name = f'llm-modelhub-hyperpod-{executor.account_id}-{executor.region}'
-                lifecycle_script_s3_uri = f's3://{bucket_name}/hyperpod-scripts/'
+                lifecycle_script_s3_uri = f's3://{bucket_name}/LifecycleScripts/base-config/'
 
             # Convert instance groups to dict format
             instance_groups_dict = [ig.dict() for ig in request.instance_groups]

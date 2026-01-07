@@ -425,12 +425,32 @@ class DatabaseWrapper(BaseModel):
                 connection.commit()
 
     def update_cluster_error(self, cluster_id: str, error_message: str):
-        """Update cluster with error message."""
+        """Update cluster with error message and set status to FAILED."""
         with self.connection_pool.get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     f"UPDATE {CLUSTER_TABLE} SET error_message = %s, cluster_status = %s, cluster_update_time = %s WHERE cluster_id = %s",
                     (error_message, ClusterStatus.FAILED.value, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), cluster_id)
+                )
+                connection.commit()
+
+    def clear_cluster_error(self, cluster_id: str):
+        """Clear cluster error message without changing status."""
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"UPDATE {CLUSTER_TABLE} SET error_message = NULL, cluster_update_time = %s WHERE cluster_id = %s",
+                    (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), cluster_id)
+                )
+                connection.commit()
+
+    def set_cluster_error_message(self, cluster_id: str, error_message: str):
+        """Set cluster error message without changing status."""
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"UPDATE {CLUSTER_TABLE} SET error_message = %s, cluster_update_time = %s WHERE cluster_id = %s",
+                    (error_message, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), cluster_id)
                 )
                 connection.commit()
 

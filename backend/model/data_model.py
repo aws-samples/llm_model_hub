@@ -162,7 +162,7 @@ class HyperPodDeployConfig(BaseModel):
     # KV Cache configuration
     enable_kv_cache: bool = False
     enable_l1_cache: bool = True  # Local CPU memory cache
-    enable_l2_cache: bool = False  # Distributed cache
+    enable_l2_cache: bool = True  # Distributed cache (enabled by default when KV cache is on)
     kv_cache_backend: str = "tieredstorage"  # "tieredstorage" or "redis"
     l2_cache_url: Optional[str] = None  # Required for redis backend
 

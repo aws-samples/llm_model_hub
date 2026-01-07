@@ -24,6 +24,7 @@ import { TopNav } from '../commons/top-nav';
 import { createCluster } from './hooks';
 import { useSimpleNotifications } from '../commons/use-notifications';
 import SpotPriceInfo from '../commons/spot-price-info';
+import { useTranslation } from 'react-i18next';
 
 const instanceTypeOptions = [
   { label: 'ml.c5.large (CPU)', value: 'ml.c5.large' },
@@ -68,6 +69,7 @@ const clusterBreadcrumbs = [
 
 function CreateClusterContent() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { setNotificationItems } = useSimpleNotifications();
   const [submitting, setSubmitting] = useState(false);
 
@@ -107,7 +109,7 @@ function CreateClusterContent() {
         ...items,
         {
           type: 'error',
-          content: 'Cluster name is required',
+          content: t('cluster_name_required'),
           dismissible: true,
           id: 'validation-error',
         },
@@ -120,7 +122,7 @@ function CreateClusterContent() {
         ...items,
         {
           type: 'error',
-          content: 'At least one instance group is required',
+          content: t('instance_group_required'),
           dismissible: true,
           id: 'validation-error-ig',
         },
@@ -160,7 +162,7 @@ function CreateClusterContent() {
           ...items,
           {
             type: 'success',
-            content: `Cluster "${clusterName}" creation initiated`,
+            content: `${t('cluster_create_success')}: "${clusterName}"`,
             dismissible: true,
             id: 'create-success',
           },
@@ -174,7 +176,7 @@ function CreateClusterContent() {
         ...items,
         {
           type: 'error',
-          content: `Failed to create cluster: ${error}`,
+          content: `${t('cluster_create_failed')}: ${error}`,
           dismissible: true,
           id: 'create-error',
         },
@@ -194,8 +196,8 @@ function CreateClusterContent() {
     setInstanceGroups([
       ...instanceGroups,
       {
-        name: `instance-group-${instanceGroups.length + 1}`,
-        instance_type: 'ml.g5.xlarge',
+        name: `worker-group-${instanceGroups.length + 1}`,
+        instance_type: 'ml.g5.4xlarge',
         instance_count: 0,
         min_instance_count: 0,
         use_spot: false,
@@ -216,20 +218,20 @@ function CreateClusterContent() {
       actions={
         <SpaceBetween direction="horizontal" size="xs">
           <Button variant="link" onClick={() => navigate('/clusters')}>
-            Cancel
+            {t('cancel')}
           </Button>
           <Button variant="primary" onClick={handleSubmit} loading={submitting}>
-            Create Cluster
+            {t('create_cluster')}
           </Button>
         </SpaceBetween>
       }
-      header={<Header variant="h1">Create HyperPod Cluster</Header>}
+      header={<Header variant="h1">{t('create_cluster')}</Header>}
     >
       <SpaceBetween size="l">
         {/* Basic Settings */}
-        <Container header={<Header variant="h2">Basic Settings</Header>}>
+        <Container header={<Header variant="h2">{t('basic_settings')}</Header>}>
           <SpaceBetween size="l">
-            <FormField label="Cluster Name" description="Name for the HyperPod cluster">
+            <FormField label={t('cluster_name')} description={t('cluster_name_desc')}>
               <Input
                 value={clusterName}
                 onChange={({ detail }) => setClusterName(detail.value)}
@@ -237,8 +239,8 @@ function CreateClusterContent() {
               />
             </FormField>
             <FormField
-              label="EKS Cluster Name"
-              description="Name for the underlying EKS cluster (optional, defaults to cluster-name-eks)"
+              label={t('eks_cluster_name')}
+              description={t('eks_cluster_name_desc')}
             >
               <Input
                 value={eksClusterName}
@@ -246,7 +248,7 @@ function CreateClusterContent() {
                 placeholder="my-eks-cluster"
               />
             </FormField>
-            <FormField label="Kubernetes Version">
+            <FormField label={t('kubernetes_version')}>
               <Select
                 selectedOption={kubernetesVersion}
                 onChange={({ detail }) => setKubernetesVersion(detail.selectedOption as any)}
@@ -263,11 +265,11 @@ function CreateClusterContent() {
               variant="h2"
               actions={
                 <Button onClick={addInstanceGroup} iconName="add-plus">
-                  Add Instance Group
+                  {t('add_instance_group')}
                 </Button>
               }
             >
-              Instance Groups
+              {t('instance_groups')}
             </Header>
           }
         >
@@ -281,23 +283,23 @@ function CreateClusterContent() {
                     actions={
                       instanceGroups.length > 1 && (
                         <Button onClick={() => removeInstanceGroup(index)} iconName="remove">
-                          Remove
+                          {t('remove')}
                         </Button>
                       )
                     }
                   >
-                    Instance Group {index + 1}
+                    {t('instance_group')} {index + 1}
                   </Header>
                 }
               >
                 <SpaceBetween size="m">
-                  <FormField label="Group Name">
+                  <FormField label={t('group_name')}>
                     <Input
                       value={ig.name}
                       onChange={({ detail }) => handleInstanceGroupChange(index, 'name', detail.value)}
                     />
                   </FormField>
-                  <FormField label="Instance Type">
+                  <FormField label={t('instance_type')}>
                     <Select
                       selectedOption={instanceTypeOptions.find(opt => opt.value === ig.instance_type) || null}
                       onChange={({ detail }) =>
@@ -307,7 +309,7 @@ function CreateClusterContent() {
                     />
                   </FormField>
                   <SpaceBetween direction="horizontal" size="l">
-                    <FormField label="Instance Count" description="Number of instances to launch initially">
+                    <FormField label={t('instance_count')} description={t('instance_count_desc')}>
                       <Input
                         type="number"
                         value={String(ig.instance_count)}
@@ -316,7 +318,7 @@ function CreateClusterContent() {
                         }
                       />
                     </FormField>
-                    <FormField label="Min Instance Count" description="Minimum instances (0+) for autoscaling">
+                    <FormField label={t('min_instance_count')} description={t('min_instance_count_desc')}>
                       <Input
                         type="number"
                         value={String(ig.min_instance_count ?? 0)}
@@ -327,8 +329,8 @@ function CreateClusterContent() {
                     </FormField>
                   </SpaceBetween>
                   <FormField
-                    label="Additional storage volume per instance (GB)"
-                    description="Specify the size for an additional Elastic Block Store (EBS) volume to be added to each instance in your instance group."
+                    label={t('storage_volume_size')}
+                    description={t('storage_volume_size_desc')}
                   >
                     <Input
                       type="number"
@@ -340,8 +342,8 @@ function CreateClusterContent() {
                     />
                   </FormField>
                   <FormField
-                    label="Training Plan ARN"
-                    description="Optional: ARN of the training plan for capacity reservation"
+                    label={t('training_plan_arn')}
+                    description={t('training_plan_arn_desc')}
                   >
                     <Input
                       value={ig.training_plan_arn || ''}
@@ -353,7 +355,7 @@ function CreateClusterContent() {
                     checked={ig.use_spot}
                     onChange={({ detail }) => handleInstanceGroupChange(index, 'use_spot', detail.checked)}
                   >
-                    Use Spot Instances
+                    {t('use_spot_instances')}
                   </Checkbox>
                   {ig.use_spot && (
                     <SpotPriceInfo
@@ -365,13 +367,13 @@ function CreateClusterContent() {
                     checked={ig.enable_instance_stress_check || false}
                     onChange={({ detail }) => handleInstanceGroupChange(index, 'enable_instance_stress_check', detail.checked)}
                   >
-                    Enable InstanceStress Deep Health Check
+                    {t('enable_stress_check')}
                   </Checkbox>
                   <Checkbox
                     checked={ig.enable_instance_connectivity_check || false}
                     onChange={({ detail }) => handleInstanceGroupChange(index, 'enable_instance_connectivity_check', detail.checked)}
                   >
-                    Enable InstanceConnectivity Deep Health Check
+                    {t('enable_connectivity_check')}
                   </Checkbox>
                 </SpaceBetween>
               </Container>
@@ -380,33 +382,33 @@ function CreateClusterContent() {
         </Container>
 
         {/* VPC Settings */}
-        <Container header={<Header variant="h2">VPC Settings</Header>}>
+        <Container header={<Header variant="h2">{t('vpc_settings')}</Header>}>
           <SpaceBetween size="l">
             <Tiles
               value={useExistingVpc ? 'existing' : 'new'}
               onChange={({ detail }) => setUseExistingVpc(detail.value === 'existing')}
               items={[
-                { value: 'new', label: 'Create new VPC', description: 'Automatically create VPC and subnets' },
-                { value: 'existing', label: 'Use existing VPC', description: 'Provide existing VPC and subnet IDs' },
+                { value: 'new', label: t('create_new_vpc'), description: t('create_new_vpc_desc') },
+                { value: 'existing', label: t('use_existing_vpc'), description: t('use_existing_vpc_desc') },
               ]}
             />
             {useExistingVpc && (
               <SpaceBetween size="m">
-                <FormField label="VPC ID">
+                <FormField label={t('vpc_id')}>
                   <Input
                     value={vpcId}
                     onChange={({ detail }) => setVpcId(detail.value)}
                     placeholder="vpc-xxxxxxxx"
                   />
                 </FormField>
-                <FormField label="Subnet IDs" description="Comma-separated list of subnet IDs">
+                <FormField label={t('subnet_ids')} description={t('subnet_ids_desc')}>
                   <Input
                     value={subnetIds}
                     onChange={({ detail }) => setSubnetIds(detail.value)}
                     placeholder="subnet-xxx, subnet-yyy"
                   />
                 </FormField>
-                <FormField label="Security Group IDs" description="Comma-separated list of security group IDs">
+                <FormField label={t('sg_ids')} description={t('sg_ids_desc')}>
                   <Input
                     value={securityGroupIds}
                     onChange={({ detail }) => setSecurityGroupIds(detail.value)}
@@ -419,31 +421,31 @@ function CreateClusterContent() {
         </Container>
 
         {/* Advanced Settings */}
-        <ExpandableSection headerText="Advanced Settings" variant="container">
+        <ExpandableSection headerText={t('advanced_settings')} variant="container">
           <SpaceBetween size="l">
-            <FormField label="Node Recovery">
+            <FormField label={t('node_recovery')}>
               <Tiles
                 value={nodeRecovery}
                 onChange={({ detail }) => setNodeRecovery(detail.value)}
                 items={[
-                  { value: 'Automatic', label: 'Automatic', description: 'Automatically recover failed nodes' },
-                  { value: 'None', label: 'None', description: 'Do not automatically recover nodes' },
+                  { value: 'Automatic', label: t('automatic'), description: t('automatic_desc') },
+                  { value: 'None', label: t('none'), description: t('none_recovery_desc') },
                 ]}
               />
             </FormField>
             <FormField
-              description="After cluster creation, you'll need to create NodeClass and NodePool resources in Kubernetes to configure autoscaling behavior."
+              description={t('karpenter_desc')}
             >
               <Checkbox
                 checked={enableAutoscaling}
                 onChange={({ detail }) => setEnableAutoscaling(detail.checked)}
               >
-                Enable Karpenter Autoscaling
+                {t('enable_karpenter')}
               </Checkbox>
             </FormField>
             <FormField
-              label="Lifecycle Script S3 URI"
-              description="S3 URI for lifecycle scripts. If not specified, a default bucket will be created: s3://llm-modelhub-hyperpod-{account-id}-{region}/hyperpod-scripts/"
+              label={t('lifecycle_script_s3')}
+              description={t('lifecycle_script_s3_desc')}
             >
               <Input
                 value={lifecycleScriptS3Uri}
@@ -452,8 +454,8 @@ function CreateClusterContent() {
               />
             </FormField>
             <FormField
-              label="S3 Mountpoint Bucket"
-              description="S3 bucket to mount on HyperPod instances at /mnt/s3. If not specified, the SageMaker default bucket (sagemaker-{region}-{account-id}) will be used."
+              label={t('s3_mountpoint_bucket')}
+              description={t('s3_mountpoint_bucket_desc')}
             >
               <Input
                 value={s3MountBucket}

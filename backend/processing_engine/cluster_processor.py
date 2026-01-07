@@ -125,6 +125,97 @@ def get_updating_clusters():
     return [ret[0] for ret in results]
 
 
+def sync_cluster_status_with_aws(cluster_id: str) -> bool:
+    """
+    Sync a single cluster's status with AWS.
+
+    This function checks the actual cluster status from AWS and updates the database
+    if there's a mismatch. This helps recover from scenarios where the database
+    status got out of sync with AWS (e.g., update operation failures).
+
+    Returns True if status was synced/updated, False otherwise.
+    """
+    try:
+        cluster = database.get_cluster_by_id(cluster_id)
+        if not cluster:
+            logger.warning(f"Cluster not found for status sync: {cluster_id}")
+            return False
+
+        executor = ClusterJobExecutor(cluster_id)
+        cluster_name = cluster.cluster_name
+        db_status = cluster.cluster_status
+
+        # Get actual status from AWS
+        aws_status, error_msg = executor.get_hyperpod_cluster_status(cluster_name)
+        logger.debug(f"Status sync check - Cluster {cluster_name}: DB={db_status.value}, AWS={aws_status}")
+
+        # Map AWS status to database ClusterStatus
+        aws_to_db_status = {
+            'InService': ClusterStatus.ACTIVE,
+            'Creating': ClusterStatus.CREATING,
+            'Updating': ClusterStatus.UPDATING,
+            'Deleting': ClusterStatus.DELETING,
+            'Failed': ClusterStatus.FAILED,
+            'RollbackFailed': ClusterStatus.FAILED,
+        }
+
+        expected_db_status = aws_to_db_status.get(aws_status)
+
+        if expected_db_status and expected_db_status != db_status:
+            logger.info(
+                f"Syncing cluster {cluster_name} status: {db_status.value} -> {expected_db_status.value} "
+                f"(AWS status: {aws_status})"
+            )
+            database.set_cluster_status(cluster_id, expected_db_status)
+
+            # Update error message based on new status
+            # Note: Don't use update_cluster_error() when clearing errors
+            # because it always sets status to FAILED
+            if expected_db_status == ClusterStatus.ACTIVE:
+                # Clear error message without changing status
+                database.clear_cluster_error(cluster_id)
+            elif error_msg:
+                # Only update error, status already set above
+                database.set_cluster_error_message(cluster_id, error_msg)
+
+            return True
+
+        return False
+
+    except Exception as e:
+        logger.error(f"Error syncing cluster status for {cluster_id}: {e}")
+        return False
+
+
+def sync_all_cluster_statuses():
+    """
+    Sync all cluster statuses with AWS.
+
+    This function is called periodically to ensure database stays in sync with AWS.
+    It checks ACTIVE and FAILED clusters to catch any status mismatches.
+    """
+    try:
+        # Get all clusters that might have status mismatches
+        active_clusters = database.get_clusters_by_status(ClusterStatus.ACTIVE)
+        failed_clusters = database.get_clusters_by_status(ClusterStatus.FAILED)
+
+        all_clusters = [(c[0], 'ACTIVE') for c in active_clusters] + [(c[0], 'FAILED') for c in failed_clusters]
+
+        if not all_clusters:
+            return
+
+        synced_count = 0
+        for cluster_id, _ in all_clusters:
+            if sync_cluster_status_with_aws(cluster_id):
+                synced_count += 1
+
+        if synced_count > 0:
+            logger.info(f"Synced {synced_count} cluster statuses with AWS")
+
+    except Exception as e:
+        logger.error(f"Error in sync_all_cluster_statuses: {e}")
+
+
 def create_vpc_and_subnets(executor: ClusterJobExecutor, cluster_name: str):
     """
     Create VPC with subnets for EKS cluster.
@@ -1335,11 +1426,30 @@ def process_cluster_update(cluster_id: str) -> bool:
             database.set_cluster_status(cluster_id, ClusterStatus.ACTIVE)
             return True
         elif hp_status == 'Failed':
-            # Update failed
-            logger.error(f"Cluster {cluster_name} update failed: {error_msg}")
-            database.set_cluster_status(cluster_id, ClusterStatus.FAILED)
-            database.update_cluster_error(cluster_id, error_msg or "Cluster update failed")
-            return False
+            # Update operation reported as failed - but cluster may recover
+            # Wait and re-check AWS status to see if cluster recovers to InService
+            logger.warning(f"Cluster {cluster_name} update reported as failed: {error_msg}")
+            logger.info(f"Waiting 30 seconds to re-check cluster status...")
+            time.sleep(30)
+
+            # Re-check the actual cluster status from AWS
+            final_status, final_error = executor.get_hyperpod_cluster_status(cluster_name)
+            logger.info(f"Re-checked cluster {cluster_name} AWS status: {final_status}")
+
+            if final_status == 'InService':
+                # Cluster recovered! Update operation failed but cluster is still working
+                logger.info(f"Cluster {cluster_name} recovered to InService after update failure")
+                database.set_cluster_status(cluster_id, ClusterStatus.ACTIVE)
+                # Record the update failure as a warning, not a fatal error
+                update_error_msg = f"[Update Failed] {error_msg or 'Cluster update operation failed but cluster recovered to InService'}"
+                database.update_cluster_error(cluster_id, update_error_msg)
+                return True
+            else:
+                # Cluster is truly failed
+                logger.error(f"Cluster {cluster_name} confirmed failed after re-check: {final_status}")
+                database.set_cluster_status(cluster_id, ClusterStatus.FAILED)
+                database.update_cluster_error(cluster_id, final_error or error_msg or "Cluster update failed")
+                return False
         elif hp_status in ['Updating', 'Creating']:
             # Still updating, keep monitoring
             logger.info(f"Cluster {cluster_name} is still {hp_status}, continuing to monitor...")
@@ -1365,8 +1475,18 @@ def start_cluster_processor():
     logger.info("Starting cluster processing engine...")
 
     processing_threads = {}
+    sync_counter = 0  # Counter for periodic status sync
+    SYNC_INTERVAL = 30  # Sync every 30 iterations (5 minutes with 10s sleep)
 
     while True:
+        # Periodic status sync with AWS (every 5 minutes)
+        sync_counter += 1
+        if sync_counter >= SYNC_INTERVAL:
+            sync_counter = 0
+            try:
+                sync_all_cluster_statuses()
+            except Exception as e:
+                logger.error(f"Error in periodic status sync: {e}")
         # Process pending cluster creations
         pending_clusters = get_pending_clusters()
         if pending_clusters:

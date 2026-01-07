@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import intersection from 'lodash/intersection';
 import { Flashbar, Pagination, Table, TextFilter } from '@cloudscape-design/components';
+import { useTranslation } from 'react-i18next';
 
 import { COLUMN_DEFINITIONS, DEFAULT_PREFERENCES, Preferences } from './table-config';
 import { Breadcrumbs, jobsBreadcrumbs } from '../commons/breadcrumbs'
@@ -31,6 +32,7 @@ function ServerSideTable({
   setDisplayNotify,
   setNotificationData
 }) {
+  const { t } = useTranslation();
   const [preferences, setPreferences] = useLocalStorage('ModelHub-JobTable-Preferences', DEFAULT_PREFERENCES);
   const [descendingSorting, setDescendingSorting] = useState(false);
   const [currentPageIndex, setCurrentPageIndex] = useState(1);
@@ -106,13 +108,11 @@ function ServerSideTable({
   const onDelete = () => {
     const msgid = `msg-${Math.random().toString(8)}`;
     if (selectedItems[0].job_status === 'RUNNING'){
-      // setDisplayNotify(true);
-      // setNotificationData({ status: 'warning', content: `"RUNNING" 状态无法删除，请到SageMaker控制台中停止训练任务。` });
       setNotificationItems((item) => [
         ...item,
         {
           type: "warning",
-          content: `"RUNNING" 状态无法删除，请到SageMaker控制台中停止训练任务。`,
+          content: t('job_running_cannot_delete'),
           dismissible: true,
           dismissLabel: "Dismiss message",
           onDismiss: () =>
@@ -126,13 +126,11 @@ function ServerSideTable({
       remotePost({job_id:selectedItems[0].job_id},'delete_job').then(res=>{
         console.log(res);
         if (res.response.code === 'SUCCESS'){
-          // setDisplayNotify(true);
-          // setNotificationData({ status: 'success', content: `删除成功 job id ${selectedItems[0].job_id}` });
           setNotificationItems((item) => [
             ...item,
             {
               type: "success",
-              content: `删除成功 job id ${selectedItems[0].job_id}`,
+              content: `${t('job_delete_success')} ${selectedItems[0].job_id}`,
               dismissible: true,
               dismissLabel: "Dismiss message",
               onDismiss: () =>
@@ -159,19 +157,14 @@ function ServerSideTable({
               id: msgid,
             },
           ]);
-          // setDisplayNotify(true);
-          // setNotificationData({ status: 'error', content: `${selectedItems[0].job_id}. ${res.response.message}` });
-
         }
-        
+
       }).catch(err=>{
-        // setDisplayNotify(true);
-        // setNotificationData({ status: 'error', content: `删除失败 job id ${selectedItems[0].job_id}` });
         setNotificationItems((item) => [
           ...item,
           {
             type: "error",
-            content: `删除失败 job id ${selectedItems[0].job_id}`,
+            content: `${t('job_delete_failed')} ${selectedItems[0].job_id}`,
             dismissible: true,
             dismissLabel: "Dismiss message",
             onDismiss: () =>
@@ -230,16 +223,16 @@ function ServerSideTable({
           onRefresh={onRefresh}
         />
       }
-      loadingText="Loading"
+      loadingText={t('loading_jobs')}
       empty={<TableNoMatchState onClearFilter={onClearFilter} />}
       filter={
         <TextFilter
           filteringText={filteringText}
           onChange={({ detail }) => setFilteringText(detail.filteringText)}
           onDelayedChange={() => setDelayedFilteringText(filteringText)}
-          filteringAriaLabel="Filter"
-          filteringPlaceholder="Find"
-          filteringClearAriaLabel="Clear"
+          filteringAriaLabel={t('filter_jobs')}
+          filteringPlaceholder={t('find_jobs')}
+          filteringClearAriaLabel={t('clear')}
           countText={getTextFilterCounterServerSideText(items, pagesCount, pageSize)}
         />
       }

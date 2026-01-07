@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 import React from 'react';
 import { Button, Header, HeaderProps, SpaceBetween } from '@cloudscape-design/components';
-import { t } from 'i18next';
+import { useTranslation } from 'react-i18next';
 
 interface FullPageHeaderProps extends HeaderProps {
   title?: string;
@@ -20,8 +20,8 @@ interface FullPageHeaderProps extends HeaderProps {
 }
 // || selectedItems[0].endpoint_status !== 'INSERVICE'
 export function FullPageHeader({
-  title = 'Endpoints',
-  createButtonText = 'Start Chat',
+  title,
+  createButtonText,
   extraActions = null,
   selectedItemsCount,
   selectedItems,
@@ -34,6 +34,9 @@ export function FullPageHeader({
   onViewCode,
   ...props
 }: FullPageHeaderProps) {
+  const { t } = useTranslation();
+  const displayTitle = title || t('endpoints');
+  const displayButtonText = createButtonText || t('chat');
   // console.log("selectedItems",selectedItems)
   return (
     <Header
@@ -52,7 +55,7 @@ export function FullPageHeader({
            {t('create')}
           </Button>
           <Button data-testid="header-btn-chat" variant="primary" disabled={selectedItemsCount === 0 || selectedItems&&selectedItems[0]?.endpoint_status !== 'INSERVICE' } href={`/chat/${selectedItems&&selectedItems[0]?.endpoint_name}`}>
-            {createButtonText}
+            {displayButtonText}
           </Button>
           <Button data-testid="header-btn-viewcode" disabled={selectedItemsCount === 0 || selectedItems&&selectedItems[0]?.endpoint_status !== 'INSERVICE' } onClick={onViewCode}>
           {t('viewcode')}
@@ -61,7 +64,7 @@ export function FullPageHeader({
       }
       {...props}
     >
-      {title}
+      {displayTitle}
     </Header>
   );
 }

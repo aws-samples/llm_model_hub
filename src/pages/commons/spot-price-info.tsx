@@ -10,6 +10,7 @@ import {
   ColumnLayout,
 } from '@cloudscape-design/components';
 import { remotePost } from '../../common/api-gateway';
+import { useTranslation } from 'react-i18next';
 
 interface SpotPriceInfoProps {
   instanceType: string;
@@ -33,6 +34,7 @@ interface RiskData {
 }
 
 const SpotPriceInfo: React.FC<SpotPriceInfoProps> = ({ instanceType, useSpot }) => {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [priceData, setPriceData] = useState<PriceData | null>(null);
@@ -93,7 +95,7 @@ const SpotPriceInfo: React.FC<SpotPriceInfoProps> = ({ instanceType, useSpot }) 
   if (!instanceType) {
     return (
       <Box color="text-status-inactive" padding={{ top: 's' }}>
-        <StatusIndicator type="info">Select an instance type to view spot pricing</StatusIndicator>
+        <StatusIndicator type="info">{t('spot_select_instance')}</StatusIndicator>
       </Box>
     );
   }
@@ -103,7 +105,7 @@ const SpotPriceInfo: React.FC<SpotPriceInfoProps> = ({ instanceType, useSpot }) 
       <Box padding={{ top: 's' }}>
         <SpaceBetween direction="horizontal" size="xs">
           <Spinner size="normal" />
-          <span>Loading spot price info...</span>
+          <span>{t('spot_price_loading')}</span>
         </SpaceBetween>
       </Box>
     );
@@ -112,7 +114,7 @@ const SpotPriceInfo: React.FC<SpotPriceInfoProps> = ({ instanceType, useSpot }) 
   if (error) {
     return (
       <Box padding={{ top: 's' }}>
-        <StatusIndicator type="error">{error}</StatusIndicator>
+        <StatusIndicator type="error">{t('spot_price_error')}</StatusIndicator>
       </Box>
     );
   }
@@ -120,7 +122,7 @@ const SpotPriceInfo: React.FC<SpotPriceInfoProps> = ({ instanceType, useSpot }) 
   if (!priceData?.available) {
     return (
       <Box padding={{ top: 's' }}>
-        <StatusIndicator type="warning">Spot pricing not available for this instance type</StatusIndicator>
+        <StatusIndicator type="warning">{t('spot_not_available')}</StatusIndicator>
       </Box>
     );
   }
@@ -141,45 +143,45 @@ const SpotPriceInfo: React.FC<SpotPriceInfoProps> = ({ instanceType, useSpot }) 
   const getRiskLabel = (riskLevel?: string): string => {
     switch (riskLevel) {
       case 'low':
-        return 'Low Risk';
+        return t('spot_risk_low');
       case 'medium':
-        return 'Medium Risk';
+        return t('spot_risk_medium');
       case 'high':
-        return 'High Risk';
+        return t('spot_risk_high');
       default:
-        return 'Unknown';
+        return t('spot_risk_unknown');
     }
   };
 
   return (
     <Box padding={{ top: 's' }}>
-      <ExpandableSection headerText="Spot Price Info" variant="footer" defaultExpanded>
+      <ExpandableSection headerText={t('spot_price_info')} variant="footer" defaultExpanded>
         <SpaceBetween size="s">
           <ColumnLayout columns={2} variant="text-grid">
             <div>
-              <Box variant="awsui-key-label">Current Price</Box>
+              <Box variant="awsui-key-label">{t('spot_current_price')}</Box>
               <Box variant="p">
                 ${priceData.availability_zones?.[0]?.current_price?.toFixed(4) || 'N/A'}/hr
               </Box>
             </div>
             <div>
-              <Box variant="awsui-key-label">Price Range (7 days)</Box>
+              <Box variant="awsui-key-label">{t('spot_price_range')}</Box>
               <Box variant="p">
                 ${priceData.min_price?.toFixed(4)} - ${priceData.max_price?.toFixed(4)}/hr
               </Box>
             </div>
             <div>
-              <Box variant="awsui-key-label">Price Volatility</Box>
+              <Box variant="awsui-key-label">{t('spot_volatility')}</Box>
               <Box variant="p">{priceData.price_volatility?.toFixed(1)}%</Box>
             </div>
             <div>
-              <Box variant="awsui-key-label">Interruption Risk</Box>
+              <Box variant="awsui-key-label">{t('spot_risk_level')}</Box>
               <StatusIndicator type={getRiskStatusType(riskData?.risk_level)}>
                 {getRiskLabel(riskData?.risk_level)}
               </StatusIndicator>
             </div>
             <div>
-              <Box variant="awsui-key-label">Recommended AZ</Box>
+              <Box variant="awsui-key-label">{t('spot_recommended_az')}</Box>
               <Box variant="p">{priceData.recommended_az || 'N/A'}</Box>
             </div>
           </ColumnLayout>

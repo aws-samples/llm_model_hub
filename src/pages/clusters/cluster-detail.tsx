@@ -26,6 +26,7 @@ import { Breadcrumbs } from '../commons/breadcrumbs';
 import { TopNav } from '../commons/top-nav';
 import { getCluster, updateClusterInstanceGroups, listClusterNodes } from './hooks';
 import { useSimpleNotifications } from '../commons/use-notifications';
+import { useTranslation } from 'react-i18next';
 
 const statusTypeMap: Record<string, 'pending' | 'in-progress' | 'success' | 'error' | 'stopped'> = {
   PENDING: 'pending',
@@ -149,6 +150,7 @@ function getDefaultLifecycleScriptUri(cluster: ClusterData): string {
 function ClusterDetailContent() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { setNotificationItems } = useSimpleNotifications();
   const [cluster, setCluster] = useState<ClusterData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -166,10 +168,13 @@ function ClusterDetailContent() {
   const [clusterNodes, setClusterNodes] = useState<ClusterNode[]>([]);
   const [nodesLoading, setNodesLoading] = useState(false);
   const [nodesLastUpdated, setNodesLastUpdated] = useState<Date | null>(null);
+  const [errorDismissed, setErrorDismissed] = useState(false);
 
   useEffect(() => {
     if (id) {
       loadCluster(id);
+      // Reset error dismissed state when viewing a different cluster
+      setErrorDismissed(false);
     }
   }, [id]);
 
@@ -217,7 +222,7 @@ function ClusterDetailContent() {
   };
 
   const handleAddGroup = () => {
-    setEditingGroup({ ...emptyInstanceGroup, name: `instance-group-${(cluster?.instance_groups?.length || 0) + 1}` });
+    setEditingGroup({ ...emptyInstanceGroup, name: `worker-group-${(cluster?.instance_groups?.length || 0) + 1}` });
     setShowAddModal(true);
   };
 
@@ -267,7 +272,7 @@ function ClusterDetailContent() {
           ...items,
           {
             type: 'success',
-            content: isNew ? 'Instance group added successfully' : 'Instance group updated successfully',
+            content: isNew ? t('instance_group_added') : t('instance_group_updated'),
             dismissible: true,
             id: successId,
             onDismiss: () => setNotificationItems((items: any) => items.filter((item: any) => item.id !== successId)),
@@ -282,7 +287,7 @@ function ClusterDetailContent() {
         ...items,
         {
           type: 'error',
-          content: `Failed to ${isNew ? 'add' : 'update'} instance group: ${error.message || error}`,
+          content: `${t('error')}: ${error.message || error}`,
           dismissible: true,
           id: errorId,
           onDismiss: () => setNotificationItems((items: any) => items.filter((item: any) => item.id !== errorId)),
@@ -319,7 +324,7 @@ function ClusterDetailContent() {
           ...items,
           {
             type: 'success',
-            content: `Deleted ${selectedInstanceGroups.length} instance group(s)`,
+            content: `${t('instance_group_deleted')}: ${selectedInstanceGroups.length}`,
             dismissible: true,
             id: successId,
             onDismiss: () => setNotificationItems((items: any) => items.filter((item: any) => item.id !== successId)),
@@ -334,7 +339,7 @@ function ClusterDetailContent() {
         ...items,
         {
           type: 'error',
-          content: `Failed to delete instance group(s): ${error.message || error}`,
+          content: `${t('error')}: ${error.message || error}`,
           dismissible: true,
           id: errorId,
           onDismiss: () => setNotificationItems((items: any) => items.filter((item: any) => item.id !== errorId)),
@@ -349,7 +354,7 @@ function ClusterDetailContent() {
     return (
       <Box textAlign="center" padding="xxl">
         <Spinner size="large" />
-        <Box variant="p" padding={{ top: 's' }}>Loading cluster details...</Box>
+        <Box variant="p" padding={{ top: 's' }}>{t('loading_cluster')}</Box>
       </Box>
     );
   }
@@ -357,12 +362,12 @@ function ClusterDetailContent() {
   if (!cluster || !cluster.cluster_name) {
     return (
       <Box textAlign="center" padding="xxl">
-        <Box variant="h2">Cluster not found</Box>
+        <Box variant="h2">{t('cluster_not_found')}</Box>
         <Box variant="p" padding={{ top: 's' }}>
-          The cluster you're looking for doesn't exist or has been deleted.
+          {t('cluster_not_found_desc')}
         </Box>
         <Button onClick={() => navigate('/clusters')} variant="primary">
-          Back to Clusters
+          {t('back_to_clusters')}
         </Button>
       </Box>
     );
@@ -380,10 +385,10 @@ function ClusterDetailContent() {
         actions={
           <SpaceBetween direction="horizontal" size="xs">
             <Button iconName="refresh" onClick={handleRefresh}>
-              Refresh
+              {t('refresh')}
             </Button>
             <Button onClick={() => navigate('/clusters')}>
-              Back to Clusters
+              {t('back_to_clusters')}
             </Button>
           </SpaceBetween>
         }
@@ -392,14 +397,16 @@ function ClusterDetailContent() {
       </Header>
 
       {/* Error Message */}
-      {cluster.error_message && (
+      {cluster.error_message && !errorDismissed && (
         <Flashbar
           items={[
             {
               type: 'error',
-              header: 'Cluster Error',
+              header: t('cluster_error'),
               content: cluster.error_message,
-              dismissible: false,
+              dismissible: true,
+              dismissLabel: t('dismiss'),
+              onDismiss: () => setErrorDismissed(true),
             },
           ]}
         />
@@ -418,41 +425,41 @@ function ClusterDetailContent() {
         tabs={[
           {
             id: 'overview',
-            label: 'Overview',
+            label: t('overview'),
             content: (
               <SpaceBetween size="l">
                 {/* Basic Info */}
-                <Container header={<Header variant="h2">Cluster Information</Header>}>
+                <Container header={<Header variant="h2">{t('cluster_info')}</Header>}>
                   <ColumnLayout columns={2} variant="text-grid">
                     <SpaceBetween size="l">
                       <div>
-                        <Box variant="awsui-key-label">Cluster Name</Box>
+                        <Box variant="awsui-key-label">{t('cluster_name')}</Box>
                         <div>{cluster.cluster_name}</div>
                       </div>
                       <div>
-                        <Box variant="awsui-key-label">Cluster ID</Box>
+                        <Box variant="awsui-key-label">{t('cluster_id')}</Box>
                         <CopyToClipboard
                           textToCopy={cluster.cluster_id}
-                          copyButtonAriaLabel="Copy cluster ID"
-                          copySuccessText="Cluster ID copied"
-                          copyErrorText="Failed to copy"
+                          copyButtonAriaLabel={t('copy')}
+                          copySuccessText={t('copied')}
+                          copyErrorText={t('error')}
                           variant="inline"
                         />
                       </div>
                       <div>
-                        <Box variant="awsui-key-label">Status</Box>
+                        <Box variant="awsui-key-label">{t('status')}</Box>
                         <StatusIndicator type={statusTypeMap[cluster.cluster_status] || 'pending'}>
                           {statusLabelMap[cluster.cluster_status] || cluster.cluster_status}
                         </StatusIndicator>
                       </div>
                       <div>
-                        <Box variant="awsui-key-label">Created</Box>
+                        <Box variant="awsui-key-label">{t('created')}</Box>
                         <div>{cluster.cluster_create_time || '-'}</div>
                       </div>
                     </SpaceBetween>
                     <SpaceBetween size="l">
                       <div>
-                        <Box variant="awsui-key-label">EKS Cluster Name</Box>
+                        <Box variant="awsui-key-label">{t('eks_cluster_name')}</Box>
                         <div>{cluster.eks_cluster_name || '-'}</div>
                       </div>
                       <div>
@@ -464,7 +471,7 @@ function ClusterDetailContent() {
                         <div style={{ wordBreak: 'break-all' }}>{cluster.hyperpod_cluster_arn || '-'}</div>
                       </div>
                       <div>
-                        <Box variant="awsui-key-label">Last Updated</Box>
+                        <Box variant="awsui-key-label">{t('last_updated')}</Box>
                         <div>{cluster.cluster_update_time || '-'}</div>
                       </div>
                     </SpaceBetween>
@@ -472,25 +479,25 @@ function ClusterDetailContent() {
                 </Container>
 
                 {/* Configuration */}
-                <Container header={<Header variant="h2">Configuration</Header>}>
+                <Container header={<Header variant="h2">{t('configuration')}</Header>}>
                   <ColumnLayout columns={2} variant="text-grid">
                     <SpaceBetween size="l">
                       <div>
-                        <Box variant="awsui-key-label">Kubernetes Version</Box>
+                        <Box variant="awsui-key-label">{t('kubernetes_version')}</Box>
                         <div>{eksConfig.kubernetes_version || '-'}</div>
                       </div>
                       <div>
-                        <Box variant="awsui-key-label">Node Recovery</Box>
-                        <div>{hyperpodConfig.node_recovery || 'Automatic'}</div>
+                        <Box variant="awsui-key-label">{t('node_recovery')}</Box>
+                        <div>{hyperpodConfig.node_recovery || t('automatic')}</div>
                       </div>
                     </SpaceBetween>
                     <SpaceBetween size="l">
                       <div>
-                        <Box variant="awsui-key-label">Karpenter Autoscaling</Box>
-                        <div>{hyperpodConfig.enable_autoscaling ? 'Enabled' : 'Disabled'}</div>
+                        <Box variant="awsui-key-label">{t('enable_karpenter')}</Box>
+                        <div>{hyperpodConfig.enable_autoscaling ? t('enable') : t('false')}</div>
                       </div>
                       <div>
-                        <Box variant="awsui-key-label">Lifecycle Script S3 URI</Box>
+                        <Box variant="awsui-key-label">{t('lifecycle_script_s3')}</Box>
                         <div style={{ wordBreak: 'break-all' }}>
                           {clusterConfig.lifecycle_script_s3_uri || getDefaultLifecycleScriptUri(cluster)}
                           {!clusterConfig.lifecycle_script_s3_uri && cluster.hyperpod_cluster_arn && (
@@ -503,17 +510,17 @@ function ClusterDetailContent() {
                 </Container>
 
                 {/* VPC Info */}
-                <Container header={<Header variant="h2">Network Configuration</Header>}>
+                <Container header={<Header variant="h2">{t('network_config')}</Header>}>
                   <ColumnLayout columns={2} variant="text-grid">
                     <SpaceBetween size="l">
                       <div>
-                        <Box variant="awsui-key-label">VPC ID</Box>
+                        <Box variant="awsui-key-label">{t('vpc_id')}</Box>
                         <div>{cluster.vpc_id || '-'}</div>
                       </div>
                     </SpaceBetween>
                     <SpaceBetween size="l">
                       <div>
-                        <Box variant="awsui-key-label">Subnets</Box>
+                        <Box variant="awsui-key-label">{t('subnets')}</Box>
                         <div>{cluster.subnet_ids?.join(', ') || '-'}</div>
                       </div>
                     </SpaceBetween>
@@ -524,7 +531,7 @@ function ClusterDetailContent() {
           },
           {
             id: 'instance-groups',
-            label: 'Instance Groups',
+            label: t('instance_groups'),
             content: (() => {
               // Check if cluster is in a transitional state
               const isTransitionalState = ['PENDING', 'CREATING', 'UPDATING', 'DELETING'].includes(cluster.cluster_status);
@@ -536,8 +543,8 @@ function ClusterDetailContent() {
                   <Header
                     variant="h2"
                     description={isTransitionalState
-                      ? `Instance groups cannot be modified while cluster is ${statusLabelMap[cluster.cluster_status] || cluster.cluster_status}.`
-                      : "Add and configure the groups of compute instances."
+                      ? t('cannot_modify_transitional')
+                      : t('instance_groups_desc')
                     }
                     actions={
                       <SpaceBetween direction="horizontal" size="xs">
@@ -545,21 +552,21 @@ function ClusterDetailContent() {
                           disabled={actionsDisabled || selectedInstanceGroups.length !== 1}
                           onClick={handleEditGroup}
                         >
-                          Edit
+                          {t('edit')}
                         </Button>
                         <Button
                           disabled={actionsDisabled || selectedInstanceGroups.length === 0}
                           onClick={handleDeleteGroup}
                         >
-                          Delete
+                          {t('delete')}
                         </Button>
                         <Button variant="primary" onClick={handleAddGroup} disabled={actionsDisabled}>
-                          Add group
+                          {t('add_group')}
                         </Button>
                       </SpaceBetween>
                     }
                   >
-                    Instance Groups
+                    {t('instance_groups')}
                   </Header>
                 }
               >
@@ -572,22 +579,22 @@ function ClusterDetailContent() {
                   columnDefinitions={[
                     {
                       id: 'name',
-                      header: 'Name',
+                      header: t('name'),
                       cell: (item: InstanceGroup) => item.name,
                     },
                     {
                       id: 'instance_type',
-                      header: 'Instance Type',
+                      header: t('instance_type'),
                       cell: (item: InstanceGroup) => item.instance_type,
                     },
                     {
                       id: 'instance_count',
-                      header: 'Desired',
+                      header: t('desired'),
                       cell: (item: InstanceGroup) => item.instance_count,
                     },
                     {
                       id: 'current_count',
-                      header: 'Current',
+                      header: t('current'),
                       cell: (item: InstanceGroup) => {
                         if (nodesLoading) {
                           return <Spinner size="normal" />;
@@ -600,7 +607,7 @@ function ClusterDetailContent() {
                     },
                     {
                       id: 'available_count',
-                      header: 'Available',
+                      header: t('available'),
                       cell: (item: InstanceGroup) => {
                         if (nodesLoading) {
                           return <Spinner size="normal" />;
@@ -619,40 +626,40 @@ function ClusterDetailContent() {
                     },
                     {
                       id: 'min_instance_count',
-                      header: 'Min Count',
+                      header: t('min_instance_count'),
                       cell: (item: InstanceGroup) => item.min_instance_count ?? '-',
                     },
                     {
                       id: 'storage_volume_size',
-                      header: 'Storage (GB)',
+                      header: t('storage_volume_size'),
                       cell: (item: InstanceGroup) => item.storage_volume_size ?? 500,
                     },
                     {
                       id: 'use_spot',
-                      header: 'Capacity',
-                      cell: (item: InstanceGroup) => item.use_spot ? 'Spot' : 'On-demand',
+                      header: t('capacity'),
+                      cell: (item: InstanceGroup) => item.use_spot ? t('spot') : t('on_demand'),
                     },
                     {
                       id: 'training_plan_arn',
-                      header: 'Training Plan',
+                      header: t('training_plan_arn'),
                       cell: (item: InstanceGroup) => item.training_plan_arn || '-',
                     },
                     {
                       id: 'health_checks',
-                      header: 'Deep Health Checks',
+                      header: t('deep_health_checks'),
                       cell: (item: InstanceGroup) => {
                         const checks = [];
-                        if (item.enable_instance_stress_check) checks.push('Stress');
-                        if (item.enable_instance_connectivity_check) checks.push('Connectivity');
+                        if (item.enable_instance_stress_check) checks.push(t('stress'));
+                        if (item.enable_instance_connectivity_check) checks.push(t('connectivity'));
                         return checks.length > 0 ? checks.join(', ') : '-';
                       },
                     },
                   ]}
                   empty={
                     <Box textAlign="center" color="inherit">
-                      <b>No instance groups</b>
+                      <b>{t('no_instance_groups')}</b>
                       <Box padding={{ bottom: 's' }} variant="p" color="inherit">
-                        This cluster has no instance groups configured.
+                        {t('no_instance_groups_desc')}
                       </Box>
                     </Box>
                   }
@@ -663,17 +670,16 @@ function ClusterDetailContent() {
           },
           {
             id: 'instances',
-            label: 'Instances',
+            label: t('instances'),
             content: (
               <Container
                 header={
                   <Header
                     variant="h2"
-                    description="Gain detailed information about the individual compute instances in the HyperPod cluster."
                     actions={
                       <SpaceBetween direction="horizontal" size="xs">
                         <Box color="text-body-secondary" fontSize="body-s">
-                          {nodesLastUpdated && `Last updated: ${nodesLastUpdated.toLocaleString()}`}
+                          {nodesLastUpdated && `${t('last_updated')}: ${nodesLastUpdated.toLocaleString()}`}
                         </Box>
                         <Button
                           iconName="refresh"
@@ -683,7 +689,7 @@ function ClusterDetailContent() {
                       </SpaceBetween>
                     }
                   >
-                    Instances ({clusterNodes.length})
+                    {t('instances')} ({clusterNodes.length})
                   </Header>
                 }
               >
@@ -767,64 +773,64 @@ function ClusterDetailContent() {
       <Modal
         visible={showAddModal}
         onDismiss={() => setShowAddModal(false)}
-        header="Add instance group"
+        header={t('add_instance_group_title')}
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
               <Button variant="link" onClick={() => setShowAddModal(false)}>
-                Cancel
+                {t('cancel')}
               </Button>
               <Button variant="primary" onClick={() => handleSaveGroup(true)} loading={savingGroup}>
-                Add group
+                {t('add_group')}
               </Button>
             </SpaceBetween>
           </Box>
         }
       >
-        <InstanceGroupForm group={editingGroup} setGroup={setEditingGroup} />
+        <InstanceGroupForm group={editingGroup} setGroup={setEditingGroup} t={t} />
       </Modal>
 
       {/* Edit Instance Group Modal */}
       <Modal
         visible={showEditModal}
         onDismiss={() => setShowEditModal(false)}
-        header="Edit instance group"
+        header={t('edit_instance_group_title')}
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
               <Button variant="link" onClick={() => setShowEditModal(false)}>
-                Cancel
+                {t('cancel')}
               </Button>
               <Button variant="primary" onClick={() => handleSaveGroup(false)} loading={savingGroup}>
-                Save changes
+                {t('save_changes')}
               </Button>
             </SpaceBetween>
           </Box>
         }
       >
-        <InstanceGroupForm group={editingGroup} setGroup={setEditingGroup} />
+        <InstanceGroupForm group={editingGroup} setGroup={setEditingGroup} t={t} />
       </Modal>
 
       {/* Delete Confirmation Modal */}
       <Modal
         visible={showDeleteModal}
         onDismiss={() => setShowDeleteModal(false)}
-        header="Delete instance group(s)"
+        header={t('delete_instance_group_title')}
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
               <Button variant="link" onClick={() => setShowDeleteModal(false)}>
-                Cancel
+                {t('cancel')}
               </Button>
               <Button variant="primary" onClick={handleConfirmDelete} loading={savingGroup}>
-                Delete
+                {t('delete')}
               </Button>
             </SpaceBetween>
           </Box>
         }
       >
         <Box variant="p">
-          Are you sure you want to delete the following instance group(s)?
+          {t('confirm_delete_instance_groups')}
         </Box>
         <Box variant="p" fontWeight="bold">
           {selectedInstanceGroups.map(g => g.name).join(', ')}
@@ -838,20 +844,22 @@ function ClusterDetailContent() {
 function InstanceGroupForm({
   group,
   setGroup,
+  t,
 }: {
   group: InstanceGroup;
   setGroup: React.Dispatch<React.SetStateAction<InstanceGroup>>;
+  t: (key: string) => string;
 }) {
   return (
     <SpaceBetween size="l">
-      <FormField label="Group name">
+      <FormField label={t('group_name')}>
         <Input
           value={group.name}
           onChange={({ detail }) => setGroup({ ...group, name: detail.value })}
-          placeholder="instance-group-1"
+          placeholder="worker-group-1"
         />
       </FormField>
-      <FormField label="Instance type">
+      <FormField label={t('instance_type')}>
         <Select
           selectedOption={instanceTypeOptions.find(opt => opt.value === group.instance_type) || null}
           onChange={({ detail }) => setGroup({ ...group, instance_type: detail.selectedOption?.value || 'ml.g5.xlarge' })}
@@ -859,14 +867,14 @@ function InstanceGroupForm({
         />
       </FormField>
       <SpaceBetween direction="horizontal" size="l">
-        <FormField label="Instance count">
+        <FormField label={t('instance_count')}>
           <Input
             type="number"
             value={String(group.instance_count)}
             onChange={({ detail }) => setGroup({ ...group, instance_count: parseInt(detail.value) || 0 })}
           />
         </FormField>
-        <FormField label="Min instance count">
+        <FormField label={t('min_instance_count')}>
           <Input
             type="number"
             value={String(group.min_instance_count ?? 0)}
@@ -874,14 +882,14 @@ function InstanceGroupForm({
           />
         </FormField>
       </SpaceBetween>
-      <FormField label="Storage volume (GB)">
+      <FormField label={t('storage_volume_size')}>
         <Input
           type="number"
           value={String(group.storage_volume_size || 500)}
           onChange={({ detail }) => setGroup({ ...group, storage_volume_size: parseInt(detail.value) || 500 })}
         />
       </FormField>
-      <FormField label="Training Plan ARN" description="Optional">
+      <FormField label={t('training_plan_arn')} description={t('optional')}>
         <Input
           value={group.training_plan_arn || ''}
           onChange={({ detail }) => setGroup({ ...group, training_plan_arn: detail.value })}
@@ -892,19 +900,19 @@ function InstanceGroupForm({
         checked={group.use_spot || false}
         onChange={({ detail }) => setGroup({ ...group, use_spot: detail.checked })}
       >
-        Use Spot Instances
+        {t('use_spot_instances')}
       </Checkbox>
       <Checkbox
         checked={group.enable_instance_stress_check || false}
         onChange={({ detail }) => setGroup({ ...group, enable_instance_stress_check: detail.checked })}
       >
-        Enable InstanceStress Deep Health Check
+        {t('enable_stress_check')}
       </Checkbox>
       <Checkbox
         checked={group.enable_instance_connectivity_check || false}
         onChange={({ detail }) => setGroup({ ...group, enable_instance_connectivity_check: detail.checked })}
       >
-        Enable InstanceConnectivity Deep Health Check
+        {t('enable_connectivity_check')}
       </Checkbox>
     </SpaceBetween>
   );
