@@ -17,15 +17,16 @@ npm test           # Run tests
 
 ### Backend (Python/FastAPI)
 ```bash
-# Activate environment first
+# Activate environment first (from backend/ directory)
+cd backend
 source .venv/bin/activate
 
-# Start backend services (from backend/ directory)
+# Start backend services
 bash 02.start_backend.sh
 
 # Or manually:
-pm2 start server.py --name "modelhub-server" --interpreter ../.venv/bin/python3 -- --host 0.0.0.0 --port 8000
-pm2 start processing_engine/main.py --name "modelhub-engine" --interpreter ../.venv/bin/python3
+pm2 start server.py --name "modelhub-server" --interpreter .venv/bin/python3 -- --host 0.0.0.0 --port 8000
+pm2 start processing_engine/main.py --name "modelhub-engine" --interpreter .venv/bin/python3
 
 # Service management
 pm2 list           # Check running processes

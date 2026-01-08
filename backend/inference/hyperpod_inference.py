@@ -19,6 +19,16 @@ from utils.config import DEFAULT_IMAGES
 from logger_config import setup_logger
 logger = setup_logger('hyperpod_inference.py', log_file='hyperpod_inference.log', level=logging.INFO)
 
+# Import resource utilities
+from inference.utils import (
+    GPU_MAPPING,
+    INSTANCE_RESOURCES,
+    DEFAULT_RESOURCES,
+    get_gpu_count,
+    get_instance_resources,
+    get_per_replica_resources,
+)
+
 # Import database for cluster info lookup
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -32,54 +42,6 @@ INFERENCE_API_GROUP = "inference.sagemaker.aws.amazon.com"
 INFERENCE_API_VERSION = "v1"
 INFERENCE_ENDPOINT_PLURAL = "inferenceendpointconfigs"
 INFERENCE_ENDPOINT_KIND = "InferenceEndpointConfig"
-
-# GPU count mapping for instance types
-GPU_MAPPING = {
-    "ml.g5.xlarge": 1,
-    "ml.g5.2xlarge": 1,
-    "ml.g5.4xlarge": 1,
-    "ml.g5.8xlarge": 1,
-    "ml.g5.12xlarge": 4,
-    "ml.g5.16xlarge": 1,
-    "ml.g5.24xlarge": 4,
-    "ml.g5.48xlarge": 8,
-    "ml.p4d.24xlarge": 8,
-    "ml.p4de.24xlarge": 8,
-    "ml.p5.48xlarge": 8,
-    "ml.p5e.48xlarge": 8,
-}
-
-# Instance type resource mapping (cpu, memory in Gi)
-# Values set to ~80% of instance capacity to leave room for system processes
-INSTANCE_RESOURCES = {
-    # G5 instances (NVIDIA A10G GPU)
-    "ml.g5.xlarge": {"cpu": "3", "memory": "12Gi"},       # 4 vCPU, 16 GB
-    "ml.g5.2xlarge": {"cpu": "6", "memory": "24Gi"},      # 8 vCPU, 32 GB
-    "ml.g5.4xlarge": {"cpu": "12", "memory": "48Gi"},     # 16 vCPU, 64 GB
-    "ml.g5.8xlarge": {"cpu": "24", "memory": "96Gi"},     # 32 vCPU, 128 GB
-    "ml.g5.12xlarge": {"cpu": "36", "memory": "144Gi"},   # 48 vCPU, 192 GB
-    "ml.g5.16xlarge": {"cpu": "48", "memory": "192Gi"},   # 64 vCPU, 256 GB
-    "ml.g5.24xlarge": {"cpu": "72", "memory": "288Gi"},   # 96 vCPU, 384 GB
-    "ml.g5.48xlarge": {"cpu": "144", "memory": "576Gi"},  # 192 vCPU, 768 GB
-    # G6 instances (NVIDIA L4 GPU)
-    "ml.g6.xlarge": {"cpu": "3", "memory": "12Gi"},       # 4 vCPU, 16 GB
-    "ml.g6.2xlarge": {"cpu": "6", "memory": "24Gi"},      # 8 vCPU, 32 GB
-    "ml.g6.4xlarge": {"cpu": "12", "memory": "48Gi"},     # 16 vCPU, 64 GB
-    "ml.g6.8xlarge": {"cpu": "24", "memory": "96Gi"},     # 32 vCPU, 128 GB
-    "ml.g6.12xlarge": {"cpu": "36", "memory": "144Gi"},   # 48 vCPU, 192 GB
-    "ml.g6.16xlarge": {"cpu": "48", "memory": "192Gi"},   # 64 vCPU, 256 GB
-    "ml.g6.24xlarge": {"cpu": "72", "memory": "288Gi"},   # 96 vCPU, 384 GB
-    "ml.g6.48xlarge": {"cpu": "144", "memory": "576Gi"},  # 192 vCPU, 768 GB
-    # P4d instances (NVIDIA A100 40GB GPU)
-    "ml.p4d.24xlarge": {"cpu": "72", "memory": "864Gi"},  # 96 vCPU, 1152 GB
-    "ml.p4de.24xlarge": {"cpu": "72", "memory": "864Gi"}, # 96 vCPU, 1152 GB
-    # P5 instances (NVIDIA H100 GPU)
-    "ml.p5.48xlarge": {"cpu": "144", "memory": "1536Gi"}, # 192 vCPU, 2048 GB
-    "ml.p5e.48xlarge": {"cpu": "144", "memory": "1536Gi"},# 192 vCPU, 2048 GB
-}
-
-# Default resources for unknown instance types (conservative values)
-DEFAULT_RESOURCES = {"cpu": "4", "memory": "16Gi"}
 
 
 # ==============================================================================
@@ -891,24 +853,6 @@ def get_kubernetes_client(kubeconfig_path: str):
     return client.CustomObjectsApi(), client.CoreV1Api()
 
 
-def _get_gpu_count(instance_type: str) -> int:
-    """Get GPU count for an instance type"""
-    return GPU_MAPPING.get(instance_type, 1)
-
-
-def _get_instance_resources(instance_type: str) -> Dict[str, str]:
-    """
-    Get CPU and memory resources for an instance type.
-
-    Args:
-        instance_type: AWS instance type (e.g., ml.g5.4xlarge)
-
-    Returns:
-        Dict with 'cpu' and 'memory' keys
-    """
-    return INSTANCE_RESOURCES.get(instance_type, DEFAULT_RESOURCES)
-
-
 def _parse_s3_path(s3_path: str) -> Tuple[str, str]:
     """
     Parse S3 path into bucket and key.
@@ -938,6 +882,7 @@ def deploy_to_hyperpod(
     instance_type: str,
     engine: str = "vllm",
     replicas: int = 1,
+    instance_count: int = 1,  # Number of available instances for resource allocation
     namespace: str = "default",
     region: str = None,
     model_s3_path: str = None,
@@ -1033,8 +978,11 @@ def deploy_to_hyperpod(
 
     # vLLM uses port 8000, SGLang DLC uses port 8080
     container_port = 8080 if engine.lower() == "sglang" else 8000
-    gpu_count = _get_gpu_count(instance_type)
-    instance_resources = _get_instance_resources(instance_type)
+
+    # Calculate per-replica resources based on replicas and instance count
+    replica_resources = get_per_replica_resources(instance_type, replicas, instance_count)
+    gpu_count = replica_resources["gpu"]
+    instance_resources = {"cpu": replica_resources["cpu"], "memory": replica_resources["memory"]}
 
     # Build the InferenceEndpointConfig resource
     resource_name = endpoint_name.lower().replace("_", "-")[:63]  # K8s name restrictions
@@ -1436,6 +1384,7 @@ def deploy_to_hyperpod_advanced(
     instance_type: str,
     engine: str = "vllm",
     replicas: int = 1,
+    instance_count: int = 1,  # Number of available instances for resource allocation
     namespace: str = "default",
     region: str = None,
     model_s3_path: str = None,
@@ -1538,9 +1487,12 @@ def deploy_to_hyperpod_advanced(
 
     # Build environment variables
     env_vars = []
-    gpu_count = _get_gpu_count(instance_type)
-    instance_resources = _get_instance_resources(instance_type)
-    tp_size = tensor_parallel_size or gpu_count
+    # Calculate per-replica resources based on replicas and instance count
+    # When replicas > instance_count, resources are divided to fit multiple replicas per instance
+    replica_resources = get_per_replica_resources(instance_type, replicas, instance_count)
+    gpu_count = replica_resources["gpu"]
+    instance_resources = {"cpu": replica_resources["cpu"], "memory": replica_resources["memory"]}
+    tp_size = tensor_parallel_size or replica_resources["tensor_parallel_size"]
 
     if engine == "vllm":
         env_vars = [
@@ -2114,6 +2066,7 @@ def get_hyperpod_endpoint_url(
         # Also check the Ingress directly for the ALB hostname
         # This is important because when we recreate the Ingress with internet-facing scheme,
         # the CRD status doesn't get updated automatically
+        ingress_exists = False
         try:
             from kubernetes import client, config
             config.load_kube_config(config_file=kubeconfig_path)
@@ -2124,6 +2077,7 @@ def get_hyperpod_endpoint_url(
             ingress_name = f"alb-{resource_name}-{namespace}"
 
             ingress = networking_api.read_namespaced_ingress(name=ingress_name, namespace=ingress_namespace)
+            ingress_exists = True
             if ingress.status.load_balancer and ingress.status.load_balancer.ingress:
                 ingress_hostname = ingress.status.load_balancer.ingress[0].hostname
                 if ingress_hostname:
@@ -2137,6 +2091,14 @@ def get_hyperpod_endpoint_url(
                         "use_https": use_https,
                         "full_url": f"https://{endpoint_url}/{invocation_path}"
                     }
+                else:
+                    # Ingress exists but ALB not provisioned yet - don't fall back to stale CRD data
+                    logger.info(f"Ingress {ingress_name} exists but ALB hostname not provisioned yet")
+                    return None
+            else:
+                # Ingress exists but no load_balancer status yet - ALB still provisioning
+                logger.info(f"Ingress {ingress_name} exists but load_balancer status not ready yet")
+                return None
         except Exception as e:
             logger.debug(f"Could not get Ingress hostname: {e}")
 

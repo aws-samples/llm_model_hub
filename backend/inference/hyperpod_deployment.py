@@ -273,6 +273,7 @@ def deploy_hyperpod_with_hf_download_sync(
                 instance_type=instance_type,
                 engine=engine,
                 replicas=replicas,
+                instance_count=instance_count,  # For per-replica resource allocation
                 namespace=namespace,
                 region=region,
                 model_s3_path=model_s3_path,
@@ -300,6 +301,7 @@ def deploy_hyperpod_with_hf_download_sync(
                 instance_type=instance_type,
                 engine=engine,
                 replicas=replicas,
+                instance_count=instance_count,  # For per-replica resource allocation
                 namespace=namespace,
                 region=region,
                 model_s3_path=model_s3_path,
@@ -335,7 +337,9 @@ def deploy_hyperpod_with_hf_download_sync(
                     from inference.hyperpod_inference import recreate_ingress_with_scheme
 
                     # Retry ALB configuration with exponential backoff
-                    max_retries = 6
+                    # HyperPod operator can take 10-15+ minutes to create Ingress
+                    # Use 12 retries with delays up to 120s = ~22 minutes total coverage
+                    max_retries = 12
                     retry_delay = 60
                     alb_configured = False
 
@@ -375,13 +379,13 @@ def deploy_hyperpod_with_hf_download_sync(
                         else:
                             error = alb_result.get('error', 'Unknown error')
                             if 'not found' in error.lower() and attempt < max_retries - 1:
-                                logger.info(f"[HyperPod Deploy Background] Ingress not ready yet, will retry...")
-                                retry_delay = min(retry_delay * 1.5, 90)
+                                logger.info(f"[HyperPod Deploy Background] Ingress not ready yet (attempt {attempt + 1}/{max_retries}), will retry...")
+                                retry_delay = min(retry_delay * 1.5, 120)  # cap at 120s for ~22min total coverage
                             else:
                                 logger.warning(f"[HyperPod Deploy Background] ALB configuration attempt {attempt + 1} failed: {error}")
 
                     if not alb_configured:
-                        logger.warning(f"[HyperPod Deploy Background] Failed to configure public ALB after {max_retries} attempts. The endpoint is still accessible via internal service.")
+                        logger.warning(f"[HyperPod Deploy Background] Failed to configure public ALB after {max_retries} attempts. HyperPod operator may still be setting up. Check ingress manually.")
 
             return True, endpoint_name
         else:
@@ -630,6 +634,7 @@ def deploy_endpoint_hyperpod(
                 instance_type=instance_type,
                 engine=engine,
                 replicas=replicas,
+                instance_count=instance_count,  # For per-replica resource allocation
                 namespace=namespace,
                 region=region,
                 model_s3_path=model_path,
@@ -657,6 +662,7 @@ def deploy_endpoint_hyperpod(
                 instance_type=instance_type,
                 engine=engine,
                 replicas=replicas,
+                instance_count=instance_count,  # For per-replica resource allocation
                 namespace=namespace,
                 region=region,
                 model_s3_path=model_path,
@@ -724,7 +730,9 @@ def deploy_endpoint_hyperpod(
                     def configure_public_alb_background():
                         """Configure public ALB in background after Ingress is created."""
                         try:
-                            max_retries = 6
+                            # HyperPod operator can take 10-15+ minutes to create Ingress
+                            # Use 12 retries with delays up to 120s = ~22 minutes total coverage
+                            max_retries = 12
                             retry_delay = 60
                             alb_configured = False
 
@@ -742,19 +750,35 @@ def deploy_endpoint_hyperpod(
                                 )
 
                                 if alb_result.get('success'):
-                                    logger.info(f"[Background ALB] Public ALB configured successfully: {alb_result.get('alb_hostname')}")
+                                    alb_hostname = alb_result.get('alb_hostname')
+                                    logger.info(f"[Background ALB] Public ALB configured successfully: {alb_hostname}")
                                     alb_configured = True
+
+                                    # Update database with the new public ALB URL
+                                    if alb_hostname:
+                                        try:
+                                            import json as json_module
+                                            extra_config_data['alb_url'] = f"https://{alb_hostname}/v1/chat/completions"
+                                            extra_config_data['endpoint_url'] = alb_hostname
+                                            database.update_endpoint_status(
+                                                endpoint_name=endpoint_name,
+                                                endpoint_status=EndpointStatus.CREATING,  # Keep current status
+                                                extra_config=json_module.dumps(extra_config_data)
+                                            )
+                                            logger.info(f"[Background ALB] Database updated with public ALB URL: {alb_hostname}")
+                                        except Exception as db_e:
+                                            logger.warning(f"[Background ALB] Failed to update database with ALB URL: {db_e}")
                                     break
                                 else:
                                     error = alb_result.get('error', 'Unknown error')
                                     if 'not found' in error.lower() and attempt < max_retries - 1:
-                                        logger.info(f"[Background ALB] Ingress not ready yet, will retry...")
-                                        retry_delay = min(retry_delay * 1.5, 90)
+                                        logger.info(f"[Background ALB] Ingress not ready yet (attempt {attempt + 1}/{max_retries}), will retry...")
+                                        retry_delay = min(retry_delay * 1.5, 120)  # cap at 120s for ~22min total coverage
                                     else:
                                         logger.warning(f"[Background ALB] ALB configuration attempt {attempt + 1} failed: {error}")
 
                             if not alb_configured:
-                                logger.warning(f"[Background ALB] Failed to configure public ALB after {max_retries} attempts.")
+                                logger.warning(f"[Background ALB] Failed to configure public ALB after {max_retries} attempts. HyperPod operator may still be setting up. Check ingress manually.")
                         except Exception as e:
                             logger.error(f"[Background ALB] Error configuring public ALB: {e}")
 
