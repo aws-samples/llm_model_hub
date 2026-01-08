@@ -434,12 +434,12 @@ def patch_readiness_probe_timeout(
     which can be too short for some models (especially SGLang). This function
     patches the deployment to use a longer timeout.
 
-    IMPORTANT: After patching, this function deletes existing pods to force
-    the rollout. This is necessary because:
-    1. The patch creates a new ReplicaSet with the updated timeout
-    2. But the new pods can't start (GPU is used by old pods)
-    3. Old pods continue running with 1s timeout and eventually fail
-    4. Deleting old pods allows new pods to acquire GPU resources
+    IMPORTANT: The HyperPod operator may reset the timeout during reconciliation.
+    This function will:
+    1. Wait for deployment to be created
+    2. Patch the timeout and verify it persists (retry if operator resets)
+    3. Delete existing pods to force rollout
+    4. Re-patch after pod deletion to ensure new pods get correct timeout
 
     Args:
         kubeconfig_path: Path to kubeconfig file
@@ -461,6 +461,65 @@ def patch_readiness_probe_timeout(
     core_api = client.CoreV1Api()
 
     resource_name = endpoint_name.lower().replace("_", "-")[:63]
+
+    def get_containers_needing_patch(deployment):
+        """Find containers with readiness probe timeout less than target."""
+        containers_to_patch = []
+        containers = deployment.spec.template.spec.containers
+        for i, container in enumerate(containers):
+            if container.readiness_probe and container.readiness_probe.timeout_seconds:
+                current_timeout = container.readiness_probe.timeout_seconds
+                if current_timeout < timeout_seconds:
+                    containers_to_patch.append((i, container.name, current_timeout))
+        return containers_to_patch
+
+    def patch_container_timeout(container_index, container_name):
+        """Patch a container's readiness probe timeout. Returns True on success."""
+        try:
+            patch = [{
+                "op": "replace",
+                "path": f"/spec/template/spec/containers/{container_index}/readinessProbe/timeoutSeconds",
+                "value": timeout_seconds
+            }]
+            apps_api.patch_namespaced_deployment(
+                name=resource_name,
+                namespace=namespace,
+                body=patch
+            )
+            logger.info(f"[Readiness Patch] Patched container {container_name} timeout to {timeout_seconds}s")
+            return True
+        except ApiException as e:
+            logger.warning(f"[Readiness Patch] Failed to patch container {container_name}: {e}")
+            return False
+
+    def ensure_timeout_patched(max_attempts=5, wait_between=3):
+        """Patch and verify timeout persists. Returns True if successful."""
+        for attempt in range(max_attempts):
+            # Get current state
+            deployment = apps_api.read_namespaced_deployment(
+                name=resource_name,
+                namespace=namespace
+            )
+            containers_to_patch = get_containers_needing_patch(deployment)
+
+            if not containers_to_patch:
+                logger.info(f"[Readiness Patch] All containers have correct timeout (>= {timeout_seconds}s)")
+                return True
+
+            # Patch containers that need it
+            for container_index, container_name, current_timeout in containers_to_patch:
+                logger.info(f"[Readiness Patch] Container {container_name}: {current_timeout}s -> {timeout_seconds}s (attempt {attempt + 1}/{max_attempts})")
+                patch_container_timeout(container_index, container_name)
+
+            # Wait for operator reconciliation
+            time.sleep(wait_between)
+
+        # Final check
+        deployment = apps_api.read_namespaced_deployment(
+            name=resource_name,
+            namespace=namespace
+        )
+        return len(get_containers_needing_patch(deployment)) == 0
 
     try:
         # Wait for deployment to be created
@@ -488,64 +547,92 @@ def patch_readiness_probe_timeout(
                 "error": f"Deployment not found: {resource_name}"
             }
 
-        # Find the model container (usually index 1, after init container runs)
-        # The model container typically has the readiness probe
-        containers = deployment.spec.template.spec.containers
-        patched = False
-
-        for i, container in enumerate(containers):
-            if container.readiness_probe and container.readiness_probe.timeout_seconds:
-                current_timeout = container.readiness_probe.timeout_seconds
-                if current_timeout < timeout_seconds:
-                    logger.info(f"[Readiness Patch] Patching container {container.name} readiness timeout from {current_timeout}s to {timeout_seconds}s")
-                    patch = [{
-                        "op": "replace",
-                        "path": f"/spec/template/spec/containers/{i}/readinessProbe/timeoutSeconds",
-                        "value": timeout_seconds
-                    }]
-                    apps_api.patch_namespaced_deployment(
-                        name=resource_name,
-                        namespace=namespace,
-                        body=patch
-                    )
-                    patched = True
-                    logger.info(f"[Readiness Patch] Successfully patched readiness probe timeout for {container.name}")
-
-        if patched:
-            # Delete existing pods to force rollout with new timeout
-            # This is necessary because:
-            # 1. New pods can't start (GPU occupied by old pods)
-            # 2. Old pods have wrong timeout and will eventually fail readiness
-            logger.info(f"[Readiness Patch] Deleting existing pods to force rollout...")
-            try:
-                pods = core_api.list_namespaced_pod(
-                    namespace=namespace,
-                    label_selector=f"app={resource_name}"
-                )
-                for pod in pods.items:
-                    logger.info(f"[Readiness Patch] Deleting pod {pod.metadata.name} to force rollout")
-                    core_api.delete_namespaced_pod(
-                        name=pod.metadata.name,
-                        namespace=namespace,
-                        grace_period_seconds=0  # Force immediate termination
-                    )
-                logger.info(f"[Readiness Patch] Deleted {len(pods.items)} pod(s), new pods will start with timeout={timeout_seconds}s")
-            except Exception as e:
-                logger.warning(f"[Readiness Patch] Failed to delete pods (rollout may be delayed): {e}")
-
-            return {
-                "success": True,
-                "deployment": resource_name,
-                "timeout_seconds": timeout_seconds,
-                "message": f"Readiness probe timeout increased to {timeout_seconds}s"
-            }
-        else:
-            logger.info(f"[Readiness Patch] No containers needed patching or timeout already >= {timeout_seconds}s")
+        # Check if any containers need patching
+        containers_to_patch = get_containers_needing_patch(deployment)
+        if not containers_to_patch:
+            logger.info(f"[Readiness Patch] No containers need patching, timeout already >= {timeout_seconds}s")
             return {
                 "success": True,
                 "deployment": resource_name,
                 "message": "No patching needed"
             }
+
+        for container_index, container_name, current_timeout in containers_to_patch:
+            logger.info(f"[Readiness Patch] Container {container_name} needs patching: {current_timeout}s -> {timeout_seconds}s")
+
+        # CRITICAL: Use "Scale to 0" strategy to avoid resource contention
+        # Why: ReplicaSet has self-healing - deleting pods triggers immediate recreation
+        # with old config. Patching while pods exist triggers rolling update causing
+        # new+old pods to coexist (resource contention on single-node).
+        #
+        # Solution: Scale to 0 -> Patch -> Scale back
+        # This ensures all new pods use the patched configuration from the start.
+
+        original_replicas = deployment.spec.replicas
+        logger.info(f"[Readiness Patch] Original replicas: {original_replicas}")
+
+        # Step 1: Scale deployment to 0
+        logger.info(f"[Readiness Patch] Scaling deployment to 0 replicas...")
+        try:
+            scale_patch = {"spec": {"replicas": 0}}
+            apps_api.patch_namespaced_deployment(
+                name=resource_name,
+                namespace=namespace,
+                body=scale_patch
+            )
+            logger.info(f"[Readiness Patch] Deployment scaled to 0")
+
+            # Wait for pods to terminate
+            max_wait_attempts = 30  # 30 * 2 = 60 seconds max
+            for attempt in range(max_wait_attempts):
+                pods = core_api.list_namespaced_pod(
+                    namespace=namespace,
+                    label_selector=f"app={resource_name}"
+                )
+                if len(pods.items) == 0:
+                    logger.info(f"[Readiness Patch] All pods terminated")
+                    break
+                logger.info(f"[Readiness Patch] Waiting for {len(pods.items)} pod(s) to terminate (attempt {attempt + 1}/{max_wait_attempts})...")
+                time.sleep(2)
+            else:
+                logger.warning(f"[Readiness Patch] Pods did not terminate after {max_wait_attempts * 2}s, proceeding anyway")
+
+        except Exception as e:
+            logger.error(f"[Readiness Patch] Failed to scale deployment to 0: {e}")
+            # Continue anyway, worst case we still patch with running pods
+
+        # Step 2: Patch the deployment with new timeout
+        logger.info(f"[Readiness Patch] Patching deployment with timeout={timeout_seconds}s...")
+        patch_success = ensure_timeout_patched(max_attempts=5, wait_between=3)
+
+        # Step 3: Scale back to original replicas
+        logger.info(f"[Readiness Patch] Scaling back to {original_replicas} replicas...")
+        try:
+            scale_patch = {"spec": {"replicas": original_replicas}}
+            apps_api.patch_namespaced_deployment(
+                name=resource_name,
+                namespace=namespace,
+                body=scale_patch
+            )
+            logger.info(f"[Readiness Patch] Deployment scaled back to {original_replicas}")
+        except Exception as e:
+            logger.error(f"[Readiness Patch] Failed to scale back to {original_replicas}: {e}")
+
+        # Final verification
+        logger.info(f"[Readiness Patch] Final verification of timeout configuration...")
+        final_success = ensure_timeout_patched(max_attempts=3, wait_between=2)
+
+        if final_success:
+            logger.info(f"[Readiness Patch] Successfully set timeout to {timeout_seconds}s")
+        else:
+            logger.warning(f"[Readiness Patch] Could not guarantee timeout={timeout_seconds}s, operator may be overriding")
+
+        return {
+            "success": True,
+            "deployment": resource_name,
+            "timeout_seconds": timeout_seconds,
+            "message": f"Readiness probe timeout set to {timeout_seconds}s" + ("" if final_success else " (may be reset by operator)")
+        }
 
     except ApiException as e:
         logger.error(f"[Readiness Patch] Failed to patch deployment: {e}")
@@ -1801,15 +1888,17 @@ def deploy_to_hyperpod_advanced(
             logger.info(f"[Router Config] Using plain value for VLLM_API_KEY - operator will copy to router automatically")
 
         # Patch readiness probe timeout in background (HyperPod operator defaults to 1s which is too short)
+        # SGLang needs longer timeout (10s) as it takes longer to respond to health checks
         import threading
+        readiness_timeout = 10 if engine.lower() == "sglang" else 5
         def patch_readiness_background():
             try:
-                logger.info(f"[Readiness Patch] Starting background patch for {endpoint_name}")
+                logger.info(f"[Readiness Patch] Starting background patch for {endpoint_name} (engine={engine}, timeout={readiness_timeout}s)")
                 patch_result = patch_readiness_probe_timeout(
                     kubeconfig_path=kubeconfig_path,
                     endpoint_name=endpoint_name,
                     namespace=namespace,
-                    timeout_seconds=5
+                    timeout_seconds=readiness_timeout
                 )
                 if patch_result.get("success"):
                     logger.info(f"[Readiness Patch] Successfully patched: {patch_result.get('message')}")

@@ -266,6 +266,26 @@ def deploy_hyperpod_with_hf_download_sync(
 
             # Deploy with advanced configuration
             # Use same default values as SageMaker deployment for consistency
+            # Convert string values to proper types from extra_params
+            tp_size = extra_params.get('tensor_parallel_size')
+            if tp_size is not None and str(tp_size).strip():
+                tp_size = int(tp_size)
+            else:
+                tp_size = None
+            if engine.lower() == 'sglang': #sglang does not need to specify default value
+                max_model_length = extra_params.get('max_model_len')
+            else:
+                max_model_length = extra_params.get('max_model_len', 12288)
+            if max_model_length is not None and str(max_model_length).strip():
+                max_model_length = int(max_model_length)
+            else:
+                max_model_length = None
+            max_seqs = extra_params.get('max_num_seqs')
+            if max_seqs is not None and str(max_seqs).strip():
+                max_seqs = int(max_seqs)
+            else:
+                max_seqs = None
+
             result = deploy_to_hyperpod_advanced(
                 eks_cluster_name=eks_cluster_name,
                 endpoint_name=endpoint_name,
@@ -282,15 +302,15 @@ def deploy_hyperpod_with_hf_download_sync(
                 kv_cache=kv_cache_config,
                 intelligent_routing=intelligent_routing_config,
                 api_key_config=api_key_config,
-                tensor_parallel_size=extra_params.get('tensor_parallel_size'),
-                max_model_len=extra_params.get('max_model_len', 12288),  # Default 12288 like SageMaker
+                tensor_parallel_size=tp_size,
+                max_model_len=max_model_length,
                 enable_prefix_caching=extra_params.get('enable_prefix_caching', False),
                 gpu_memory_utilization=extra_params.get('mem_fraction_static', 0.9),  # Default 0.9
                 chat_template=extra_params.get('chat_template'),
                 tool_call_parser=extra_params.get('tool_call_parser'),
                 limit_mm_per_prompt=extra_params.get('limit_mm_per_prompt'),
                 enforce_eager=extra_params.get('enforce_eager', False),
-                max_num_seqs=extra_params.get('max_num_seqs'),
+                max_num_seqs=max_seqs,
                 dtype=extra_params.get('dtype'),
                 trust_remote_code=extra_params.get('trust_remote_code', True)
             )
@@ -629,6 +649,23 @@ def deploy_endpoint_hyperpod(
 
             # Deploy with advanced configuration
             # Use same default values as SageMaker deployment for consistency
+            # Convert string values to proper types from extra_params
+            tp_size = extra_params.get('tensor_parallel_size')
+            if tp_size is not None and str(tp_size).strip():
+                tp_size = int(tp_size)
+            else:
+                tp_size = None
+            max_model_length = extra_params.get('max_model_len', 12288)
+            if max_model_length is not None and str(max_model_length).strip():
+                max_model_length = int(max_model_length)
+            else:
+                max_model_length = None
+            max_seqs = extra_params.get('max_num_seqs')
+            if max_seqs is not None and str(max_seqs).strip():
+                max_seqs = int(max_seqs)
+            else:
+                max_seqs = None
+
             result = deploy_to_hyperpod_advanced(
                 eks_cluster_name=eks_cluster_name,
                 endpoint_name=endpoint_name,
@@ -645,15 +682,15 @@ def deploy_endpoint_hyperpod(
                 kv_cache=kv_cache_config,
                 intelligent_routing=intelligent_routing_config,
                 api_key_config=api_key_config,
-                tensor_parallel_size=extra_params.get('tensor_parallel_size'),
-                max_model_len=extra_params.get('max_model_len', 12288),  # Default 12288 like SageMaker
+                tensor_parallel_size=tp_size,
+                max_model_len=max_model_length,
                 enable_prefix_caching=extra_params.get('enable_prefix_caching', False),
                 gpu_memory_utilization=extra_params.get('mem_fraction_static', 0.9),  # Default 0.9
                 chat_template=extra_params.get('chat_template'),
                 tool_call_parser=extra_params.get('tool_call_parser'),
                 limit_mm_per_prompt=extra_params.get('limit_mm_per_prompt'),
                 enforce_eager=extra_params.get('enforce_eager', False),
-                max_num_seqs=extra_params.get('max_num_seqs'),
+                max_num_seqs=max_seqs,
                 dtype=extra_params.get('dtype'),
                 trust_remote_code=extra_params.get('trust_remote_code', True)
             )
