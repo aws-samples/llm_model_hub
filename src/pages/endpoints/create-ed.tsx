@@ -421,6 +421,7 @@ const SetExtraSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   const [memFrac, setMemFrac] = useState<string>('');
   const [template, setTemplate] = useState<string>('');
   const [toolCallParser, setToolCallParser] = useState<string>('');
+  const [tpSize, setTpSize] = useState<string>('');
   return (
     <SpaceBetween size='xs'>
         <FormField
@@ -456,6 +457,20 @@ const SetExtraSglang = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
           }}
         />
         <Box variant="small" color="text-body-secondary">k (1k = 1024 tokens)</Box>
+      </FormField>
+      <FormField
+        label={t("tensor_parallel_size")}
+        description={t("tensor_parallel_size_desc")}
+        stretch={false}
+      >
+        <Input
+          readOnly={readOnly}
+          value={tpSize}
+          onChange={({ detail }) => {
+            setTpSize(detail.value);
+            setData((pre: any) => ({ ...pre, extra_params:{...pre.extra_params,tensor_parallel_size: detail.value }  }))
+          }}
+        />
       </FormField>
       <FormField
         label={t("chat_template")}

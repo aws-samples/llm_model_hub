@@ -290,7 +290,9 @@ def deploy_hyperpod_with_hf_download_sync(
                 tool_call_parser=extra_params.get('tool_call_parser'),
                 limit_mm_per_prompt=extra_params.get('limit_mm_per_prompt'),
                 enforce_eager=extra_params.get('enforce_eager', False),
-                max_num_seqs=extra_params.get('max_num_seqs')
+                max_num_seqs=extra_params.get('max_num_seqs'),
+                dtype=extra_params.get('dtype'),
+                trust_remote_code=extra_params.get('trust_remote_code', True)
             )
         else:
             # Deploy with basic configuration
@@ -651,7 +653,9 @@ def deploy_endpoint_hyperpod(
                 tool_call_parser=extra_params.get('tool_call_parser'),
                 limit_mm_per_prompt=extra_params.get('limit_mm_per_prompt'),
                 enforce_eager=extra_params.get('enforce_eager', False),
-                max_num_seqs=extra_params.get('max_num_seqs')
+                max_num_seqs=extra_params.get('max_num_seqs'),
+                dtype=extra_params.get('dtype'),
+                trust_remote_code=extra_params.get('trust_remote_code', True)
             )
         else:
             # Deploy with basic configuration

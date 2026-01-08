@@ -1021,25 +1021,33 @@ def deploy_to_hyperpod(
     else:
         served_model_name = model_name
 
-    # Override container command to include --served-model-name
+    # Override container command to include --served-model-name and tensor parallel size
     # The HyperPod DLC containers have a fixed CMD that ignores args, so we must use command
     if engine.lower() == "sglang":
         worker_spec["command"] = ["python3", "-m", "sglang.launch_server"]
-        worker_spec["args"] = [
+        args = [
             "--port", str(container_port),
             "--host", "0.0.0.0",
             "--model-path", "/opt/ml/model",
             "--served-model-name", served_model_name,
             "--enable-metrics"  # Required for vLLM router to scrape metrics and keep backend registered
         ]
+        # Add tensor parallel size for multi-GPU instances
+        if gpu_count > 1:
+            args.extend(["--tp", str(gpu_count)])
+        worker_spec["args"] = args
     else:  # vllm
         worker_spec["command"] = ["python3", "-m", "vllm.entrypoints.openai.api_server"]
-        worker_spec["args"] = [
+        args = [
             "--port", str(container_port),
             "--host", "0.0.0.0",
             "--model", "/opt/ml/model",
             "--served-model-name", served_model_name
         ]
+        # Add tensor parallel size for multi-GPU instances
+        if gpu_count > 1:
+            args.extend(["--tensor-parallel-size", str(gpu_count)])
+        worker_spec["args"] = args
 
     # Build spec
     spec = {
@@ -1406,7 +1414,9 @@ def deploy_to_hyperpod_advanced(
     # vLLM-specific parameters
     limit_mm_per_prompt: Optional[str] = None,  # vLLM: --limit-mm-per-prompt (e.g., "image=2,video=1")
     enforce_eager: bool = False,  # vLLM: --enforce-eager (disable CUDA graph)
-    max_num_seqs: Optional[int] = None  # vLLM: --max-num-seqs (max concurrent sequences)
+    max_num_seqs: Optional[int] = None,  # vLLM: --max-num-seqs (max concurrent sequences)
+    dtype: Optional[str] = None,  # vLLM/SGLang: --dtype (e.g., "auto", "half", "float16", "bfloat16")
+    trust_remote_code: bool = True  # vLLM/SGLang: --trust-remote-code (default True for HuggingFace models)
 ) -> Dict[str, Any]:
     """
     Deploy a model to HyperPod EKS cluster with advanced configuration options.
@@ -1628,15 +1638,23 @@ def deploy_to_hyperpod_advanced(
             "--served-model-name", served_model_name,
             "--enable-metrics"  # Required for vLLM router to scrape metrics and keep backend registered
         ]
+        # Add trust-remote-code (default True for HuggingFace models)
+        if trust_remote_code:
+            args.append("--trust-remote-code")
         # Add optional SGLang parameters
-        if tensor_parallel_size:
-            args.extend(["--tp-size", str(tensor_parallel_size)])
+        # Always add tp_size (auto-calculated from instance GPU count if not specified)
+        if tp_size and tp_size > 1:
+            args.extend(["--tp", str(tp_size)])
         if max_model_len:
             args.extend(["--context-length", str(max_model_len)])
+        if dtype:
+            args.extend(["--dtype", dtype])
         if gpu_memory_utilization is not None:
             args.extend(["--mem-fraction-static", str(gpu_memory_utilization)])
         if chat_template:
             args.extend(["--chat-template", chat_template])
+        if tool_call_parser:
+            args.extend(["--tool-call-parser", tool_call_parser])
         worker_spec["args"] = args
     else:  # vllm
         worker_spec["command"] = ["python3", "-m", "vllm.entrypoints.openai.api_server"]
@@ -1646,11 +1664,17 @@ def deploy_to_hyperpod_advanced(
             "--model", "/opt/ml/model",
             "--served-model-name", served_model_name
         ]
+        # Add trust-remote-code (default True for HuggingFace models)
+        if trust_remote_code:
+            args.append("--trust-remote-code")
         # Add optional vLLM parameters
-        if tensor_parallel_size:
-            args.extend(["--tensor-parallel-size", str(tensor_parallel_size)])
+        # Always add tp_size (auto-calculated from instance GPU count if not specified)
+        if tp_size and tp_size > 1:
+            args.extend(["--tensor-parallel-size", str(tp_size)])
         if max_model_len:
             args.extend(["--max-model-len", str(max_model_len)])
+        if dtype:
+            args.extend(["--dtype", dtype])
         if enable_prefix_caching:
             args.append("--enable-prefix-caching")
         if gpu_memory_utilization is not None:
@@ -1658,6 +1682,7 @@ def deploy_to_hyperpod_advanced(
         if chat_template:
             args.extend(["--chat-template", chat_template])
         if tool_call_parser:
+            args.append("--enable-auto-tool-choice")
             args.extend(["--tool-call-parser", tool_call_parser])
         if limit_mm_per_prompt:
             args.extend(["--limit-mm-per-prompt", limit_mm_per_prompt])

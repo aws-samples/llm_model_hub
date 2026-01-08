@@ -131,10 +131,10 @@ class EndpointBenchmark:
         verify_ssl: bool = False,
         timeout: float = 120.0
     ):
-        self.base_url = base_url
+        self.base_url = base_url.replace("/v1","")
         self.model_name = model_name
         self.client = AsyncOpenAI(
-            base_url=f"https://{base_url}/v1" if not base_url.startswith("http") else base_url,
+            base_url=f"https://{base_url}/v1" if not base_url.startswith("http") else f"{base_url}/v1",
             api_key=api_key,
             http_client=httpx.AsyncClient(verify=verify_ssl, timeout=timeout),
         )
@@ -213,6 +213,7 @@ class EndpointBenchmark:
 
         except Exception as e:
             latency = time.time() - start_time
+            print(str(e))
             return RequestMetrics(
                 success=False,
                 latency=latency,
