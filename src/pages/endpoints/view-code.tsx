@@ -44,9 +44,8 @@ const getHyperPodCodeSample = (baseUrl: string, apiKey: string, modelName: strin
   const cleanUrl = normalizeUrl(baseUrl);
   return `
 \`\`\`python
-# pip install openai httpx
+# pip install openai
 from openai import OpenAI
-import httpx
 
 # HyperPod Inference Endpoint Configuration
 BASE_URL = "${cleanUrl}"
@@ -56,8 +55,7 @@ MODEL_NAME = "${modelName}"
 # Note: ALB uses self-signed certificate, disable SSL verification
 client = OpenAI(
     base_url=f"https://{BASE_URL}/v1",
-    api_key=API_KEY,
-    http_client=httpx.Client(verify=False),
+    api_key=API_KEY
 )
 
 #******** 示例1 非流式 ************

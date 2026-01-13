@@ -1,0 +1,68 @@
+apiVersion: inference.sagemaker.aws.amazon.com/v1
+kind: InferenceEndpointConfig
+metadata:
+  name: demo
+  namespace: default
+spec:
+  endpointName: demo-l2-cache   #include endpoint name
+  modelName: Qwen3-4B-Instruct   #include model name 
+  instanceType: ml.g5.4xlarge          #include desired instance type
+  invocationEndpoint: v1/chat/completions
+  replicas: 1
+  modelSourceConfig:
+    modelSourceType: s3
+    s3Storage:
+      bucketName: sagemaker-us-east-1-434444145045  #include your bucket name
+      region: us-east-1                  #include your region
+    modelLocation: Qwen3-4B-Instruct-2507/0d0f748bad7a4aa7a3cae5ec42bb4553/finetuned_model_merged/   #include model location 
+    prefetchEnabled: false
+  kvCacheSpec:
+    enableL1Cache: true
+    enableL2Cache: true
+    l2CacheSpec:
+     l2CacheBackend: tieredstorage
+  intelligentRoutingSpec:
+    enabled: true
+    routingStrategy: prefixaware
+  tlsConfig:
+    tlsCertificateOutputS3Uri: s3://llm-modelhub-hyperpod-434444145045-us-east-1/cert   #include your S3URI
+  metrics:
+    enabled: true
+    modelMetrics:
+      port: 8000
+  loadBalancer:
+    healthCheckPath: /health
+  worker:
+    resources:
+      limits:
+        nvidia.com/gpu: "1"
+      requests:
+        cpu: "6"
+        memory: 30Gi
+        nvidia.com/gpu: "1"
+    image: public.ecr.aws/deep-learning-containers/vllm:0.13.0-gpu-py312-cu129-ubuntu22.04-ec2-v1.0
+    args:
+      - "/opt/ml/model"
+      - "--max-model-len"
+      - "20000"
+      - "--tensor-parallel-size"
+      - "1"
+    modelInvocationPort:
+      containerPort: 8000
+      name: http
+    modelVolumeMount:
+      name: model-weights
+      mountPath: /opt/ml/model
+    environmentVariables:
+      - name: PYTHONHASHSEED
+        value: "123"
+      - name: OPTION_ROLLING_BATCH
+        value: "vllm"
+      - name: SAGEMAKER_SUBMIT_DIRECTORY
+        value: "/opt/ml/model/code"
+      - name: MODEL_CACHE_ROOT
+        value: "/opt/ml/model"
+      - name: SAGEMAKER_MODEL_SERVER_WORKERS
+        value: "1"
+      - name: SAGEMAKER_MODEL_SERVER_TIMEOUT
+        value: "3600"

@@ -197,6 +197,8 @@ function ClusterDetailContent() {
   const handleRefresh = () => {
     if (id) {
       loadCluster(id);
+      // Also refresh nodes to update instance status in Instance Groups tab
+      loadNodes(id);
     }
   };
 

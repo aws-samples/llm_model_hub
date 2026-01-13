@@ -1002,6 +1002,10 @@ def deploy_to_hyperpod(
         session = boto3.Session()
         region = session.region_name or 'us-west-2'
 
+    # Get AWS account ID for TLS certificate S3 bucket
+    sts_client = boto3.client('sts')
+    account_id = sts_client.get_caller_identity()['Account']
+
     # Get kubeconfig for the cluster
     kubeconfig_path = get_kubeconfig_for_cluster(eks_cluster_name, region)
     custom_api, _ = get_kubernetes_client(kubeconfig_path)
@@ -1020,7 +1024,8 @@ def deploy_to_hyperpod(
                 "region": region
             },
             "modelLocation": model_location,
-            "prefetchEnabled": True
+            # prefetchEnabled must be False when L2 cache is enabled to avoid lmcache-config volume issue
+            "prefetchEnabled": False
         }
         # For S3 models, use local path
         model_path_for_env = "/opt/ml/model"
@@ -1036,7 +1041,8 @@ def deploy_to_hyperpod(
                 "modelId": hf_model_id
             },
             "modelLocation": hf_model_id,
-            "prefetchEnabled": True
+            # prefetchEnabled must be False when L2 cache is enabled to avoid lmcache-config volume issue
+            "prefetchEnabled": False
         }
         model_path_for_env = "/opt/ml/model"
         use_s3_model = False
@@ -1124,11 +1130,9 @@ def deploy_to_hyperpod(
             args.extend(["--tp", str(gpu_count)])
         worker_spec["args"] = args
     else:  # vllm
-        worker_spec["command"] = ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+        # Use DLC default entrypoint - first arg is model path, followed by vLLM CLI options
         args = [
-            "--port", str(container_port),
-            "--host", "0.0.0.0",
-            "--model", "/opt/ml/model",
+            "/opt/ml/model",  # Model path as first argument
             "--served-model-name", served_model_name
         ]
         # Add tensor parallel size for multi-GPU instances
@@ -1144,7 +1148,22 @@ def deploy_to_hyperpod(
         "invocationEndpoint": "v1/chat/completions",  # Must be valid for intelligent routing
         "replicas": replicas,
         "worker": worker_spec,
-        "modelSourceConfig": model_source_config  # Required for all deployments
+        "modelSourceConfig": model_source_config,  # Required for all deployments
+        # Metrics configuration
+        "metrics": {
+            "enabled": True,
+            "modelMetrics": {
+                "port": container_port
+            }
+        },
+        # Load balancer configuration
+        "loadBalancer": {
+            "healthCheckPath": "/health"
+        },
+        # TLS configuration for certificate management
+        "tlsConfig": {
+            "tlsCertificateOutputS3Uri": f"s3://llm-modelhub-hyperpod-{account_id}-{region}/certs"
+        }
     }
 
     body = {
@@ -1546,6 +1565,10 @@ def deploy_to_hyperpod_advanced(
         session = boto3.Session()
         region = session.region_name or 'us-west-2'
 
+    # Get AWS account ID for TLS certificate S3 bucket
+    sts_client = boto3.client('sts')
+    account_id = sts_client.get_caller_identity()['Account']
+
     # Get kubeconfig for the cluster
     kubeconfig_path = get_kubeconfig_for_cluster(eks_cluster_name, region)
     custom_api, _ = get_kubernetes_client(kubeconfig_path)
@@ -1563,7 +1586,8 @@ def deploy_to_hyperpod_advanced(
                 "region": region
             },
             "modelLocation": model_location,
-            "prefetchEnabled": True
+            # prefetchEnabled must be False when L2 cache is enabled to avoid lmcache-config volume issue
+            "prefetchEnabled": False
         }
         model_path_for_env = "/opt/ml/model"
         use_s3_model = True
@@ -1577,7 +1601,8 @@ def deploy_to_hyperpod_advanced(
                 "modelId": hf_model_id
             },
             "modelLocation": hf_model_id,
-            "prefetchEnabled": True
+            # prefetchEnabled must be False when L2 cache is enabled to avoid lmcache-config volume issue
+            "prefetchEnabled": False
         }
         model_path_for_env = "/opt/ml/model"
         use_s3_model = False
@@ -1744,11 +1769,10 @@ def deploy_to_hyperpod_advanced(
             args.extend(["--tool-call-parser", tool_call_parser])
         worker_spec["args"] = args
     else:  # vllm
-        worker_spec["command"] = ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+        # Use DLC default entrypoint - first arg is model path, followed by vLLM CLI options
+        # This avoids the L2 Cache operator bug (lmcache-config volume not created when custom command is set)
         args = [
-            "--port", str(container_port),
-            "--host", "0.0.0.0",
-            "--model", "/opt/ml/model",
+            "/opt/ml/model",  # Model path as first argument
             "--served-model-name", served_model_name
         ]
         # Add trust-remote-code (default True for HuggingFace models)
@@ -1762,8 +1786,8 @@ def deploy_to_hyperpod_advanced(
             args.extend(["--max-model-len", str(max_model_len)])
         if dtype:
             args.extend(["--dtype", dtype])
-        if enable_prefix_caching:
-            args.append("--enable-prefix-caching")
+        # Note: --enable-prefix-caching is NOT needed for vLLM on HyperPod
+        # The kvCacheSpec handles prefix caching automatically via the operator
         if gpu_memory_utilization is not None:
             args.extend(["--gpu-memory-utilization", str(gpu_memory_utilization)])
         if chat_template:
@@ -1787,7 +1811,22 @@ def deploy_to_hyperpod_advanced(
         "invocationEndpoint": "v1/chat/completions",  # Must be valid for intelligent routing
         "replicas": replicas,
         "worker": worker_spec,
-        "modelSourceConfig": model_source_config  # Required for all deployments
+        "modelSourceConfig": model_source_config,  # Required for all deployments
+        # Metrics configuration - required for L2 cache to work properly
+        "metrics": {
+            "enabled": True,
+            "modelMetrics": {
+                "port": container_port
+            }
+        },
+        # Load balancer configuration
+        "loadBalancer": {
+            "healthCheckPath": "/health"
+        },
+        # TLS configuration for certificate management
+        "tlsConfig": {
+            "tlsCertificateOutputS3Uri": f"s3://llm-modelhub-hyperpod-{account_id}-{region}/certs"
+        }
     }
 
     # Add advanced configuration

@@ -7,6 +7,7 @@ import {
   useNavigate,
 } from "react-router-dom";
 
+import Dashboard from './pages/dashboard';
 import JobTable from './pages/jobs'
 import NotFound from './pages/commons/no-found';
 import CreateJobApp from './pages/jobs/create-job';
@@ -28,7 +29,7 @@ function App() {
       <Router>
       <ProvideAuth>
         <Routes>
-          <Route path="/" element={<LoginPage/>} />
+          <Route path="/" element={<RequireAuth requireAdmin={false}  redirectPath="/login"><Dashboard/></RequireAuth>} />
           <Route path="/login" element={<LoginPage/>} />
           <Route path="/jobs" element={<RequireAuth requireAdmin={false}  redirectPath="/login"><JobTable/></RequireAuth>} />
           <Route path="/jobs/createjob" element={<RequireAuth requireAdmin={false}  redirectPath="/login"><CreateJobApp/></RequireAuth>} />

@@ -128,7 +128,7 @@ const defaultData = {
     min_replicas: 1,
     max_replicas: 10,
     enable_kv_cache: false,
-    enable_l2_cache: false,  // Disabled by default due to HyperPod operator bug (lmcache-config volume mount error)
+    enable_l2_cache: false,  // L2 cache for distributed KV caching (vLLM only)
     kv_cache_backend: 'tieredstorage',
     enable_intelligent_routing: false,
     routing_strategy: 'prefixaware',
@@ -700,8 +700,20 @@ const SetHyperPodAutoscaling = ({ data, setData, readOnly }: SelectQuantTypeProp
 // HyperPod KV Cache Configuration
 const SetHyperPodKVCache = ({ data, setData, readOnly }: SelectQuantTypeProps) => {
   const [enabled, setEnabled] = useState<boolean>(false);
-  const [enableL2, setEnableL2] = useState<boolean>(false);  // Disabled by default due to operator bug
+  const [enableL2, setEnableL2] = useState<boolean>(false);
   const [backend, setBackend] = useState<SelectProps.Option | null>(KV_CACHE_BACKENDS[0]);
+
+  // Auto-disable L2 cache when engine is SGLang (L2 cache only works with vLLM)
+  // Note: This useEffect is kept for when the operator bug is fixed and L2 cache is re-enabled
+  useEffect(() => {
+    if (data.engine === 'sglang' && enableL2) {
+      setEnableL2(false);
+      setData((pre: any) => ({
+        ...pre,
+        hyperpod_config: { ...pre.hyperpod_config, enable_l2_cache: false }
+      }));
+    }
+  }, [data.engine]);
 
   return (
     <SpaceBetween size="s">
@@ -722,7 +734,7 @@ const SetHyperPodKVCache = ({ data, setData, readOnly }: SelectQuantTypeProps) =
         <SpaceBetween size="s">
           <Toggle
             readOnly={readOnly}
-            disabled={true}  // Temporarily disabled due to HyperPod operator bug (lmcache-config volume mount error)
+            disabled={data.engine === 'sglang'}  // L2 cache only works with vLLM
             checked={enableL2}
             onChange={({ detail }) => {
               setEnableL2(detail.checked);
@@ -732,7 +744,7 @@ const SetHyperPodKVCache = ({ data, setData, readOnly }: SelectQuantTypeProps) =
               }))
             }}
           >
-            {t("enable_l2_cache")} (Temporarily disabled)
+            {t("enable_l2_cache")} {data.engine === 'sglang' ? '(vLLM only)' : ''}
           </Toggle>
           {enableL2 && (
             <FormField label={t("kv_cache_backend")}>

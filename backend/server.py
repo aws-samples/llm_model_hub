@@ -548,6 +548,48 @@ async def handle_sync_all_cluster_statuses():
         )
 
 
+# ==================== Dashboard Statistics API ====================
+
+@app.post('/v1/dashboard_stats', dependencies=[Depends(check_api_key)])
+async def handle_dashboard_stats(request: DashboardStatsRequest):
+    """
+    Get aggregated statistics for the dashboard.
+    Returns job, endpoint, and cluster statistics.
+    """
+    from db_management.database import DatabaseWrapper
+    db = DatabaseWrapper()
+
+    try:
+        job_stats = db.get_job_stats()
+        endpoint_stats = db.get_endpoint_stats()
+        cluster_stats = db.get_cluster_stats()
+
+        # Get daily job counts for the last 7 days
+        daily_job_data = db.get_jobs_by_date_and_status(days=7)
+        daily_counts = [DailyJobCount(**item) for item in daily_job_data]
+        job_stats['daily_counts'] = daily_counts
+
+        return DashboardStatsResponse(
+            response_id=str(uuid.uuid4()),
+            job_stats=JobStats(**job_stats),
+            endpoint_stats=EndpointStats(**endpoint_stats),
+            cluster_stats=ClusterStats(**cluster_stats)
+        )
+    except Exception as e:
+        logger.error(f"Error getting dashboard stats: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": str(e),
+                    "type": "internal_error",
+                    "param": None,
+                    "code": "dashboard_stats_error",
+                }
+            },
+        )
+
+
 @app.post('/v1/chat/completions',dependencies=[Depends(check_api_key)])
 async def handle_inference(request:InferenceRequest):
     # logger.info(request)

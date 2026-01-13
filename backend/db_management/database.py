@@ -535,5 +535,150 @@ class DatabaseWrapper(BaseModel):
                     )
                 connection.commit()
 
+    # ==================== Dashboard Statistics ====================
+
+    def get_jobs_by_date_and_status(self, days: int = 7) -> List[Dict[str, Any]]:
+        """
+        Get job counts grouped by date and status for the last N days.
+        Returns a list of dicts with date, status, and count.
+        """
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                # Get jobs from the last N days grouped by date and status
+                cursor.execute(f"""
+                    SELECT
+                        DATE(job_create_time) as date,
+                        job_status,
+                        COUNT(*) as count
+                    FROM {JOB_TABLE}
+                    WHERE job_create_time >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+                    GROUP BY DATE(job_create_time), job_status
+                    ORDER BY date ASC
+                """, (days,))
+
+                results = cursor.fetchall()
+
+                # Convert to list of dicts
+                data = []
+                for row in results:
+                    data.append({
+                        'date': row[0].strftime('%Y-%m-%d') if row[0] else None,
+                        'status': row[1],
+                        'count': row[2]
+                    })
+
+                return data
+
+    def get_job_stats(self) -> Dict[str, Any]:
+        """Get job statistics for dashboard."""
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                # Total count
+                cursor.execute(f"SELECT COUNT(*) FROM {JOB_TABLE}")
+                total_count = cursor.fetchone()[0]
+
+                # By status
+                cursor.execute(f"SELECT job_status, COUNT(*) FROM {JOB_TABLE} GROUP BY job_status")
+                by_status = {row[0]: row[1] for row in cursor.fetchall()}
+
+                # By type
+                cursor.execute(f"SELECT job_type, COUNT(*) FROM {JOB_TABLE} GROUP BY job_type")
+                by_type = {row[0]: row[1] for row in cursor.fetchall()}
+
+                return {
+                    'total_count': total_count,
+                    'by_status': by_status,
+                    'by_type': by_type
+                }
+
+    def get_endpoint_stats(self) -> Dict[str, Any]:
+        """Get endpoint statistics for dashboard."""
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                # Total count (exclude TERMINATED)
+                cursor.execute(f"SELECT COUNT(*) FROM {EP_TABLE} WHERE endpoint_status <> 'TERMINATED'")
+                total_count = cursor.fetchone()[0]
+
+                # By deployment target (exclude TERMINATED)
+                cursor.execute(
+                    f"SELECT deployment_target, COUNT(*) FROM {EP_TABLE} WHERE endpoint_status <> 'TERMINATED' GROUP BY deployment_target"
+                )
+                by_deployment_target = {row[0] if row[0] else 'sagemaker': row[1] for row in cursor.fetchall()}
+
+                # By status (exclude TERMINATED)
+                cursor.execute(
+                    f"SELECT endpoint_status, COUNT(*) FROM {EP_TABLE} WHERE endpoint_status <> 'TERMINATED' GROUP BY endpoint_status"
+                )
+                by_status = {row[0]: row[1] for row in cursor.fetchall()}
+
+                # By engine (exclude TERMINATED)
+                cursor.execute(
+                    f"SELECT engine, COUNT(*) FROM {EP_TABLE} WHERE endpoint_status <> 'TERMINATED' GROUP BY engine"
+                )
+                by_engine = {row[0]: row[1] for row in cursor.fetchall()}
+
+                return {
+                    'total_count': total_count,
+                    'by_deployment_target': by_deployment_target,
+                    'by_status': by_status,
+                    'by_engine': by_engine
+                }
+
+    def get_cluster_stats(self) -> Dict[str, Any]:
+        """Get cluster statistics for dashboard."""
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                # Total count (exclude DELETED)
+                cursor.execute(f"SELECT COUNT(*) FROM {CLUSTER_TABLE} WHERE cluster_status <> 'DELETED'")
+                total_count = cursor.fetchone()[0]
+
+                # Active count
+                cursor.execute(f"SELECT COUNT(*) FROM {CLUSTER_TABLE} WHERE cluster_status = 'ACTIVE'")
+                active_count = cursor.fetchone()[0]
+
+                # By status (exclude DELETED)
+                cursor.execute(
+                    f"SELECT cluster_status, COUNT(*) FROM {CLUSTER_TABLE} WHERE cluster_status <> 'DELETED' GROUP BY cluster_status"
+                )
+                by_status = {row[0]: row[1] for row in cursor.fetchall()}
+
+                # Get instance groups data for instance count and type distribution
+                cursor.execute(f"SELECT instance_groups, cluster_config FROM {CLUSTER_TABLE} WHERE cluster_status = 'ACTIVE'")
+                rows = cursor.fetchall()
+
+                total_instance_count = 0
+                instance_type_distribution = {}
+
+                for row in rows:
+                    # Try to get instance_groups from cluster_config first, then from instance_groups column
+                    instance_groups = None
+                    if row[1]:  # cluster_config
+                        try:
+                            config = json.loads(row[1])
+                            instance_groups = config.get('instance_groups')
+                        except:
+                            pass
+                    if not instance_groups and row[0]:  # instance_groups column
+                        try:
+                            instance_groups = json.loads(row[0])
+                        except:
+                            pass
+
+                    if instance_groups:
+                        for ig in instance_groups:
+                            # instance_count is the desired count, we use it
+                            count = ig.get('instance_count', 0)
+                            instance_type = ig.get('instance_type', 'unknown')
+                            total_instance_count += count
+                            instance_type_distribution[instance_type] = instance_type_distribution.get(instance_type, 0) + count
+
+                return {
+                    'total_count': total_count,
+                    'active_count': active_count,
+                    'by_status': by_status,
+                    'total_instance_count': total_instance_count,
+                    'instance_type_distribution': instance_type_distribution
+                }
+
     def close(self):
         self.connection_pool.close()

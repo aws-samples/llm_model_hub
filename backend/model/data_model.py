@@ -407,3 +407,45 @@ class ListClusterNodesResponse(BaseModel):
     response_id: str
     nodes: List[ClusterNodeInfo]
     total_count: int
+
+
+# ==================== Dashboard Statistics Models ====================
+
+class DashboardStatsRequest(BaseModel):
+    """Request for dashboard statistics - no parameters needed"""
+    pass
+
+class DailyJobCount(BaseModel):
+    """Daily job count by status"""
+    date: str                  # YYYY-MM-DD format
+    status: str                # Job status
+    count: int                 # Count for this date and status
+
+class JobStats(BaseModel):
+    """Job statistics for dashboard"""
+    total_count: int
+    by_status: Dict[str, int]  # {PENDING: 5, RUNNING: 3, SUCCESS: 100, ...}
+    by_type: Dict[str, int]    # {sft: 50, pt: 30, dpo: 20, ...}
+    daily_counts: List[DailyJobCount] = []  # Last 7 days by date and status
+
+class EndpointStats(BaseModel):
+    """Endpoint statistics for dashboard"""
+    total_count: int
+    by_deployment_target: Dict[str, int]  # {sagemaker: 10, hyperpod: 5}
+    by_status: Dict[str, int]             # {CREATING: 2, INSERVICE: 8, ...}
+    by_engine: Dict[str, int]             # {vllm: 5, sglang: 3, ...}
+
+class ClusterStats(BaseModel):
+    """Cluster statistics for dashboard"""
+    total_count: int
+    active_count: int
+    by_status: Dict[str, int]                    # {ACTIVE: 3, CREATING: 1, ...}
+    total_instance_count: int                    # Sum of all instances across clusters
+    instance_type_distribution: Dict[str, int]  # {ml.g5.xlarge: 10, ...}
+
+class DashboardStatsResponse(BaseModel):
+    """Response for dashboard statistics"""
+    response_id: str
+    job_stats: JobStats
+    endpoint_stats: EndpointStats
+    cluster_stats: ClusterStats

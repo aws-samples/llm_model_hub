@@ -15,9 +15,9 @@ uv venv --python 3.12 "${SCRIPT_DIR}/.venv"
 # 激活虚拟环境
 # source .venv/bin/activate
 
-# 安装 requirements
-echo "Installing requirements with uv..."
-uv pip install -r requirements.txt
+# 安装依赖 (使用 pyproject.toml)
+echo "Installing dependencies with uv..."
+uv sync
 
 # 安装 Docker
 sudo apt-get update

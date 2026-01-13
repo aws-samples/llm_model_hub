@@ -22,6 +22,13 @@ export function Navigation({
   const navItems: SideNavigationProps['items'] = items || [
     {
       type: 'section',
+      text: t('overview'),
+      items: [
+        { type: 'link', text: t('dashboard'), href: '/' },
+      ],
+    },
+    {
+      type: 'section',
       text: t('train_management'),
       items: [
         { type: 'link', text: t('training_jobs'), href: '/jobs' },

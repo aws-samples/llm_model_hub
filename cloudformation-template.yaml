@@ -280,12 +280,12 @@ Resources:
               # Upload dummy tar.gz
               echo "Uploading dummy tar.gz"
               cd /home/ubuntu/llm_model_hub/backend/byoc || error_exit "Failed to change to byoc directory"
-              sudo -u ubuntu ../../miniconda3/envs/py311/bin/python startup.py || error_exit "Failed to upload dummy tar.gz"
+              sudo -u ubuntu ../.venv/bin/python startup.py || error_exit "Failed to upload dummy tar.gz"
 
               # Add user to database
               echo "Adding user to database"
               cd /home/ubuntu/llm_model_hub/backend/ || error_exit "Failed to change to backend directory"
-              sudo -u ubuntu bash -c "source ../miniconda3/bin/activate py311 && python3 users/add_user.py demo_user $RANDOM_PASSWORD default" || error_exit "Failed to add user to database"
+              sudo -u ubuntu .venv/bin/python users/add_user.py demo_user $RANDOM_PASSWORD default" || error_exit "Failed to add user to database"
 
               # Start backend
               echo "Starting backend"

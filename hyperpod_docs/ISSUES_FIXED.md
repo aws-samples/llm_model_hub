@@ -933,6 +933,8 @@ database.update_endpoint_status(endpoint_name, EndpointStatus.INSERVICE, json.du
 
 ## 17. KV Cache Enabled Causes "lmcache-config" Volume Mount Error
 
+**Status: ✅ FIXED**
+
 ### Issue
 Deploying HyperPod endpoint with **KV cache enabled** (L1 or L2 cache) fails with:
 ```
@@ -943,7 +945,135 @@ spec.template.spec.containers[0].volumeMounts[2].name: Not found: "lmcache-confi
 The deployment is never created. Only the router pod runs, but no model pod is scheduled.
 
 ### Root Cause
-This is a **bug in the HyperPod Inference Operator**. When KV cache is enabled via `kvCacheSpec`:
+After comparing a working deployment (manual YAML with L2 cache enabled) vs. failing deployments from the backend, the root cause was identified:
+
+**Two configuration issues triggered the operator bug:**
+
+1. **`prefetchEnabled: true`** in `modelSourceConfig`:
+   - Working deployment: `prefetchEnabled: false`
+   - Failing deployment: `prefetchEnabled: true`
+
+2. **`--enable-prefix-caching`** in container args:
+   - Working deployment: No `--enable-prefix-caching` flag
+   - Failing deployment: Had `--enable-prefix-caching` in args
+
+The operator handles prefix caching automatically via `kvCacheSpec`. When these additional flags are present, the operator attempts to create an `lmcache-config` volumeMount but fails to define the corresponding volume.
+
+**Working Configuration (demo endpoint):**
+```yaml
+modelSourceConfig:
+  modelSourceType: s3
+  s3Storage:
+    bucketName: sagemaker-us-east-1-xxx
+    region: us-east-1
+  modelLocation: path/to/model/
+  prefetchEnabled: false  # <-- Must be false
+kvCacheSpec:
+  enableL1Cache: true
+  enableL2Cache: true
+  l2CacheSpec:
+    l2CacheBackend: tieredstorage
+worker:
+  args:
+    - /opt/ml/model
+    - --max-model-len
+    - "20000"
+    # Note: NO --enable-prefix-caching flag
+```
+
+### Solution
+
+**`backend/inference/hyperpod_inference.py`**:
+
+1. **Set `prefetchEnabled: false`** in modelSourceConfig:
+```python
+model_source_config = {
+    "modelSourceType": "s3",
+    "s3Storage": {
+        "bucketName": s3_bucket,
+        "region": region
+    },
+    "modelLocation": model_location,
+    # prefetchEnabled must be False when L2 cache is enabled to avoid lmcache-config volume issue
+    "prefetchEnabled": False
+}
+```
+
+2. **Remove `--enable-prefix-caching`** from vLLM args:
+```python
+# Note: --enable-prefix-caching is NOT needed for vLLM on HyperPod
+# The kvCacheSpec handles prefix caching automatically via the operator
+# if enable_prefix_caching:
+#     args.append("--enable-prefix-caching")  # REMOVED
+```
+
+### Why This Works
+- `prefetchEnabled` controls model pre-fetching to RAM before loading to GPU. When `true` with L2 cache, it conflicts with the operator's cache management.
+- `--enable-prefix-caching` is a vLLM CLI flag for prefix caching. On HyperPod, the operator handles this via `kvCacheSpec`, so passing it explicitly causes conflicts.
+
+### Frontend Update
+**`src/pages/endpoints/create-ed.tsx`**: Re-enabled L2 Cache toggle (was disabled due to this bug):
+
+```typescript
+<Toggle
+  readOnly={readOnly}
+  disabled={data.engine === 'sglang'}  // L2 cache only works with vLLM
+  checked={enableL2}
+  onChange={({ detail }) => {
+    setEnableL2(detail.checked);
+    setData((pre: any) => ({
+      ...pre,
+      hyperpod_config: { ...pre.hyperpod_config, enable_l2_cache: detail.checked }
+    }))
+  }}
+>
+  {t("enable_l2_cache")} {data.engine === 'sglang' ? '(vLLM only)' : ''}
+</Toggle>
+```
+
+### Verification
+After the fix, deployment with L2 cache succeeds:
+```bash
+# Check pod is running
+KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl get pods -A | grep <endpoint-name>
+
+# Should show 3/3 Running (model + sidecar + otel) plus router 2/2 Running
+```
+
+### Key Learnings
+1. When using `kvCacheSpec` for L2 cache, let the operator handle prefix caching configuration
+2. `prefetchEnabled` should be `false` when L2 cache is enabled
+3. Do NOT add `--enable-prefix-caching` to vLLM args on HyperPod - operator manages this
+
+### Last Updated
+- **Fixed**: 2026-01-12
+- **Root Cause**: `prefetchEnabled: true` + `--enable-prefix-caching` flag conflict with operator's L2 cache management
+
+
+## 18. L2 Cache Shared Memory Initialization Failure (tieredstorage backend)
+
+**Status: ⚠️ UNFIXED - Needs Further Investigation**
+
+### Issue
+When L2 Cache is enabled with `tieredstorage` backend, LMCache fails to initialize shared memory and logs repeated errors:
+```
+[LMCache ERROR] Failed to initialize shared memory: [Errno 22] Invalid argument: '/ai_toolkit_cache'
+[LMCache ERROR] Failed to initialize SageMaker HyperPod connector: [Errno 22] Invalid argument: '/ai_toolkit_cache'
+[LMCache WARNING] Failed to initialize/re-establish remote connection: SageMaker HyperPod connector initialization failed
+```
+
+The error repeats every 30 seconds as LMCache retries the connection.
+
+### Impact
+- ⚠️ L2 remote cache (tieredstorage) does NOT work
+- ✅ L1 local CPU cache still works
+- ✅ Inference service works normally (falls back to no remote cache)
+- ✅ Endpoint is functional, just without L2 cache optimization
+
+### Observed Configuration
+Both endpoints with L2 cache enabled show the same error:
+
+**InferenceEndpointConfig:**
 ```yaml
 kvCacheSpec:
   enableL1Cache: true
@@ -952,76 +1082,70 @@ kvCacheSpec:
     l2CacheBackend: tieredstorage
 ```
 
-The operator adds a volume mount for `lmcache-config` to the model container:
-```yaml
-volumeMounts:
-- name: lmcache-config    # <-- Referenced here
-  mountPath: /etc/lmcache
+**LMCache config (from logs):**
+```python
+{
+  'remote_url': 'sagemaker-hyperpod://10.0.11.177:9200',
+  'extra_config': {'sagemaker_hyperpod_shared_memory_name': 'ai_toolkit_cache'}
+}
 ```
 
-But the operator **never defines the corresponding volume** in the pod spec:
+### Pod Volume Configuration
 ```yaml
 volumes:
-- name: model-weights
-  ...
-- name: sidecar-config
-  ...
-# lmcache-config volume is MISSING!
+- hostPath:
+    path: /dev/shm
+  name: host-shm
+
+volumeMounts:
+- mountPath: /dev/shm/ai_toolkit_cache
+  name: host-shm
+  subPath: ai_toolkit_cache
 ```
 
-Kubernetes validation fails because the volume mount references a non-existent volume.
+### Analysis
+LMCache expects a **POSIX shared memory segment** at `/ai_toolkit_cache`, but:
+1. The pod mounts a **directory** at `/dev/shm/ai_toolkit_cache` via hostPath
+2. This is NOT the same as a POSIX shm object accessible via `shm_open("/ai_toolkit_cache")`
+3. The `[Errno 22] Invalid argument` suggests the shm segment doesn't exist or can't be created
 
-### Solution
+### Possible Root Causes
+1. **Missing shared memory segment on host**: The HyperPod node may need pre-configured POSIX shared memory
+2. **Operator bug**: The operator mounts a directory but LMCache expects a shm object
+3. **Permission issue**: Container may lack permissions to create POSIX shared memory
+4. **Cluster configuration**: tieredstorage backend may require additional cluster-level setup
 
-**Immediate Workaround**: Disable KV cache by patching the InferenceEndpointConfig CRD:
+### Verification Commands
 ```bash
-KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl patch inferenceendpointconfig <endpoint-name> \
-  --type='merge' -p='{"spec":{"kvCacheSpec":{"enableL1Cache":false,"enableL2Cache":false}}}'
+# Check LMCache errors
+KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl logs <pod-name> -c <container-name> | grep -i "lmcache.*error\|shared memory"
+
+# Check pod volume mounts
+KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl get pod <pod-name> -o jsonpath='{.spec.containers[0].volumeMounts}' | jq .
+
+# Check if shm exists on host (requires node access)
+ls -la /dev/shm/
 ```
 
-The operator will detect the change and successfully create the deployment without the problematic volume mount.
+### Workaround
+None currently. The endpoint works without L2 cache optimization. To disable L2 cache and avoid the error logs:
 
-**Permanent Fix**: This requires an update to the HyperPod Inference Operator from AWS. The operator needs to:
-1. Define the `lmcache-config` ConfigMap with the appropriate LMCache configuration
-2. Add the corresponding volume definition to the pod spec
-
-### Prevention
-Until AWS fixes the operator, disable KV cache in the deployment code:
-
-**`backend/inference/hyperpod_inference.py`** or **`backend/inference/hyperpod_deployment.py`**:
-```python
-# Temporarily disable KV cache due to operator bug (lmcache-config volume not defined)
-# TODO: Re-enable when AWS fixes the HyperPod Inference Operator
-if enable_kv_cache:
-    logger.warning("KV cache is temporarily disabled due to HyperPod operator bug (lmcache-config volume mount error)")
-    enable_kv_cache = False
+```yaml
+kvCacheSpec:
+  enableL1Cache: true
+  enableL2Cache: false  # Disable L2 cache
 ```
 
-Or in the CRD spec generation:
-```python
-# Don't add kvCacheSpec until operator bug is fixed
-# kv_cache_spec = {
-#     "enableL1Cache": True,
-#     "enableL2Cache": True,
-#     ...
-# }
-```
+### Next Steps
+1. Investigate HyperPod node configuration for POSIX shared memory
+2. Check if tieredstorage backend requires additional cluster setup
+3. Contact AWS support for guidance on L2 cache configuration
+4. Consider testing alternative l2CacheBackend options (redis, etc.)
 
-### Verification
-After disabling KV cache, verify the deployment is created:
-```bash
-# Check deployment exists
-KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl get deployment -n default | grep <endpoint-name>
+### Affected Endpoints
+- All endpoints with `enableL2Cache: true` and `l2CacheBackend: tieredstorage`
+- Tested on cluster: modelhub16-eks
 
-# Check pod is running
-KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl get pods -n default | grep <endpoint-name>
-
-# Should show 3/3 Running (model + sidecar + otel)
-```
-
-### Affected Configurations
-This bug affects any deployment with:
-- `enableL1Cache: true` OR
-- `enableL2Cache: true`
-
-Regardless of the `l2CacheBackend` setting (tieredstorage, redis, etc.).
+### Last Updated
+- **Reported**: 2026-01-12
+- **Status**: Needs further investigation - cluster infrastructure issue

@@ -115,6 +115,7 @@ const AlbUrlCell = ({ url }) => {
         position="top"
         size="small"
         triggerType="custom"
+        visible={copyStatus !== null}
         content={
           <StatusIndicator type={copyStatus === 'success' ? 'success' : 'error'}>
             {copyStatus === 'success' ? 'URL copied' : 'Failed to copy'}
@@ -151,6 +152,7 @@ const ApiKeyCell = ({ apiKey }) => {
         position="top"
         size="small"
         triggerType="custom"
+        visible={copyStatus !== null}
         content={
           <StatusIndicator type={copyStatus === 'success' ? 'success' : 'error'}>
             {copyStatus === 'success' ? 'API key copied' : 'Failed to copy'}
@@ -165,11 +167,6 @@ const ApiKeyCell = ({ apiKey }) => {
           onClick={handleCopy}
         />
       </Popover>
-      {copyStatus && (
-        <span style={{ marginLeft: '4px', fontSize: '12px', color: copyStatus === 'success' ? '#037f0c' : '#d91515' }}>
-          {copyStatus === 'success' ? '✓' : '✗'}
-        </span>
-      )}
     </Box>
   );
 };
