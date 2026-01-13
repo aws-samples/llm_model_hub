@@ -4,9 +4,11 @@ import os
 import sagemaker
 import utils.llamafactory.extras.constants as extras
 import pickle
-
+import logging
+logger = logging.getLogger()
 dotenv.load_dotenv()
-print(os.environ)
+
+logger.info(os.environ)
 QLORA_BASE_CONFIG = './docker/LLaMA-Factory/examples/train_qlora/llama3_lora_sft_awq.yaml'
 LORA_BASE_CONFIG = './docker/LLaMA-Factory/examples/train_lora/qwen3_lora_sft.yaml'
 FULL_BASE_CONFIG = './docker/LLaMA-Factory/examples/train_full/qwen3_full_sft.yaml'
@@ -87,10 +89,12 @@ DEFAULT_IMAGES = {
 
 # check
 if not VLLM_IMAGE:
-    raise('vllm_image is not set in .env file')
+    # raise('vllm_image is not set in .env file')
+    logger.error('vllm_image is not set in .env file, please build the image and set in .env')
 
 if not SGLANG_IMAGE:
-    raise('sglang_image is not set in .env file')
+    # raise('sglang_image is not set in .env file')
+    logger.error('sglang_image is not set in .env file, please build the image and set in .env')
 
 # if not MODEL_ARTIFACT:
 #     raise('model_artifact is not set in .env file')
