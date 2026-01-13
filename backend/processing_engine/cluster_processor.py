@@ -22,7 +22,7 @@ from logger_config import setup_logger
 from utils.config import DEFAULT_REGION
 import json
 
-logger = setup_logger('cluster_processor.py', log_file='cluster_processor.log')
+logger = setup_logger('cluster_processor.py', )
 database = DatabaseWrapper()
 
 # Default lifecycle scripts folder path (relative to backend directory)

@@ -46,7 +46,7 @@ from utils.llamafactory.extras.constants import DownloadSource
 
 dotenv.load_dotenv()
 
-logger = setup_logger('server.py', log_file='server.log', level=logging.INFO)
+logger = setup_logger('server.py', level=logging.INFO)
 api_keys = os.environ['api_keys'].split(',')
 print(api_keys)
 class AppSettings(BaseModel):

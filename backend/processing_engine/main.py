@@ -20,7 +20,7 @@ from db_management.database import DatabaseWrapper
 import threading
 from logger_config import setup_logger
 from training.jobs import get_job_status
-logger = setup_logger('main.py', log_file='processing_engine.log', level=logging.INFO)
+logger = setup_logger('main.py', level=logging.INFO)
 
 database = DatabaseWrapper()
 

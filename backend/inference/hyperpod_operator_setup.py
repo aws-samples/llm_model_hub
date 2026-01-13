@@ -15,17 +15,8 @@ import json
 import time
 from typing import Optional, Tuple
 
-# Setup logging to both console and file
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Add file handler for operator setup logs
-log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
-os.makedirs(log_dir, exist_ok=True)
-file_handler = logging.FileHandler(os.path.join(log_dir, 'hyperpod_operator_setup.log'))
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-logger.addHandler(file_handler)
+from logger_config import setup_logger
+logger = setup_logger('hyperpod_operator_setup.py', level=logging.INFO)
 
 
 def check_inference_operator_installed(eks_cluster_name: str, region: str) -> Tuple[bool, str]:

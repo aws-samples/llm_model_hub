@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from dotenv import load_dotenv
 from utils.config import DEFAULT_IMAGES
 from logger_config import setup_logger
-logger = setup_logger('hyperpod_inference.py', log_file='hyperpod_inference.log', level=logging.INFO)
+logger = setup_logger('hyperpod_inference.py', level=logging.INFO)
 
 # Import resource utilities
 from inference.utils import (

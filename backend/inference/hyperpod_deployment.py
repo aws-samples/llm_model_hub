@@ -23,7 +23,7 @@ from utils.config import DEFAULT_REGION, default_bucket
 
 # Initialize database and logger
 database = DatabaseWrapper()
-logger = setup_logger('hyperpod_deployment.py', log_file='deployment.log', level=logging.INFO)
+logger = setup_logger('hyperpod_deployment.py', level=logging.INFO)
 
 
 def _get_hf_download_and_upload_model():

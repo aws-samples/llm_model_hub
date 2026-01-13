@@ -10,7 +10,7 @@ else:
 
 from logger_config import setup_logger
 import logging
-logger = setup_logger('serving.py', log_file='deployment.log', level=logging.INFO)
+logger = setup_logger('model_utils.py', level=logging.INFO)
 
 def _get_init_kwargs(model_args) -> Dict[str, Any]:
     r"""

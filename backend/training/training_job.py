@@ -22,7 +22,7 @@ LORA_BASE_CONFIG,DEEPSPEED_BASE_CONFIG_MAP,FULL_BASE_CONFIG,DEFAULT_REGION,WANDB
 
 dotenv.load_dotenv()
 
-logger = setup_logger('training_job.py', log_file='processing_engine.log', level=logging.INFO)
+logger = setup_logger('training_job.py',level=logging.INFO)
 
 
 def check_syntax_with_ast(code_str):

@@ -13,7 +13,7 @@ import os
 import time
 import uuid
 from logger_config import setup_logger
-logger = setup_logger('serving.py', log_file='deployment.log', level=logging.INFO)
+logger = setup_logger('serving.py', level=logging.INFO)
 
 #to do, need to remove item once endpoint is deleted
 predictor_pool = {}

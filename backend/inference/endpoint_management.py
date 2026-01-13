@@ -23,7 +23,7 @@ from logger_config import setup_logger
 import threading
 import concurrent.futures
 database = DatabaseWrapper()
-logger = setup_logger('endpoint_management.py', log_file='deployment.log', level=logging.INFO)
+logger = setup_logger('endpoint_management.py', level=logging.INFO)
 DEFAULT_CACHE_DIR = "./cache"  # 默认缓存目录
 CACHE_EXPIRY_DAYS = 30  # 缓存有效期(天)
 

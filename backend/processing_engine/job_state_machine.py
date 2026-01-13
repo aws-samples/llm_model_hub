@@ -15,7 +15,7 @@ from training.training_job import TrainingJobExcutor
 from datetime import datetime
 logger = logging.getLogger()
 
-logger = setup_logger('job_state_machine.py', log_file='processing_engine.log', level=logging.INFO)
+logger = setup_logger('job_state_machine.py', level=logging.INFO)
 
 dummy_datasetinfo = {'ruozhiba':{
                         'file_name':'ruozhiba.json',
