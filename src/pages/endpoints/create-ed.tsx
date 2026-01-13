@@ -121,6 +121,7 @@ const defaultData = {
   hyperpod_cluster_id: undefined,
   availableInstanceTypes: [] as string[],  // Available instance types from selected HyperPod cluster (for backward compatibility)
   instanceTypeDetails: [] as Array<{ instance_type: string; instance_groups: string[] }>,  // Detailed instance type info with instance groups
+  clusterTieredStorageEnabled: false,  // Whether the selected cluster has tiered storage enabled
   hyperpod_config: {
     replicas: 1,
     namespace: 'default',
@@ -130,6 +131,7 @@ const defaultData = {
     enable_kv_cache: false,
     enable_l2_cache: false,  // L2 cache for distributed KV caching (vLLM only)
     kv_cache_backend: 'tieredstorage',
+    l2_cache_url: '',  // L2 cache local URL (e.g., redis://redis.default.svc.cluster.local:6379)
     enable_intelligent_routing: false,
     routing_strategy: 'prefixaware',
     use_public_alb: false,
@@ -572,6 +574,13 @@ const SelectHyperPodCluster = ({ data, setData, readOnly }: ClusterSelectorProps
     setLoadingInstanceTypes(false);
   };
 
+  // Extract tiered storage status from cluster config
+  const getClusterTieredStorageEnabled = (cluster: any): boolean => {
+    const clusterConfig = cluster?.cluster_config || {};
+    const hyperpodConfig = clusterConfig?.hyperpod_config || {};
+    return hyperpodConfig?.enable_tiered_storage === true;
+  };
+
   useEffect(() => {
     if (data.deployment_target === 'hyperpod') {
       handleLoadClusters();
@@ -588,7 +597,14 @@ const SelectHyperPodCluster = ({ data, setData, readOnly }: ClusterSelectorProps
       onChange={({ detail }) => {
         setSelectOption(detail.selectedOption);
         const clusterId = detail.selectedOption?.value;
-        setData((pre: any) => ({ ...pre, hyperpod_cluster_id: clusterId }));
+        // Find the selected cluster to get its tiered storage status
+        const selectedCluster = clusters.find((c: any) => c.cluster_id === clusterId);
+        const tieredStorageEnabled = selectedCluster ? getClusterTieredStorageEnabled(selectedCluster) : false;
+        setData((pre: any) => ({
+          ...pre,
+          hyperpod_cluster_id: clusterId,
+          clusterTieredStorageEnabled: tieredStorageEnabled
+        }));
         // Fetch available instance types for this cluster
         if (clusterId) {
           handleLoadInstanceTypes(clusterId);
@@ -702,6 +718,7 @@ const SetHyperPodKVCache = ({ data, setData, readOnly }: SelectQuantTypeProps) =
   const [enabled, setEnabled] = useState<boolean>(false);
   const [enableL2, setEnableL2] = useState<boolean>(false);
   const [backend, setBackend] = useState<SelectProps.Option | null>(KV_CACHE_BACKENDS[0]);
+  const [l2CacheUrl, setL2CacheUrl] = useState<string>('');
 
   // Auto-disable L2 cache when engine is SGLang (L2 cache only works with vLLM)
   // Note: This useEffect is kept for when the operator bug is fixed and L2 cache is re-enabled
@@ -714,6 +731,11 @@ const SetHyperPodKVCache = ({ data, setData, readOnly }: SelectQuantTypeProps) =
       }));
     }
   }, [data.engine]);
+
+  // Check if tieredstorage backend is selected but cluster doesn't have tiered storage enabled
+  const showTieredStorageWarning = enableL2 &&
+    backend?.value === 'tieredstorage' &&
+    !data.clusterTieredStorageEnabled;
 
   return (
     <SpaceBetween size="s">
@@ -747,21 +769,45 @@ const SetHyperPodKVCache = ({ data, setData, readOnly }: SelectQuantTypeProps) =
             {t("enable_l2_cache")} {data.engine === 'sglang' ? '(vLLM only)' : ''}
           </Toggle>
           {enableL2 && (
-            <FormField label={t("kv_cache_backend")}>
-              <Select
-                disabled={readOnly}
-                selectedOption={backend}
-                onChange={({ detail }) => {
-                  setBackend(detail.selectedOption);
-                  setData((pre: any) => ({
-                    ...pre,
-                    hyperpod_config: { ...pre.hyperpod_config, kv_cache_backend: detail.selectedOption?.value || 'tieredstorage' }
-                  }))
-                }}
-                options={KV_CACHE_BACKENDS}
-                selectedAriaLabel="Selected"
-              />
-            </FormField>
+            <SpaceBetween size="s">
+              <FormField label={t("kv_cache_backend")}>
+                <Select
+                  disabled={readOnly}
+                  selectedOption={backend}
+                  onChange={({ detail }) => {
+                    setBackend(detail.selectedOption);
+                    setData((pre: any) => ({
+                      ...pre,
+                      hyperpod_config: { ...pre.hyperpod_config, kv_cache_backend: detail.selectedOption?.value || 'tieredstorage' }
+                    }))
+                  }}
+                  options={KV_CACHE_BACKENDS}
+                  selectedAriaLabel="Selected"
+                />
+              </FormField>
+              {showTieredStorageWarning && (
+                <Alert type="warning">
+                  {t("cluster_tiered_storage_required")}
+                </Alert>
+              )}
+              <FormField
+                label={t("l2_cache_url")}
+                description={t("l2_cache_url_desc")}
+              >
+                <Input
+                  readOnly={readOnly}
+                  value={l2CacheUrl}
+                  placeholder="redis://redis.default.svc.cluster.local:6379"
+                  onChange={({ detail }) => {
+                    setL2CacheUrl(detail.value);
+                    setData((pre: any) => ({
+                      ...pre,
+                      hyperpod_config: { ...pre.hyperpod_config, l2_cache_url: detail.value }
+                    }))
+                  }}
+                />
+              </FormField>
+            </SpaceBetween>
           )}
         </SpaceBetween>
       )}

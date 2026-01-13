@@ -46,46 +46,46 @@ GPU_MAPPING = {
 }
 
 # Instance type resource mapping (cpu, memory in Gi)
-# Values set to ~80% of instance capacity to leave room for system processes
+# Values set to 50% of instance capacity to leave room for system processes
 INSTANCE_RESOURCES = {
     # G5 instances (NVIDIA A10G GPU)
-    "ml.g5.xlarge": {"cpu": "3", "memory": "12Gi"},       # 4 vCPU, 16 GB
-    "ml.g5.2xlarge": {"cpu": "6", "memory": "24Gi"},      # 8 vCPU, 32 GB
-    "ml.g5.4xlarge": {"cpu": "12", "memory": "48Gi"},     # 16 vCPU, 64 GB
-    "ml.g5.8xlarge": {"cpu": "24", "memory": "96Gi"},     # 32 vCPU, 128 GB
-    "ml.g5.12xlarge": {"cpu": "36", "memory": "144Gi"},   # 48 vCPU, 192 GB
-    "ml.g5.16xlarge": {"cpu": "48", "memory": "192Gi"},   # 64 vCPU, 256 GB
-    "ml.g5.24xlarge": {"cpu": "72", "memory": "288Gi"},   # 96 vCPU, 384 GB
-    "ml.g5.48xlarge": {"cpu": "144", "memory": "576Gi"},  # 192 vCPU, 768 GB
+    "ml.g5.xlarge": {"cpu": "2", "memory": "8Gi"},        # 4 vCPU, 16 GB
+    "ml.g5.2xlarge": {"cpu": "4", "memory": "16Gi"},      # 8 vCPU, 32 GB
+    "ml.g5.4xlarge": {"cpu": "8", "memory": "32Gi"},      # 16 vCPU, 64 GB
+    "ml.g5.8xlarge": {"cpu": "16", "memory": "64Gi"},     # 32 vCPU, 128 GB
+    "ml.g5.12xlarge": {"cpu": "24", "memory": "96Gi"},    # 48 vCPU, 192 GB
+    "ml.g5.16xlarge": {"cpu": "32", "memory": "128Gi"},   # 64 vCPU, 256 GB
+    "ml.g5.24xlarge": {"cpu": "48", "memory": "192Gi"},   # 96 vCPU, 384 GB
+    "ml.g5.48xlarge": {"cpu": "96", "memory": "384Gi"},   # 192 vCPU, 768 GB
     # G6 instances (NVIDIA L4 GPU)
-    "ml.g6.xlarge": {"cpu": "3", "memory": "12Gi"},       # 4 vCPU, 16 GB
-    "ml.g6.2xlarge": {"cpu": "6", "memory": "24Gi"},      # 8 vCPU, 32 GB
-    "ml.g6.4xlarge": {"cpu": "12", "memory": "48Gi"},     # 16 vCPU, 64 GB
-    "ml.g6.8xlarge": {"cpu": "24", "memory": "96Gi"},     # 32 vCPU, 128 GB
-    "ml.g6.12xlarge": {"cpu": "36", "memory": "144Gi"},   # 48 vCPU, 192 GB
-    "ml.g6.16xlarge": {"cpu": "48", "memory": "192Gi"},   # 64 vCPU, 256 GB
-    "ml.g6.24xlarge": {"cpu": "72", "memory": "288Gi"},   # 96 vCPU, 384 GB
-    "ml.g6.48xlarge": {"cpu": "144", "memory": "576Gi"},  # 192 vCPU, 768 GB
+    "ml.g6.xlarge": {"cpu": "2", "memory": "8Gi"},        # 4 vCPU, 16 GB
+    "ml.g6.2xlarge": {"cpu": "4", "memory": "16Gi"},      # 8 vCPU, 32 GB
+    "ml.g6.4xlarge": {"cpu": "8", "memory": "32Gi"},      # 16 vCPU, 64 GB
+    "ml.g6.8xlarge": {"cpu": "16", "memory": "64Gi"},     # 32 vCPU, 128 GB
+    "ml.g6.12xlarge": {"cpu": "24", "memory": "96Gi"},    # 48 vCPU, 192 GB
+    "ml.g6.16xlarge": {"cpu": "32", "memory": "128Gi"},   # 64 vCPU, 256 GB
+    "ml.g6.24xlarge": {"cpu": "48", "memory": "192Gi"},   # 96 vCPU, 384 GB
+    "ml.g6.48xlarge": {"cpu": "96", "memory": "384Gi"},   # 192 vCPU, 768 GB
     # G6e instances (NVIDIA L40s GPU)
-    "ml.g6e.xlarge": {"cpu": "3", "memory": "12Gi"},       # 4 vCPU, 16 GB
-    "ml.g6e.2xlarge": {"cpu": "6", "memory": "24Gi"},      # 8 vCPU, 32 GB
-    "ml.g6e.4xlarge": {"cpu": "12", "memory": "48Gi"},     # 16 vCPU, 64 GB
-    "ml.g6e.8xlarge": {"cpu": "24", "memory": "96Gi"},     # 32 vCPU, 128 GB
-    "ml.g6e.12xlarge": {"cpu": "36", "memory": "144Gi"},   # 48 vCPU, 192 GB
-    "ml.g6e.16xlarge": {"cpu": "48", "memory": "192Gi"},   # 64 vCPU, 256 GB
-    "ml.g6e.24xlarge": {"cpu": "72", "memory": "288Gi"},   # 96 vCPU, 384 GB
-    "ml.g6e.48xlarge": {"cpu": "144", "memory": "576Gi"},  # 192 vCPU, 768 GB
+    "ml.g6e.xlarge": {"cpu": "2", "memory": "8Gi"},       # 4 vCPU, 16 GB
+    "ml.g6e.2xlarge": {"cpu": "4", "memory": "16Gi"},     # 8 vCPU, 32 GB
+    "ml.g6e.4xlarge": {"cpu": "8", "memory": "32Gi"},     # 16 vCPU, 64 GB
+    "ml.g6e.8xlarge": {"cpu": "16", "memory": "64Gi"},    # 32 vCPU, 128 GB
+    "ml.g6e.12xlarge": {"cpu": "24", "memory": "96Gi"},   # 48 vCPU, 192 GB
+    "ml.g6e.16xlarge": {"cpu": "32", "memory": "128Gi"},  # 64 vCPU, 256 GB
+    "ml.g6e.24xlarge": {"cpu": "48", "memory": "192Gi"},  # 96 vCPU, 384 GB
+    "ml.g6e.48xlarge": {"cpu": "96", "memory": "384Gi"},  # 192 vCPU, 768 GB
     # P4d instances (NVIDIA A100 40GB GPU)
-    "ml.p4d.24xlarge": {"cpu": "72", "memory": "864Gi"},  # 96 vCPU, 1152 GB
-    "ml.p4de.24xlarge": {"cpu": "72", "memory": "864Gi"}, # 96 vCPU, 1152 GB
+    "ml.p4d.24xlarge": {"cpu": "48", "memory": "576Gi"},  # 96 vCPU, 1152 GB
+    "ml.p4de.24xlarge": {"cpu": "48", "memory": "576Gi"}, # 96 vCPU, 1152 GB
     # P5 instances (NVIDIA H100 GPU)
-    "ml.p5.48xlarge": {"cpu": "144", "memory": "1536Gi"}, # 192 vCPU, 2048 GB
-    "ml.p5e.48xlarge": {"cpu": "144", "memory": "1536Gi"},# 192 vCPU, 2048 GB
-    "ml.p5en.48xlarge": {"cpu": "144", "memory": "1536Gi"},# 192 vCPU, 2048 GB
+    "ml.p5.48xlarge": {"cpu": "96", "memory": "1024Gi"},  # 192 vCPU, 2048 GB
+    "ml.p5e.48xlarge": {"cpu": "96", "memory": "1024Gi"}, # 192 vCPU, 2048 GB
+    "ml.p5en.48xlarge": {"cpu": "96", "memory": "1024Gi"},# 192 vCPU, 2048 GB
 }
 
 # Default resources for unknown instance types (conservative values)
-DEFAULT_RESOURCES = {"cpu": "4", "memory": "16Gi"}
+DEFAULT_RESOURCES = {"cpu": "8", "memory": "32Gi"}
 
 
 def get_gpu_count(instance_type: str) -> int:

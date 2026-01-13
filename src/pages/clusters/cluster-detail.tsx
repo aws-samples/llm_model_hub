@@ -27,6 +27,7 @@ import { TopNav } from '../commons/top-nav';
 import { getCluster, updateClusterInstanceGroups, listClusterNodes } from './hooks';
 import { useSimpleNotifications } from '../commons/use-notifications';
 import { useTranslation } from 'react-i18next';
+import {instanceTypeOptions} from './create-cluster';
 
 const statusTypeMap: Record<string, 'pending' | 'in-progress' | 'success' | 'error' | 'stopped'> = {
   PENDING: 'pending',
@@ -90,27 +91,29 @@ interface ClusterData {
     hyperpod_config?: {
       node_recovery?: string;
       enable_autoscaling?: boolean;
+      enable_tiered_storage?: boolean;
+      tiered_storage_memory_percentage?: number;
     };
     lifecycle_script_s3_uri?: string;
   };
 }
 
-const instanceTypeOptions = [
-  { label: 'ml.c5.large (CPU)', value: 'ml.c5.large' },
-  { label: 'ml.c5.xlarge (CPU)', value: 'ml.c5.xlarge' },
-  { label: 'ml.g5.xlarge (1x A10G)', value: 'ml.g5.xlarge' },
-  { label: 'ml.g5.2xlarge (1x A10G)', value: 'ml.g5.2xlarge' },
-  { label: 'ml.g5.4xlarge (1x A10G)', value: 'ml.g5.4xlarge' },
-  { label: 'ml.g5.8xlarge (1x A10G)', value: 'ml.g5.8xlarge' },
-  { label: 'ml.g5.12xlarge (4x A10G)', value: 'ml.g5.12xlarge' },
-  { label: 'ml.g5.24xlarge (4x A10G)', value: 'ml.g5.24xlarge' },
-  { label: 'ml.g5.48xlarge (8x A10G)', value: 'ml.g5.48xlarge' },
-  { label: 'ml.p4d.24xlarge (8x A100 40GB)', value: 'ml.p4d.24xlarge' },
-  { label: 'ml.p4de.24xlarge (8x A100 80GB)', value: 'ml.p4de.24xlarge' },
-  { label: 'ml.p5.48xlarge (8x H100)', value: 'ml.p5.48xlarge' },
-  { label: 'ml.p5e.48xlarge (8x H200)', value: 'ml.p5e.48xlarge' },
-  { label: 'ml.p5en.48xlarge (8x H200)', value: 'ml.p5en.48xlarge' },
-];
+// const instanceTypeOptions = [
+//   { label: 'ml.c5.large (CPU)', value: 'ml.c5.large' },
+//   { label: 'ml.c5.xlarge (CPU)', value: 'ml.c5.xlarge' },
+//   { label: 'ml.g5.xlarge (1x A10G)', value: 'ml.g5.xlarge' },
+//   { label: 'ml.g5.2xlarge (1x A10G)', value: 'ml.g5.2xlarge' },
+//   { label: 'ml.g5.4xlarge (1x A10G)', value: 'ml.g5.4xlarge' },
+//   { label: 'ml.g5.8xlarge (1x A10G)', value: 'ml.g5.8xlarge' },
+//   { label: 'ml.g5.12xlarge (4x A10G)', value: 'ml.g5.12xlarge' },
+//   { label: 'ml.g5.24xlarge (4x A10G)', value: 'ml.g5.24xlarge' },
+//   { label: 'ml.g5.48xlarge (8x A10G)', value: 'ml.g5.48xlarge' },
+//   { label: 'ml.p4d.24xlarge (8x A100 40GB)', value: 'ml.p4d.24xlarge' },
+//   { label: 'ml.p4de.24xlarge (8x A100 80GB)', value: 'ml.p4de.24xlarge' },
+//   { label: 'ml.p5.48xlarge (8x H100)', value: 'ml.p5.48xlarge' },
+//   { label: 'ml.p5e.48xlarge (8x H200)', value: 'ml.p5e.48xlarge' },
+//   { label: 'ml.p5en.48xlarge (8x H200)', value: 'ml.p5en.48xlarge' },
+// ];
 
 const emptyInstanceGroup: InstanceGroup = {
   name: '',
@@ -491,6 +494,18 @@ function ClusterDetailContent() {
                       <div>
                         <Box variant="awsui-key-label">{t('node_recovery')}</Box>
                         <div>{hyperpodConfig.node_recovery || t('automatic')}</div>
+                      </div>
+                      <div>
+                        <Box variant="awsui-key-label">{t('enable_tiered_storage')}</Box>
+                        <div>
+                          {hyperpodConfig.enable_tiered_storage ? (
+                            <StatusIndicator type="success">
+                              {t('enable')} ({hyperpodConfig.tiered_storage_memory_percentage || 20}%)
+                            </StatusIndicator>
+                          ) : (
+                            <StatusIndicator type="stopped">{t('false')}</StatusIndicator>
+                          )}
+                        </div>
                       </div>
                     </SpaceBetween>
                     <SpaceBetween size="l">

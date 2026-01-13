@@ -1224,7 +1224,9 @@ def process_cluster_creation(cluster_id: str):
             lifecycle_script_s3_uri=lifecycle_script_s3_uri,
             node_recovery=hyperpod_config.get('node_recovery', 'Automatic'),
             node_provisioning_mode=hyperpod_config.get('node_provisioning_mode', 'Continuous'),
-            enable_autoscaling=hyperpod_config.get('enable_autoscaling', False)
+            enable_autoscaling=hyperpod_config.get('enable_autoscaling', False),
+            enable_tiered_storage=hyperpod_config.get('enable_tiered_storage', False),
+            tiered_storage_memory_percentage=hyperpod_config.get('tiered_storage_memory_percentage', 20)
         )
         created_resources['hyperpod_cluster'] = True
 
@@ -1640,12 +1642,20 @@ def process_hyperpod_endpoint_status(endpoint_name: str, cluster_id: str, extra_
             except Exception as e:
                 logger.warning(f"Failed to get ALB URL for {endpoint_name}: {e}")
 
-            # If public ALB is requested but current ALB is internal, wait for public ALB
-            if use_public_alb and alb_url and 'internal' in alb_url.lower():
-                logger.info(f"HyperPod endpoint {endpoint_name} is InService but waiting for public ALB "
-                           f"(current ALB is internal: {alb_url})")
-                # Don't update status to INSERVICE yet, will check again next loop
-                return
+            # If public ALB is requested, wait until public ALB is ready
+            if use_public_alb:
+                if not alb_url:
+                    # ALB not provisioned yet, wait
+                    logger.info(f"HyperPod endpoint {endpoint_name} is InService but waiting for public ALB "
+                               f"(ALB not provisioned yet)")
+                    # Don't update status to INSERVICE yet, will check again next loop
+                    return
+                elif 'internal' in alb_url.lower():
+                    # ALB is still internal, wait for public ALB
+                    logger.info(f"HyperPod endpoint {endpoint_name} is InService but waiting for public ALB "
+                               f"(current ALB is internal: {alb_url})")
+                    # Don't update status to INSERVICE yet, will check again next loop
+                    return
 
             database.update_endpoint_status(
                 endpoint_name=endpoint_name,

@@ -322,6 +322,9 @@ class HyperPodConfigModel(BaseModel):
     node_provisioning_mode: str = "Continuous"  # "Continuous" or "OnDemand"
     enable_deep_health_checks: bool = True
     enable_autoscaling: bool = False
+    # Tiered Storage for L2 KV Cache (requires AWS managed daemon on nodes)
+    enable_tiered_storage: bool = False
+    tiered_storage_memory_percentage: int = 20  # 20-100, percentage of instance memory for tiered storage
 
 class CreateClusterRequest(BaseModel):
     """Request to create HyperPod EKS cluster"""

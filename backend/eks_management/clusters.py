@@ -344,7 +344,9 @@ class ClusterJobExecutor:
         lifecycle_script_s3_uri: Optional[str] = None,
         node_recovery: str = "Automatic",
         node_provisioning_mode: str = "Continuous",
-        enable_autoscaling: bool = False
+        enable_autoscaling: bool = False,
+        enable_tiered_storage: bool = False,
+        tiered_storage_memory_percentage: int = 20
     ) -> Dict[str, Any]:
         """Create HyperPod cluster."""
         logger.info(f"Creating HyperPod cluster: {cluster_name}")
@@ -427,6 +429,14 @@ class ClusterJobExecutor:
             'NodeRecovery': node_recovery,
             'NodeProvisioningMode': node_provisioning_mode
         }
+
+        # Add TieredStorageConfig if enabled (for L2 KV Cache with managed daemon)
+        if enable_tiered_storage:
+            cluster_config['TieredStorageConfig'] = {
+                'Mode': 'Enabled',
+                'InstanceMemoryAllocationPercentage': tiered_storage_memory_percentage
+            }
+            logger.info(f"Tiered storage enabled with {tiered_storage_memory_percentage}% memory allocation")
 
         try:
             # First try with AutoScaling if enabled (requires newer boto3)
@@ -529,8 +539,11 @@ class ClusterJobExecutor:
         execution_role_arn: str,
         lifecycle_script_s3_uri: Optional[str] = None,
         node_provisioning_mode: str = "Continuous",
+        node_recovery: Optional[str] = None,
+        enable_tiered_storage: Optional[bool] = None,
+        tiered_storage_memory_percentage: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """Update HyperPod cluster instance groups."""
+        """Update HyperPod cluster instance groups and/or tiered storage config."""
         # Validate: HyperPod clusters require at least 1 instance group
         if not instance_groups or len(instance_groups) == 0:
             raise ValueError("HyperPod clusters require at least 1 instance group. Cannot delete all instance groups.")
@@ -598,10 +611,31 @@ class ClusterJobExecutor:
             instance_groups_config.append(ig_config)
 
         try:
-            response = self.sagemaker.update_cluster(
-                ClusterName=cluster_name,
-                InstanceGroups=instance_groups_config
-            )
+            # Build update params
+            update_params = {
+                'ClusterName': cluster_name,
+                'InstanceGroups': instance_groups_config
+            }
+
+            # Add NodeRecovery if specified
+            if node_recovery:
+                update_params['NodeRecovery'] = node_recovery
+
+            # Add TieredStorageConfig if specified
+            if enable_tiered_storage is not None:
+                if enable_tiered_storage:
+                    update_params['TieredStorageConfig'] = {
+                        'Mode': 'Enabled',
+                        'InstanceMemoryAllocationPercentage': tiered_storage_memory_percentage or 20
+                    }
+                    logger.info(f"Updating tiered storage: enabled with {tiered_storage_memory_percentage or 20}% memory allocation")
+                else:
+                    update_params['TieredStorageConfig'] = {
+                        'Mode': 'Disabled'
+                    }
+                    logger.info("Updating tiered storage: disabled")
+
+            response = self.sagemaker.update_cluster(**update_params)
             logger.info(f"HyperPod cluster update initiated: {cluster_name}")
             return response
         except Exception as e:
@@ -978,12 +1012,21 @@ async def update_cluster(request: UpdateClusterRequest) -> CommonResponse:
             # Convert instance groups to dict format
             instance_groups_dict = [ig.dict() for ig in request.instance_groups]
 
+            # Get tiered storage config from hyperpod_config if provided
+            enable_tiered_storage = None
+            tiered_storage_memory_percentage = None
+            if request.hyperpod_config:
+                enable_tiered_storage = request.hyperpod_config.enable_tiered_storage
+                tiered_storage_memory_percentage = request.hyperpod_config.tiered_storage_memory_percentage
+
             # Call AWS API to update cluster
             executor.update_hyperpod_cluster(
                 cluster_name=cluster.cluster_name,
                 instance_groups=instance_groups_dict,
                 execution_role_arn=execution_role_arn,
-                lifecycle_script_s3_uri=lifecycle_script_s3_uri
+                lifecycle_script_s3_uri=lifecycle_script_s3_uri,
+                enable_tiered_storage=enable_tiered_storage,
+                tiered_storage_memory_percentage=tiered_storage_memory_percentage
             )
 
             database.set_cluster_status(request.cluster_id, ClusterStatus.UPDATING)
@@ -1012,6 +1055,68 @@ async def update_cluster(request: UpdateClusterRequest) -> CommonResponse:
     # Just update database config (no AWS API call needed)
     if request.instance_groups is not None and cluster_status_str != ClusterStatus.ACTIVE.value:
         logger.warning(f"Cluster {cluster.cluster_name} is not ACTIVE (status: {cluster_status_str}), skipping AWS API call for instance groups update")
+
+    # Handle case where only tiered storage config is being updated (without instance groups)
+    if request.instance_groups is None and request.hyperpod_config and cluster_status_str == ClusterStatus.ACTIVE.value:
+        # Check if tiered storage is being updated
+        if request.hyperpod_config.enable_tiered_storage is not None:
+            logger.info(f"Updating tiered storage config only for cluster {cluster.cluster_name}")
+            try:
+                executor = ClusterJobExecutor(request.cluster_id)
+
+                # Get execution role ARN
+                hyperpod_role_name = f'{cluster.cluster_name}-hyperpod-role'
+                execution_role_arn = f'arn:aws:iam::{executor.account_id}:role/{hyperpod_role_name}'
+
+                # Get lifecycle script URI
+                lifecycle_script_s3_uri = cluster_config.get('lifecycle_script_s3_uri')
+                if not lifecycle_script_s3_uri:
+                    bucket_name = f'llm-modelhub-hyperpod-{executor.account_id}-{executor.region}'
+                    lifecycle_script_s3_uri = f's3://{bucket_name}/LifecycleScripts/base-config/'
+
+                # Get current instance groups from database (required by AWS API)
+                current_instance_groups = cluster_config.get('instance_groups', [])
+                if not current_instance_groups:
+                    return CommonResponse(
+                        response_id=str(uuid.uuid4()),
+                        response={
+                            'statusCode': 400,
+                            'body': 'Cannot update tiered storage: no instance groups found in cluster config'
+                        }
+                    )
+
+                # Call AWS API with current instance groups and new tiered storage config
+                executor.update_hyperpod_cluster(
+                    cluster_name=cluster.cluster_name,
+                    instance_groups=current_instance_groups,
+                    execution_role_arn=execution_role_arn,
+                    lifecycle_script_s3_uri=lifecycle_script_s3_uri,
+                    enable_tiered_storage=request.hyperpod_config.enable_tiered_storage,
+                    tiered_storage_memory_percentage=request.hyperpod_config.tiered_storage_memory_percentage
+                )
+
+                database.set_cluster_status(request.cluster_id, ClusterStatus.UPDATING)
+
+                return CommonResponse(
+                    response_id=str(uuid.uuid4()),
+                    response={
+                        'statusCode': 200,
+                        'body': {
+                            'cluster_id': request.cluster_id,
+                            'message': 'Cluster tiered storage update initiated'
+                        }
+                    }
+                )
+            except Exception as e:
+                logger.error(f"Failed to update cluster tiered storage: {e}")
+                database.update_cluster_error(request.cluster_id, str(e))
+                return CommonResponse(
+                    response_id=str(uuid.uuid4()),
+                    response={
+                        'statusCode': 500,
+                        'body': f'Failed to update cluster tiered storage: {str(e)}'
+                    }
+                )
 
     return CommonResponse(
         response_id=str(uuid.uuid4()),

@@ -26,7 +26,7 @@ import { useSimpleNotifications } from '../commons/use-notifications';
 import SpotPriceInfo from '../commons/spot-price-info';
 import { useTranslation } from 'react-i18next';
 
-const instanceTypeOptions = [
+export const instanceTypeOptions = [
   { label: 'ml.c5.large (CPU)', value: 'ml.c5.large' },
   { label: 'ml.c5.xlarge (CPU)', value: 'ml.c5.xlarge' },
   { label: 'ml.g5.4xlarge (1x A10G)', value: 'ml.g5.4xlarge' },
@@ -34,6 +34,16 @@ const instanceTypeOptions = [
   { label: 'ml.g5.12xlarge (4x A10G)', value: 'ml.g5.12xlarge' },
   { label: 'ml.g5.24xlarge (4x A10G)', value: 'ml.g5.24xlarge' },
   { label: 'ml.g5.48xlarge (8x A10G)', value: 'ml.g5.48xlarge' },
+  { label: 'ml.g6e.4xlarge (1x L40s 48GB)', value: 'ml.g6e.4xlarge' },
+  { label: 'ml.g6e.8xlarge (1x L40s 48GB)', value: 'ml.g6e.8xlarge' },
+  { label: 'ml.g6e.12xlarge (4x L40s 48GB)', value: 'ml.g6e.12xlarge' },
+  { label: 'ml.g6e.24xlarge (4x L40s 48GB)', value: 'ml.g6e.24xlarge' },
+  { label: 'ml.g6e.48xlarge (8x L40s 48GB)', value: 'ml.g6e.48xlarge' },
+  { label: 'ml.g6.4xlarge (1x L40 24G)', value: 'ml.g6.4xlarge' },
+  { label: 'ml.g6.8xlarge (1x L40 24G)', value: 'ml.g6.8xlarge' },
+  { label: 'ml.g6.12xlarge (4x L40 24G)', value: 'ml.g6.12xlarge' },
+  { label: 'ml.g6.24xlarge (4x L40 24G)', value: 'ml.g6.24xlarge' },
+  { label: 'ml.g6.48xlarge (8x L40 24G)', value: 'ml.g6.48xlarge' },
   { label: 'ml.p4d.24xlarge (8x A100 40GB)', value: 'ml.p4d.24xlarge' },
   { label: 'ml.p4de.24xlarge (8x A100 80GB)', value: 'ml.p4de.24xlarge' },
   { label: 'ml.p5.48xlarge (8x H100)', value: 'ml.p5.48xlarge' },
@@ -97,6 +107,10 @@ function CreateClusterContent() {
   const [lifecycleScriptS3Uri, setLifecycleScriptS3Uri] = useState('');
   const [s3MountBucket, setS3MountBucket] = useState('');
 
+  // Tiered Storage settings (for L2 KV Cache with managed daemon)
+  const [enableTieredStorage, setEnableTieredStorage] = useState(false);
+  const [tieredStorageMemoryPercentage, setTieredStorageMemoryPercentage] = useState(20);
+
   // VPC settings
   const [useExistingVpc, setUseExistingVpc] = useState(false);
   const [vpcId, setVpcId] = useState('');
@@ -142,6 +156,8 @@ function CreateClusterContent() {
       hyperpod_config: {
         node_recovery: nodeRecovery,
         enable_autoscaling: enableAutoscaling,
+        enable_tiered_storage: enableTieredStorage,
+        tiered_storage_memory_percentage: tieredStorageMemoryPercentage,
       },
       lifecycle_script_s3_uri: lifecycleScriptS3Uri || undefined,
       s3_mount_bucket: s3MountBucket || undefined,
@@ -463,6 +479,32 @@ function CreateClusterContent() {
                 placeholder="my-bucket-name (leave empty for SageMaker default bucket)"
               />
             </FormField>
+            <FormField
+              description={t('tiered_storage_desc')}
+            >
+              <Checkbox
+                checked={enableTieredStorage}
+                onChange={({ detail }) => setEnableTieredStorage(detail.checked)}
+              >
+                {t('enable_tiered_storage')}
+              </Checkbox>
+            </FormField>
+            {enableTieredStorage && (
+              <FormField
+                label={t('tiered_storage_memory_percentage')}
+                description={t('tiered_storage_memory_percentage_desc')}
+              >
+                <Input
+                  type="number"
+                  value={String(tieredStorageMemoryPercentage)}
+                  onChange={({ detail }) => {
+                    const value = parseInt(detail.value) || 20;
+                    setTieredStorageMemoryPercentage(Math.min(100, Math.max(20, value)));
+                  }}
+                  placeholder="20"
+                />
+              </FormField>
+            )}
           </SpaceBetween>
         </ExpandableSection>
       </SpaceBetween>

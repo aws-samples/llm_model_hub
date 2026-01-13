@@ -1052,7 +1052,7 @@ KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl get pods -A | grep <e
 
 ## 18. L2 Cache Shared Memory Initialization Failure (tieredstorage backend)
 
-**Status: ⚠️ UNFIXED - Needs Further Investigation**
+**Status: ✅ ROOT CAUSE IDENTIFIED - Cluster Configuration Required**
 
 ### Issue
 When L2 Cache is enabled with `tieredstorage` backend, LMCache fails to initialize shared memory and logs repeated errors:
@@ -1064,14 +1064,69 @@ When L2 Cache is enabled with `tieredstorage` backend, LMCache fails to initiali
 
 The error repeats every 30 seconds as LMCache retries the connection.
 
+### Root Cause (Confirmed)
+
+**The `tieredstorage` L2 cache backend requires cluster-level `TieredStorageConfig` to be enabled.**
+
+Verification on cluster `modelhub16`:
+```bash
+$ aws sagemaker describe-cluster --cluster-name modelhub16 --region us-east-1 | jq '.TieredStorageConfig'
+"Not configured"
+```
+
+When `TieredStorageConfig` is NOT enabled:
+1. ❌ No memory management daemon running on nodes (port 9200)
+2. ❌ No POSIX shared memory segment created (`/ai_toolkit_cache`)
+3. ❌ LMCache cannot connect to tieredstorage backend
+
+Evidence from investigation:
+```bash
+# curl to tieredstorage service fails (nothing listening on port 9200)
+$ kubectl exec <pod> -c <container> -- curl -s http://10.0.11.177:9200/health
+# Exit code 7 - Connection refused
+
+# /dev/shm only has a directory, not a POSIX shm segment
+$ kubectl exec <pod> -c <container> -- ls -la /dev/shm/
+drwxrwxrwt. 2 root root  40 Jan 12 05:42 ai_toolkit_cache  # This is a directory, NOT a shm object
+```
+
+### Solution
+
+**Enable `TieredStorageConfig` at cluster level** when creating or updating the HyperPod cluster:
+
+**For new clusters:**
+```bash
+aws sagemaker create-cluster \
+    --cluster-name <cluster-name> \
+    --orchestrator "Eks={ClusterArn=<eks-cluster-arn>}" \
+    --instance-groups '[...]' \
+    --vpc-config '{...}' \
+    --tiered-storage-config '{"Mode": "Enable"，"InstanceMemoryAllocationPercentage": 20}'
+```
+
+**For existing clusters:**
+```bash
+aws sagemaker update-cluster \
+    --cluster-name modelhub16 \
+    --node-recovery Automatic  \
+    --tiered-storage-config '{"Mode": "Enable", "InstanceMemoryAllocationPercentage": 20}' 
+```
+
+When enabled, AWS automatically installs a **memory management daemon** on each node that:
+1. Runs on port 9200 (tieredstorage service)
+2. Creates the POSIX shared memory segment (`/ai_toolkit_cache`)
+3. Manages the distributed tiered storage for L2 cache
+
+**Reference**: [AWS Documentation - Set up managed tiered checkpointing](https://docs.aws.amazon.com/sagemaker/latest/dg/managed-tier-checkpointing-setup.html)
+
 ### Impact
-- ⚠️ L2 remote cache (tieredstorage) does NOT work
+- ⚠️ L2 remote cache (tieredstorage) does NOT work without cluster config
 - ✅ L1 local CPU cache still works
 - ✅ Inference service works normally (falls back to no remote cache)
 - ✅ Endpoint is functional, just without L2 cache optimization
 
 ### Observed Configuration
-Both endpoints with L2 cache enabled show the same error:
+Endpoints with L2 cache enabled show the error:
 
 **InferenceEndpointConfig:**
 ```yaml
@@ -1090,45 +1145,20 @@ kvCacheSpec:
 }
 ```
 
-### Pod Volume Configuration
-```yaml
-volumes:
-- hostPath:
-    path: /dev/shm
-  name: host-shm
-
-volumeMounts:
-- mountPath: /dev/shm/ai_toolkit_cache
-  name: host-shm
-  subPath: ai_toolkit_cache
-```
-
-### Analysis
-LMCache expects a **POSIX shared memory segment** at `/ai_toolkit_cache`, but:
-1. The pod mounts a **directory** at `/dev/shm/ai_toolkit_cache` via hostPath
-2. This is NOT the same as a POSIX shm object accessible via `shm_open("/ai_toolkit_cache")`
-3. The `[Errno 22] Invalid argument` suggests the shm segment doesn't exist or can't be created
-
-### Possible Root Causes
-1. **Missing shared memory segment on host**: The HyperPod node may need pre-configured POSIX shared memory
-2. **Operator bug**: The operator mounts a directory but LMCache expects a shm object
-3. **Permission issue**: Container may lack permissions to create POSIX shared memory
-4. **Cluster configuration**: tieredstorage backend may require additional cluster-level setup
-
 ### Verification Commands
 ```bash
-# Check LMCache errors
+# Check if TieredStorageConfig is enabled on the cluster
+aws sagemaker describe-cluster --cluster-name <cluster-name> --region <region> | jq '.TieredStorageConfig'
+
+# Check LMCache errors in pod logs
 KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl logs <pod-name> -c <container-name> | grep -i "lmcache.*error\|shared memory"
 
-# Check pod volume mounts
-KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl get pod <pod-name> -o jsonpath='{.spec.containers[0].volumeMounts}' | jq .
-
-# Check if shm exists on host (requires node access)
-ls -la /dev/shm/
+# Test connectivity to tieredstorage service (should work if enabled)
+KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl exec <pod-name> -c <container-name> -- curl -s http://<node-ip>:9200/health
 ```
 
 ### Workaround
-None currently. The endpoint works without L2 cache optimization. To disable L2 cache and avoid the error logs:
+If you cannot enable `TieredStorageConfig` on the cluster, disable L2 cache to avoid error logs:
 
 ```yaml
 kvCacheSpec:
@@ -1136,11 +1166,15 @@ kvCacheSpec:
   enableL2Cache: false  # Disable L2 cache
 ```
 
-### Next Steps
-1. Investigate HyperPod node configuration for POSIX shared memory
-2. Check if tieredstorage backend requires additional cluster setup
-3. Contact AWS support for guidance on L2 cache configuration
-4. Consider testing alternative l2CacheBackend options (redis, etc.)
+Alternatively, use `redis` as L2 cache backend (requires separate Redis cluster):
+```yaml
+kvCacheSpec:
+  enableL1Cache: true
+  enableL2Cache: true
+  l2CacheSpec:
+    l2CacheBackend: redis
+    l2CacheLocalUrl: redis://redis.redis-system.svc.cluster.local:6379
+```
 
 ### Affected Endpoints
 - All endpoints with `enableL2Cache: true` and `l2CacheBackend: tieredstorage`
@@ -1148,72 +1182,6 @@ kvCacheSpec:
 
 ### Last Updated
 - **Reported**: 2026-01-12
-- **Status**: Needs further investigation - cluster infrastructure issue
+- **Root Cause Identified**: 2026-01-13
+- **Status**: Cluster-level `TieredStorageConfig` must be enabled for tieredstorage backend to work
 
-
-## 19. SageMakerEndpointRegistration CR Creation Fails Due to Uppercase endpointName
-
-**Status: ✅ FIXED**
-
-### Issue
-HyperPod endpoint deployment fails with operator error:
-```
-Failed to create new sageMakerEndpointRegistration CR
-metadata.name: Invalid value: "Qwen3-4B-Instruct-2507-2026-01-13-01-12": a lowercase RFC 1123 subdomain must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character
-```
-
-The deployment shows:
-- Router pod running (2/2)
-- Model deployment with 0/0 replicas
-- Operator reconciliation loop failing
-
-### Root Cause
-The backend code was using lowercase for `metadata.name` (CRD resource name) but NOT for `spec.endpointName`:
-
-```python
-resource_name = endpoint_name.lower().replace("_", "-")[:63]  # Lowercase CRD name
-
-spec = {
-    "modelName": model_name,
-    "endpointName": endpoint_name,  # BUG: Not lowercased!
-    ...
-}
-```
-
-The HyperPod operator uses `spec.endpointName` to create `SageMakerEndpointRegistration` CR, which requires Kubernetes-compliant lowercase names (RFC 1123).
-
-### Solution
-
-**`backend/inference/hyperpod_inference.py`**: Use `resource_name` (already lowercase) for `endpointName` in both functions:
-
-```python
-# deploy_to_hyperpod() - line ~1148
-spec = {
-    "modelName": model_name,
-    # endpointName must be lowercase for K8s resource naming (RFC 1123)
-    "endpointName": resource_name,
-    ...
-}
-
-# deploy_to_hyperpod_advanced() - line ~1812
-spec = {
-    "modelName": model_name,
-    # endpointName must be lowercase for K8s resource naming (RFC 1123)
-    "endpointName": resource_name,
-    ...
-}
-```
-
-### Verification
-After the fix, deploy a new endpoint and check:
-```bash
-# Check operator logs - no RFC 1123 errors
-KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl logs -n hyperpod-inference-system -l app.kubernetes.io/name=hyperpod-inference-operator --tail=100 | grep -i "rfc 1123\|invalid"
-
-# Check model pods are scheduled (not 0/0)
-KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl get deployment -A | grep <endpoint-name>
-```
-
-### Last Updated
-- **Fixed**: 2026-01-13
-- **Root Cause**: `spec.endpointName` had uppercase letters, operator uses it for K8s resource names

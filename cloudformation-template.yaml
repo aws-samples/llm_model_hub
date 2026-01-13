@@ -184,7 +184,8 @@ Resources:
               echo "Running setup script"
               cd /home/ubuntu/llm_model_hub/backend || error_exit "Failed to change to backend directory"
               sudo -u ubuntu bash 01.setup.sh || error_exit "Failed to run setup script"
-              sleep 30
+              export PATH="$HOME/.local/bin:$PATH"
+              sleep 3
 
               # Start parallel builds for all Docker images
               echo "Starting parallel builds for all Docker images"
@@ -280,7 +281,7 @@ Resources:
               # Upload dummy tar.gz
               echo "Uploading dummy tar.gz"
               cd /home/ubuntu/llm_model_hub/backend/byoc || error_exit "Failed to change to byoc directory"
-              sudo -u ubuntu ../.venv/bin/python startup.py || error_exit "Failed to upload dummy tar.gz"
+              sudo -u ubuntu ../.venv/bin/python startup.py|| error_exit "Failed to upload dummy tar.gz"
 
               # Add user to database
               echo "Adding user to database"

@@ -13,7 +13,7 @@ cd "${SCRIPT_DIR}/docker_easyr1/"
 bash build_and_push.sh
 
 cd "${SCRIPT_DIR}"
-uv pip install -r requirements.txt
+uv sync
 
 cd "${SCRIPT_DIR}/byoc/"
 bash build_and_push.sh

@@ -858,7 +858,8 @@ class KVCacheConfig:
             l2_spec: Dict[str, str] = {
                 "l2CacheBackend": self.l2_cache_backend
             }
-            if self.l2_cache_backend == "redis" and self.l2_cache_url:
+            # Add l2CacheLocalUrl if provided (works for any backend)
+            if self.l2_cache_url:
                 l2_spec["l2CacheLocalUrl"] = self.l2_cache_url
             spec["l2CacheSpec"] = l2_spec
         return spec

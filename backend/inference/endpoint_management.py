@@ -30,6 +30,123 @@ CACHE_EXPIRY_DAYS = 30  # 缓存有效期(天)
 
 endpoints_lock = threading.Lock()
 thread_pool = {}
+
+def check_hyperpod_deployment_status(endpoint_name: str, hyperpod_cluster_id: str):
+    """
+    Check HyperPod endpoint deployment status and update database.
+
+    This function polls the HyperPod endpoint status via Kubernetes API
+    and updates the database when status changes to INSERVICE or FAILED.
+    It also waits for public ALB to be ready if use_public_alb is enabled.
+    """
+    logger.info(f'[HyperPod Status] Starting status check thread for {endpoint_name}')
+
+    # Import here to avoid circular imports
+    from inference.hyperpod_inference import get_hyperpod_endpoint_status, get_hyperpod_endpoint_url
+
+    # Get cluster info to get eks_cluster_name
+    cluster = database.get_cluster_by_id(hyperpod_cluster_id)
+    if not cluster:
+        logger.error(f'[HyperPod Status] Cluster not found: {hyperpod_cluster_id}')
+        with endpoints_lock:
+            thread_pool.pop(endpoint_name, None)
+        return False
+
+    eks_cluster_name = cluster.eks_cluster_name
+    max_attempts = 120  # Max 20 minutes (120 * 10s)
+    attempt = 0
+
+    while attempt < max_attempts:
+        try:
+            status, error_msg = get_hyperpod_endpoint_status(
+                eks_cluster_name=eks_cluster_name,
+                endpoint_name=endpoint_name,
+                namespace="default"
+            )
+
+            logger.info(f'[HyperPod Status] {endpoint_name}: status={status}, error={error_msg}')
+
+            if status == "INSERVICE":
+                # Get endpoint extra_config to check if public ALB is requested
+                extra_config_str = database.get_endpoint_extra_config(endpoint_name)
+                extra_config = {}
+                if extra_config_str:
+                    try:
+                        extra_config = json.loads(extra_config_str)
+                    except:
+                        pass
+
+                use_public_alb = extra_config.get('use_public_alb', False)
+
+                # If public ALB is requested, check if it's ready
+                if use_public_alb:
+                    try:
+                        url_info = get_hyperpod_endpoint_url(
+                            eks_cluster_name=eks_cluster_name,
+                            endpoint_name=endpoint_name,
+                            namespace="default"
+                        )
+                        alb_url = url_info.get('full_url', '') if url_info else ''
+
+                        if not alb_url:
+                            logger.info(f'[HyperPod Status] {endpoint_name} is InService but waiting for public ALB (not provisioned yet)')
+                            time.sleep(10)
+                            attempt += 1
+                            continue
+                        elif 'internal' in alb_url.lower():
+                            logger.info(f'[HyperPod Status] {endpoint_name} is InService but waiting for public ALB (current: {alb_url})')
+                            time.sleep(10)
+                            attempt += 1
+                            continue
+
+                        # Update extra_config with ALB URL
+                        extra_config['alb_url'] = alb_url
+                        extra_config['endpoint_url'] = url_info.get('endpoint_url', '')
+                    except Exception as e:
+                        logger.warning(f'[HyperPod Status] Failed to get ALB URL for {endpoint_name}: {e}')
+                        time.sleep(10)
+                        attempt += 1
+                        continue
+
+                # Update status to INSERVICE
+                database.update_endpoint_status(
+                    endpoint_name=endpoint_name,
+                    endpoint_status=EndpointStatus.INSERVICE,
+                    extra_config=json.dumps(extra_config) if extra_config else None
+                )
+                logger.info(f'[HyperPod Status] {endpoint_name} is now INSERVICE')
+                with endpoints_lock:
+                    thread_pool.pop(endpoint_name, None)
+                return True
+            elif status == "FAILED":
+                database.update_endpoint_status(
+                    endpoint_name=endpoint_name,
+                    endpoint_status=EndpointStatus.FAILED
+                )
+                logger.error(f'[HyperPod Status] {endpoint_name} FAILED: {error_msg}')
+                with endpoints_lock:
+                    thread_pool.pop(endpoint_name, None)
+                return False
+            elif status == "NOTFOUND":
+                logger.warning(f'[HyperPod Status] {endpoint_name} not found in cluster')
+                # Don't remove from thread_pool yet, might be creating
+
+            # Still CREATING, wait and retry
+            time.sleep(10)
+            attempt += 1
+
+        except Exception as e:
+            logger.error(f'[HyperPod Status] Error checking {endpoint_name}: {e}')
+            time.sleep(10)
+            attempt += 1
+
+    # Timeout - keep status as CREATING, stop polling
+    logger.warning(f'[HyperPod Status] {endpoint_name} status check timed out after {max_attempts * 10}s')
+    with endpoints_lock:
+        thread_pool.pop(endpoint_name, None)
+    return False
+
+
 def check_deployment_status(endpoint_name:str):
     logger.info('a thread start')
     while True:
@@ -734,12 +851,27 @@ def list_endpoints(request:ListEndpointsRequest) -> Dict[EndpointInfo,int]:
 
     count = database.count_endpoints(query_terms=request.query_terms)
 
-    #启动一个线程来更新状态 (only for SageMaker endpoints)
+    # Start background threads to poll and update endpoint status
     for endpoint_info in info:
         if endpoint_info.endpoint_status == EndpointStatus.CREATING and endpoint_info.endpoint_name not in thread_pool:
-            if endpoint_info.deployment_target != 'hyperpod':
+            if endpoint_info.deployment_target == 'hyperpod':
+                # HyperPod endpoint - use Kubernetes API to check status
+                if endpoint_info.hyperpod_cluster_id:
+                    thread = threading.Thread(
+                        target=check_hyperpod_deployment_status,
+                        args=(endpoint_info.endpoint_name, endpoint_info.hyperpod_cluster_id),
+                        daemon=True
+                    )
+                    logger.info(f'[HyperPod Status] Starting polling thread for {endpoint_info.endpoint_name}')
+                    with endpoints_lock:
+                        thread_pool[endpoint_info.endpoint_name] = 1
+                        thread.start()
+                else:
+                    logger.warning(f'[HyperPod Status] No cluster_id for endpoint {endpoint_info.endpoint_name}, skipping status polling')
+            else:
+                # SageMaker endpoint - use SageMaker API to check status
                 thread = threading.Thread(target=check_deployment_status, args=(endpoint_info.endpoint_name,))
-                logger.info(endpoint_info.endpoint_name )
+                logger.info(endpoint_info.endpoint_name)
                 with endpoints_lock:
                     thread_pool[endpoint_info.endpoint_name] = 1
                     thread.start()

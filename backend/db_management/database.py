@@ -250,6 +250,14 @@ class DatabaseWrapper(BaseModel):
                 cursor.execute(f"SELECT * FROM {EP_TABLE} WHERE endpoint_name = %s",(endpoint_name,))
                 return cursor.fetchone()
 
+    def get_endpoint_extra_config(self, endpoint_name: str) -> str:
+        """Get endpoint extra_config JSON string by endpoint name."""
+        with self.connection_pool.get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(f"SELECT extra_config FROM {EP_TABLE} WHERE endpoint_name = %s", (endpoint_name,))
+                result = cursor.fetchone()
+                return result[0] if result else None
+
     def get_hyperpod_endpoints_creating(self):
         """Get all HyperPod endpoints in CREATING status for background monitoring."""
         with self.connection_pool.get_connection() as connection:
