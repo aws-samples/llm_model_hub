@@ -53,8 +53,7 @@ python3 startup.py         # Initialize BYOC setup
 
 ### Upgrade
 ```bash
-cd backend/
-bash 03.upgrade.sh         # One-click upgrade (v1.0.6+)
+bash upgrade.sh            # One-click upgrade (v1.0.6+)
 ```
 
 ## Architecture

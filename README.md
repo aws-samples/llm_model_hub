@@ -162,8 +162,8 @@ bash cn-region-deploy.sh
 - **方法 2**. 
 1. 使用一键升级脚本（1.0.6之后支持）：
 ```bash
-cd /home/ubuntu/llm_model_hub/backend/
-bash 03.upgrade.sh
+cd /home/ubuntu/llm_model_hub/
+bash upgrade.sh
 ```
 - **方法 3**. 手动更新：
 1. 更新代码, 重新打包byoc镜像
@@ -175,7 +175,7 @@ bash build_and_push.sh
 ```
 2. 重启服务
 ```bash
-pm2 restart all
+bash restart_all.sh
 ```
 4. 更新完成
 
