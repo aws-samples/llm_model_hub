@@ -792,11 +792,13 @@ def deploy_endpoint_hyperpod(
 
                                 if alb_result.get('success'):
                                     alb_hostname = alb_result.get('alb_hostname')
-                                    logger.info(f"[Background ALB] Public ALB configured successfully: {alb_hostname}")
-                                    alb_configured = True
 
-                                    # Update database with the new public ALB URL
+                                    # Only consider successful if we got a valid ALB hostname
                                     if alb_hostname:
+                                        logger.info(f"[Background ALB] Public ALB configured successfully: {alb_hostname}")
+                                        alb_configured = True
+
+                                        # Update database with the new public ALB URL
                                         try:
                                             import json as json_module
                                             extra_config_data['alb_url'] = f"https://{alb_hostname}/v1/chat/completions"
@@ -809,7 +811,11 @@ def deploy_endpoint_hyperpod(
                                             logger.info(f"[Background ALB] Database updated with public ALB URL: {alb_hostname}")
                                         except Exception as db_e:
                                             logger.warning(f"[Background ALB] Failed to update database with ALB URL: {db_e}")
-                                    break
+                                        break
+                                    else:
+                                        # success=True but empty hostname means ALB not ready yet, retry
+                                        logger.info(f"[Background ALB] Ingress created but ALB not provisioned yet (attempt {attempt + 1}/{max_retries}), will retry...")
+                                        retry_delay = min(retry_delay * 1.5, 120)
                                 else:
                                     error = alb_result.get('error', 'Unknown error')
                                     if 'not found' in error.lower() and attempt < max_retries - 1:

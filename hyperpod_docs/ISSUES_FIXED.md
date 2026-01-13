@@ -1149,3 +1149,71 @@ kvCacheSpec:
 ### Last Updated
 - **Reported**: 2026-01-12
 - **Status**: Needs further investigation - cluster infrastructure issue
+
+
+## 19. SageMakerEndpointRegistration CR Creation Fails Due to Uppercase endpointName
+
+**Status: ✅ FIXED**
+
+### Issue
+HyperPod endpoint deployment fails with operator error:
+```
+Failed to create new sageMakerEndpointRegistration CR
+metadata.name: Invalid value: "Qwen3-4B-Instruct-2507-2026-01-13-01-12": a lowercase RFC 1123 subdomain must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character
+```
+
+The deployment shows:
+- Router pod running (2/2)
+- Model deployment with 0/0 replicas
+- Operator reconciliation loop failing
+
+### Root Cause
+The backend code was using lowercase for `metadata.name` (CRD resource name) but NOT for `spec.endpointName`:
+
+```python
+resource_name = endpoint_name.lower().replace("_", "-")[:63]  # Lowercase CRD name
+
+spec = {
+    "modelName": model_name,
+    "endpointName": endpoint_name,  # BUG: Not lowercased!
+    ...
+}
+```
+
+The HyperPod operator uses `spec.endpointName` to create `SageMakerEndpointRegistration` CR, which requires Kubernetes-compliant lowercase names (RFC 1123).
+
+### Solution
+
+**`backend/inference/hyperpod_inference.py`**: Use `resource_name` (already lowercase) for `endpointName` in both functions:
+
+```python
+# deploy_to_hyperpod() - line ~1148
+spec = {
+    "modelName": model_name,
+    # endpointName must be lowercase for K8s resource naming (RFC 1123)
+    "endpointName": resource_name,
+    ...
+}
+
+# deploy_to_hyperpod_advanced() - line ~1812
+spec = {
+    "modelName": model_name,
+    # endpointName must be lowercase for K8s resource naming (RFC 1123)
+    "endpointName": resource_name,
+    ...
+}
+```
+
+### Verification
+After the fix, deploy a new endpoint and check:
+```bash
+# Check operator logs - no RFC 1123 errors
+KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl logs -n hyperpod-inference-system -l app.kubernetes.io/name=hyperpod-inference-operator --tail=100 | grep -i "rfc 1123\|invalid"
+
+# Check model pods are scheduled (not 0/0)
+KUBECONFIG=/home/ubuntu/.kube/config-<cluster>-eks kubectl get deployment -A | grep <endpoint-name>
+```
+
+### Last Updated
+- **Fixed**: 2026-01-13
+- **Root Cause**: `spec.endpointName` had uppercase letters, operator uses it for K8s resource names

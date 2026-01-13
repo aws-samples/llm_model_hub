@@ -1619,7 +1619,11 @@ def process_hyperpod_endpoint_status(endpoint_name: str, cluster_id: str, extra_
 
         # Update database based on status
         if status == 'INSERVICE':
+            # Check if public ALB is requested
+            use_public_alb = extra_config.get('use_public_alb', False)
+
             # Fetch ALB URL and store in extra_config
+            alb_url = ''
             try:
                 from inference.hyperpod_inference import get_hyperpod_endpoint_url
                 url_info = get_hyperpod_endpoint_url(
@@ -1629,11 +1633,19 @@ def process_hyperpod_endpoint_status(endpoint_name: str, cluster_id: str, extra_
                     region=DEFAULT_REGION
                 )
                 if url_info:
-                    extra_config['alb_url'] = url_info.get('full_url', '')
+                    alb_url = url_info.get('full_url', '')
+                    extra_config['alb_url'] = alb_url
                     extra_config['endpoint_url'] = url_info.get('endpoint_url', '')
-                    logger.info(f"HyperPod endpoint {endpoint_name} ALB URL: {url_info.get('full_url')}")
+                    logger.info(f"HyperPod endpoint {endpoint_name} ALB URL: {alb_url}")
             except Exception as e:
                 logger.warning(f"Failed to get ALB URL for {endpoint_name}: {e}")
+
+            # If public ALB is requested but current ALB is internal, wait for public ALB
+            if use_public_alb and alb_url and 'internal' in alb_url.lower():
+                logger.info(f"HyperPod endpoint {endpoint_name} is InService but waiting for public ALB "
+                           f"(current ALB is internal: {alb_url})")
+                # Don't update status to INSERVICE yet, will check again next loop
+                return
 
             database.update_endpoint_status(
                 endpoint_name=endpoint_name,

@@ -1,6 +1,6 @@
 [project]
-name = "llm-model-hub"
-version = "1.0.0"
+name = "llm-model-hub-backend"
+version = "0.1.0"
 description = "LLM Model Hub - A no-code visual platform for LLM model fine-tuning, deployment, and debugging"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -30,10 +30,3 @@ dependencies = [
     "openai>=1.0.0",
     "httpx>=0.24.0",
 ]
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.uv]
-dev-dependencies = []

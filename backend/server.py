@@ -36,7 +36,8 @@ from eks_management.clusters import (
 from processing_engine.cluster_processor import sync_cluster_status_with_aws, sync_all_cluster_statuses
 from utils.get_factory_config import get_factory_config
 from utils.outputs import list_s3_objects
-from inference.endpoint_management import deploy_endpoint,delete_endpoint,get_endpoint_status,list_endpoints,deploy_endpoint_byoc,get_endpoint_engine,get_endpoint_info,deploy_endpoint_hyperpod,delete_endpoint_hyperpod
+from inference.endpoint_management import deploy_endpoint,delete_endpoint,get_endpoint_status,list_endpoints,deploy_endpoint_byoc,get_endpoint_engine,get_endpoint_info
+from inference.hyperpod_deployment import deploy_endpoint_hyperpod,delete_endpoint_hyperpod
 from inference.serving import inference,inference_byoc
 from users.login import login_auth
 from utils.config import DEFAULT_REGION

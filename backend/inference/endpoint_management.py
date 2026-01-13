@@ -697,25 +697,12 @@ def get_endpoint_info(endpoint_name: str) -> dict:
 
 
 # =============================================================================
-# HyperPod Deployment Functions
-# =============================================================================
-# HyperPod deployment functions have been moved to hyperpod_deployment.py
-# for better code organization. Import them here for backward compatibility.
-
-from inference.hyperpod_deployment import (
-    deploy_endpoint_hyperpod,
-    delete_endpoint_hyperpod,
-    deploy_hyperpod_with_hf_download_background,
-    deploy_hyperpod_with_hf_download_sync,
-)
-
-
-# =============================================================================
 # Endpoint List Function
 # =============================================================================
 
 def list_endpoints(request:ListEndpointsRequest) -> Dict[EndpointInfo,int]:
-    logger.info(f"thread pool:{thread_pool}")
+    if thread_pool:
+        logger.info(f"thread pool:{thread_pool}")
     results = database.list_endpoints(query_terms=request.query_terms,page_size=request.page_size,page_index=request.page_index)
 
     info = []

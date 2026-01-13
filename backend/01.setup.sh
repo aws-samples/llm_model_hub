@@ -8,13 +8,6 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # 添加 uv 到 PATH
 export PATH="$HOME/.local/bin:$PATH"
 
-# 创建 Python 3.12 虚拟环境
-echo "Creating Python 3.12 virtual environment with uv..."
-uv venv --python 3.12 "${SCRIPT_DIR}/.venv"
-
-# 激活虚拟环境
-# source .venv/bin/activate
-
 # 安装依赖 (使用 pyproject.toml)
 echo "Installing dependencies with uv..."
 uv sync

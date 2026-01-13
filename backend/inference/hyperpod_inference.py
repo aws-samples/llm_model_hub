@@ -1130,9 +1130,11 @@ def deploy_to_hyperpod(
             args.extend(["--tp", str(gpu_count)])
         worker_spec["args"] = args
     else:  # vllm
-        # Use DLC default entrypoint - first arg is model path, followed by vLLM CLI options
+        worker_spec["command"] = ["python3", "-m", "vllm.entrypoints.openai.api_server"]
         args = [
-            "/opt/ml/model",  # Model path as first argument
+            "--port", str(container_port),
+            "--host", "0.0.0.0",
+            "--model", "/opt/ml/model",
             "--served-model-name", served_model_name
         ]
         # Add tensor parallel size for multi-GPU instances
@@ -1143,7 +1145,8 @@ def deploy_to_hyperpod(
     # Build spec
     spec = {
         "modelName": model_name,
-        "endpointName": endpoint_name,
+        # endpointName must be lowercase for K8s resource naming (RFC 1123)
+        "endpointName": resource_name,
         "instanceType": instance_type,
         "invocationEndpoint": "v1/chat/completions",  # Must be valid for intelligent routing
         "replicas": replicas,
@@ -1769,10 +1772,11 @@ def deploy_to_hyperpod_advanced(
             args.extend(["--tool-call-parser", tool_call_parser])
         worker_spec["args"] = args
     else:  # vllm
-        # Use DLC default entrypoint - first arg is model path, followed by vLLM CLI options
-        # This avoids the L2 Cache operator bug (lmcache-config volume not created when custom command is set)
+        worker_spec["command"] = ["python3", "-m", "vllm.entrypoints.openai.api_server"]
         args = [
-            "/opt/ml/model",  # Model path as first argument
+            "--port", str(container_port),
+            "--host", "0.0.0.0",
+            "--model", "/opt/ml/model",
             "--served-model-name", served_model_name
         ]
         # Add trust-remote-code (default True for HuggingFace models)
@@ -1806,7 +1810,8 @@ def deploy_to_hyperpod_advanced(
     # Build spec
     spec = {
         "modelName": model_name,
-        "endpointName": endpoint_name,
+        # endpointName must be lowercase for K8s resource naming (RFC 1123)
+        "endpointName": resource_name,
         "instanceType": instance_type,
         "invocationEndpoint": "v1/chat/completions",  # Must be valid for intelligent routing
         "replicas": replicas,
