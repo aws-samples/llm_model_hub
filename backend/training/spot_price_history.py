@@ -101,12 +101,13 @@ def get_spot_price_history(
                     price_values = [p['price'] for p in prices]
                     all_prices.extend(price_values)
 
+                    # Apply 15% SageMaker markup to all prices for consistency
                     az_stats.append({
                         'availability_zone': az,
-                        'current_price': prices[0]['price'],  # Most recent
-                        'min_price': min(price_values),
-                        'max_price': max(price_values),
-                        'avg_price': round(sum(price_values) / len(price_values), 4),
+                        'current_price': prices[0]['price'] * 1.15,  # Most recent with SageMaker markup
+                        'min_price': min(price_values) * 1.15,
+                        'max_price': max(price_values) * 1.15,
+                        'avg_price': round(sum(price_values) / len(price_values) * 1.15, 4),
                         'price_count': len(prices),
                         'price_history': sorted(prices, key=lambda x: x['timestamp'], reverse=True)[:10]  # Last 10 records
                     })
