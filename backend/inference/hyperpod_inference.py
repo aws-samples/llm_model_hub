@@ -1791,8 +1791,9 @@ def deploy_to_hyperpod_advanced(
             args.extend(["--max-model-len", str(max_model_len)])
         if dtype:
             args.extend(["--dtype", dtype])
-        # Note: --enable-prefix-caching is NOT needed for vLLM on HyperPod
-        # The kvCacheSpec handles prefix caching automatically via the operator
+        # Enable prefix caching if requested
+        if enable_prefix_caching:
+            args.append("--enable-prefix-caching")
         if gpu_memory_utilization is not None:
             args.extend(["--gpu-memory-utilization", str(gpu_memory_utilization)])
         if chat_template:
