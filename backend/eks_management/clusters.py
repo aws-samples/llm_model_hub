@@ -37,7 +37,7 @@ from logger_config import setup_logger
 from utils.config import boto_sess, DEFAULT_REGION
 from eks_management.utils import get_occupied_nodes
 
-logger = setup_logger('eks_clusters.py', log_file='eks_clusters.log')
+logger = setup_logger('eks_clusters.py')
 database = DatabaseWrapper()
 
 # Cluster table name
@@ -393,7 +393,7 @@ class ClusterJobExecutor:
                 k8s_labels['sagemaker.amazonaws.com/node-lifecycle'] = 'spot'
 
             if k8s_labels:
-                ig_config['OverrideKubernetesConfig'] = {
+                ig_config['KubernetesConfig'] = {
                     'Labels': k8s_labels
                 }
 
@@ -590,7 +590,7 @@ class ClusterJobExecutor:
                 k8s_labels['sagemaker.amazonaws.com/node-lifecycle'] = 'spot'
 
             if k8s_labels:
-                ig_config['OverrideKubernetesConfig'] = {
+                ig_config['KubernetesConfig'] = {
                     'Labels': k8s_labels
                 }
 

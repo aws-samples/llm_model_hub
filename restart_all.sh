@@ -1,6 +1,28 @@
 #!/bin/bash
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# 解析参数 - 传递给 start_frontend.sh
+FRONTEND_ARGS=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --prod|-p|--port)
+            FRONTEND_ARGS="$FRONTEND_ARGS $1"
+            if [[ "$1" == "--port" ]]; then
+                FRONTEND_ARGS="$FRONTEND_ARGS $2"
+                shift
+            fi
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: $0 [--prod|-p] [--port PORT]"
+            echo "  --prod, -p    Start frontend in production mode"
+            echo "  --port PORT   Frontend port (default: 3000)"
+            exit 1
+            ;;
+    esac
+done
+
 echo "=== Restarting All Services ==="
 echo ""
 
@@ -22,7 +44,7 @@ bash "${SCRIPT_DIR}/backend/02.start_backend.sh"
 # 启动前端
 echo ""
 echo "Starting frontend..."
-bash "${SCRIPT_DIR}/start_frontend.sh"
+bash "${SCRIPT_DIR}/start_frontend.sh" $FRONTEND_ARGS
 
 echo ""
 echo "=== All Services Restarted ==="
