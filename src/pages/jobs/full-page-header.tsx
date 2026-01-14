@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 import React from 'react';
 import { Button, Header, HeaderProps, SpaceBetween } from '@cloudscape-design/components';
-import { t } from 'i18next';
+import { useTranslation } from 'react-i18next';
 
 interface FullPageHeaderProps extends HeaderProps {
   title?: string;
@@ -19,8 +19,8 @@ interface FullPageHeaderProps extends HeaderProps {
 }
 
 export function FullPageHeader({
-  title = 'Jobs',
-  createButtonText = 'Create Job',
+  title,
+  createButtonText,
   extraActions = null,
   selectedItemsCount,
   selectedItems,
@@ -32,8 +32,10 @@ export function FullPageHeader({
   onDeploy,
   ...props
 }: FullPageHeaderProps) {
+  const { t } = useTranslation();
   const isOnlyOneSelected = selectedItemsCount === 1;
   const selectedItem = selectedItems&&selectedItems[0];
+  const displayTitle = title || t('jobs');
   return (
     <Header
       variant="awsui-h1-sticky"
@@ -60,7 +62,7 @@ export function FullPageHeader({
       }
       {...props}
     >
-      {title}
+      {displayTitle}
     </Header>
   );
 }

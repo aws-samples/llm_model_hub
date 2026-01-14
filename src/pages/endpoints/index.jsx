@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import intersection from 'lodash/intersection';
 import { Flashbar, Pagination, Table, TextFilter } from '@cloudscape-design/components';
+import { useTranslation } from 'react-i18next';
 
 import { COLUMN_DEFINITIONS, DEFAULT_PREFERENCES, Preferences } from './table-config';
 import { Breadcrumbs, endpointsBreadcrumbs } from '../commons/breadcrumbs'
@@ -32,6 +33,7 @@ function ServerSideTable({
   setDisplayNotify,
   setNotificationData
 }) {
+  const { t } = useTranslation();
   const [preferences, setPreferences] = useLocalStorage('ModelHub-endpoint-table-Preferences', DEFAULT_PREFERENCES);
   const [descendingSorting, setDescendingSorting] = useState(false);
   const [currentPageIndex, setCurrentPageIndex] = useState(1);
@@ -134,16 +136,16 @@ function ServerSideTable({
           onViewCode={onViewCode}
         />
       }
-      loadingText="Loading"
+      loadingText={t('loading_endpoints')}
       empty={<TableNoMatchState onClearFilter={onClearFilter} />}
       filter={
         <TextFilter
           filteringText={filteringText}
           onChange={({ detail }) => setFilteringText(detail.filteringText)}
           onDelayedChange={() => setDelayedFilteringText(filteringText)}
-          filteringAriaLabel="Filter"
-          filteringPlaceholder="Find"
-          filteringClearAriaLabel="Clear"
+          filteringAriaLabel={t('filter_endpoints')}
+          filteringPlaceholder={t('find_endpoints')}
+          filteringClearAriaLabel={t('clear')}
           countText={getTextFilterCounterServerSideText(items, pagesCount, pageSize)}
         />
       }

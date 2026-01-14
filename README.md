@@ -162,8 +162,8 @@ bash cn-region-deploy.sh
 - **方法 2**. 
 1. 使用一键升级脚本（1.0.6之后支持）：
 ```bash
-cd /home/ubuntu/llm_model_hub/backend/
-bash 03.upgrade.sh
+cd /home/ubuntu/llm_model_hub/
+bash upgrade.sh
 ```
 - **方法 3**. 手动更新：
 1. 更新代码, 重新打包byoc镜像
@@ -175,7 +175,7 @@ bash build_and_push.sh
 ```
 2. 重启服务
 ```bash
-pm2 restart all
+bash restart_all.sh
 ```
 4. 更新完成
 
@@ -189,7 +189,6 @@ use llm;
 show tables;
 select * from USER_TABLE;
 ```
-
 
 # 示例代码免责声明
 本软件按"原样"提供，不提供任何形式的明示或暗示保证，包括但不限于对适销性、特定用途适用性和非侵权性的保证。在任何情况下，无论是在合同诉讼、侵权行为或其他方面，作者或版权持有人均不对任何索赔、损害或其他责任负责，这些索赔、损害或其他责任源于本软件或与本软件的使用或其他交易有关。

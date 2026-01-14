@@ -2,29 +2,31 @@
 // SPDX-License-Identifier: MIT-0
 import React, { useRef, useState } from "react";
 import { CustomAppLayout, Navigation } from "./common-components";
-import { Header, ContentLayout, Link ,BreadcrumbGroup} from "@cloudscape-design/components";
+import { Header, ContentLayout, Link, BreadcrumbGroup, Button } from "@cloudscape-design/components";
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
 
-const breadcrumbsItems = [
+const NotFound = () => {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const appLayout = useRef(null);
+
+  const breadcrumbsItems = [
     {
-      text: 'Not ready',
-      href: '/home',
+      text: t('home'),
+      href: '/',
     },
     {
-      text: 'Not ready',
+      text: t('page_not_found'),
       href: '#',
     },
   ];
 
-
-const Breadcrumbs = () => (
+  const Breadcrumbs = () => (
     <BreadcrumbGroup items={breadcrumbsItems} expandAriaLabel="Show path" ariaLabel="Breadcrumbs" />
   );
-
-
-const NotFound = () => {
-  const [toolsOpen, setToolsOpen] = useState(false);
-  const appLayout = useRef(null);
 
   return (
     <CustomAppLayout
@@ -34,13 +36,17 @@ const NotFound = () => {
       content={
         <ContentLayout
           header={
-            <Header variant="h1" info={<Link variant="info">Info</Link>}>
-              Not ready
+            <Header variant="h1" info={<Link variant="info">{t('info')}</Link>}>
+              {t('page_not_found')}
             </Header>
           }
         >
-            <br/><br/>
-          <h1>Page not ready yet</h1>
+          <br/><br/>
+          <p>{t('page_not_found_desc')}</p>
+          <br/>
+          <Button variant="primary" onClick={() => navigate('/')}>
+            {t('go_home')}
+          </Button>
         </ContentLayout>
       }
       onToolsChange={({ detail }) => setToolsOpen(detail.open)}

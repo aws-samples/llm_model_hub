@@ -15,7 +15,7 @@ if [[ $region =~ ^cn ]]; then
     suffix="com.cn"
 fi
 
-VERSION=0.3.2.4d13ebe
+VERSION=0.3.2.fd9a5d9
 # BASE_IMAGE=hiyouga/verl:ngc-th2.8.0-cu12.9-vllm0.11.0
 if [[ $region =~ ^cn ]]; then
     # BASE_IMAGE="727897471807.dkr.ecr.${region}.amazonaws.${suffix}/pytorch-training:2.8.0-gpu-py312-cu129-ubuntu22.04-sagemaker"
@@ -29,7 +29,7 @@ fi
 
 inference_image=llm-modelhub-easyr1
 public_ecr_uri=public.ecr.aws/f8g1z3n8
-inference_fullname=${public_ecr_uri}/${inference_image}:latest
+inference_fullname=${public_ecr_uri}/${inference_image}:${VERSION}
 
 # Login to AWS Public ECR
 aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws

@@ -4,12 +4,14 @@ import os
 import sagemaker
 import utils.llamafactory.extras.constants as extras
 import pickle
-
+import logging
+logger = logging.getLogger()
 dotenv.load_dotenv()
-print(os.environ)
+
+logger.info(os.environ)
 QLORA_BASE_CONFIG = './docker/LLaMA-Factory/examples/train_qlora/llama3_lora_sft_awq.yaml'
-LORA_BASE_CONFIG = './docker/LLaMA-Factory/examples/train_lora/llama3_lora_sft.yaml'
-FULL_BASE_CONFIG = './docker/LLaMA-Factory/examples/train_full/llama3_full_sft.yaml'
+LORA_BASE_CONFIG = './docker/LLaMA-Factory/examples/train_lora/qwen3_lora_sft.yaml'
+FULL_BASE_CONFIG = './docker/LLaMA-Factory/examples/train_full/qwen3_full_sft.yaml'
 DATASET_INFO_FILE = './docker/LLaMA-Factory/data/dataset_info.json'
 SUPPORTED_MODELS_FILE = './utils/supported_models.pkl'
 DEFAULT_TEMPLATE_FILE = './utils/default_template.pkl'
@@ -35,7 +37,7 @@ role = os.environ.get('role')
 print(f"sagemaker role:{role}")
 
 
-sagemaker_session =  sagemaker.session.Session(boto_session=boto_sess) #sagemaker.session.Session()
+sagemaker_session = sagemaker.Session(boto_session=boto_sess)
 region = sagemaker_session.boto_region_name
 default_bucket = sagemaker_session.default_bucket()
 print(f"default_bucket:{default_bucket}")
@@ -76,22 +78,32 @@ except Exception as e:
 VLLM_IMAGE = os.environ.get('vllm_image')
 SGLANG_IMAGE = os.environ.get('sglang_image')
 MODEL_ARTIFACT = os.environ.get('model_artifact')
+# Get HyperPod inference container images from environment variables
+HP_VLLM_IMAGE = os.environ.get("hp_vllm_image", "public.ecr.aws/deep-learning-containers/vllm:0.13.0-gpu-py312-cu129-ubuntu22.04-ec2-v1.0")
+HP_SGLANG_IMAGE = os.environ.get("hp_sglang_image", "public.ecr.aws/deep-learning-containers/sglang:0.5.6-gpu-py312")
+# HyperPod inference container images
+DEFAULT_IMAGES = {
+    "vllm": HP_VLLM_IMAGE,
+    "sglang": HP_SGLANG_IMAGE,
+}
 
 # check
 if not VLLM_IMAGE:
-    raise('vllm_image is not set in .env file')
+    # raise('vllm_image is not set in .env file')
+    logger.error('vllm_image is not set in .env file, please build the image and set in .env')
 
-# if not SGLANG_IMAGE:
-#     raise('sglang_image is not set in .env file')
+if not SGLANG_IMAGE:
+    # raise('sglang_image is not set in .env file')
+    logger.error('sglang_image is not set in .env file, please build the image and set in .env')
 
-if not MODEL_ARTIFACT:
-    raise('model_artifact is not set in .env file')
+# if not MODEL_ARTIFACT:
+#     raise('model_artifact is not set in .env file')
 
 if not os.environ.get('role'):
     raise('role is not set in .env file')
 
-if MODEL_ARTIFACT and not MODEL_ARTIFACT.endswith('.tar.gz'):
-    raise('model_artifact must end with .tar.gz')
+# if MODEL_ARTIFACT and not MODEL_ARTIFACT.endswith('.tar.gz'):
+#     raise('model_artifact must end with .tar.gz')
 
 instance_gpus_map={
 'ml.g4dn.2xlarge':1,

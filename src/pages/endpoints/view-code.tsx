@@ -1,8 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
 import React ,{useState} from 'react';
-import { Button, Modal, Box,  SpaceBetween, } from '@cloudscape-design/components';
-import { useTranslation } from "react-i18next";
+import { Button, Modal, Box,  SpaceBetween, Tabs } from '@cloudscape-design/components';
 import ReactMarkdown from "react-markdown";
 import gfm from "remark-gfm";
 import {Prism, SyntaxHighlighterProps} from 'react-syntax-highlighter';
@@ -15,6 +14,204 @@ interface PageHeaderProps {
   visible: boolean;
   setVisible: (value: boolean) => void;
 }
+
+// Helper function to parse extra_config
+const parseExtraConfig = (item: any) => {
+  if (!item.extra_config) return {};
+  try {
+    return typeof item.extra_config === 'string'
+      ? JSON.parse(item.extra_config)
+      : item.extra_config;
+  } catch {
+    return {};
+  }
+};
+
+// Helper to normalize URL (remove protocol and path, keep only hostname)
+const normalizeUrl = (url: string): string => {
+  // Remove protocol
+  let cleanUrl = url.replace(/^https?:\/\//, '');
+  // Remove path (keep only hostname)
+  const slashIndex = cleanUrl.indexOf('/');
+  if (slashIndex !== -1) {
+    cleanUrl = cleanUrl.substring(0, slashIndex);
+  }
+  return cleanUrl;
+};
+
+// HyperPod OpenAI SDK code sample
+const getHyperPodCodeSample = (baseUrl: string, apiKey: string, modelName: string) => {
+  const cleanUrl = normalizeUrl(baseUrl);
+  return `
+\`\`\`python
+# pip install openai
+from openai import OpenAI
+
+# HyperPod Inference Endpoint Configuration
+BASE_URL = "${cleanUrl}"
+API_KEY = "${apiKey}"
+MODEL_NAME = "${modelName}"
+
+# Note: ALB uses self-signed certificate, disable SSL verification
+client = OpenAI(
+    base_url=f"https://{BASE_URL}/v1",
+    api_key=API_KEY
+)
+
+#******** 示例1 非流式 ************
+response = client.chat.completions.create(
+    model=MODEL_NAME,
+    messages=[
+        {"role": "user", "content": "Hi, who are you?"}
+    ],
+    max_tokens=1024,
+    stream=False
+)
+print(response.choices[0].message.content)
+
+
+#******** 示例2 流式 ************
+stream = client.chat.completions.create(
+    model=MODEL_NAME,
+    messages=[
+        {"role": "user", "content": "Write a quick sort in python"}
+    ],
+    max_tokens=4096,
+    stream=True
+)
+
+for chunk in stream:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="", flush=True)
+print()
+
+
+#******** 示例3 流式 reasoning (QwQ/DeepSeek-R1等推理模型) ************
+stream = client.chat.completions.create(
+    model=MODEL_NAME,
+    messages=[
+        {"role": "user", "content": "Solve: What is 25 * 37?"}
+    ],
+    max_tokens=8000,
+    stream=True,
+    extra_body={"reasoning_effort": "high"}  # 可选: low, medium, high
+)
+
+for chunk in stream:
+    delta = chunk.choices[0].delta
+    # 推理内容 (思考过程)
+    if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
+        print(f"[思考] {delta.reasoning_content}", end="", flush=True)
+    # 最终回答
+    if delta.content:
+        print(delta.content, end="", flush=True)
+print()
+
+
+#******** 示例4 Tool Use / Function Calling ************
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get current weather in a given city",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "city": {"type": "string", "description": "City name"}
+                },
+                "required": ["city"]
+            },
+        },
+    }
+]
+
+response = client.chat.completions.create(
+    model=MODEL_NAME,
+    messages=[
+        {"role": "user", "content": "What's the weather in Beijing?"}
+    ],
+    tools=tools,
+    tool_choice="auto",
+    max_tokens=1024
+)
+
+message = response.choices[0].message
+if message.tool_calls:
+    for tool_call in message.tool_calls:
+        print(f"Function: {tool_call.function.name}")
+        print(f"Arguments: {tool_call.function.arguments}")
+else:
+    print(message.content)
+
+
+#******** 示例5 Vision (多模态模型) ************
+# 需要模型支持视觉输入，如 Qwen-VL, LLaVA 等
+response = client.chat.completions.create(
+    model=MODEL_NAME,
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What's in this image?"},
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/300px-PNG_transparency_demonstration_1.png"
+                    }
+                }
+            ]
+        }
+    ],
+    max_tokens=1024
+)
+print(response.choices[0].message.content)
+
+
+#******** 示例6 Embeddings (需要部署embedding模型) ************
+# response = client.embeddings.create(
+#     model=MODEL_NAME,
+#     input="Hello, world!"
+# )
+# print(response.data[0].embedding[:10])  # 打印前10维
+\`\`\`
+`;
+};
+
+// cURL code sample for HyperPod
+const getHyperPodCurlSample = (baseUrl: string, apiKey: string, modelName: string) => {
+  const cleanUrl = normalizeUrl(baseUrl);
+  return `
+\`\`\`bash
+# Note: -k flag skips SSL certificate verification (self-signed cert)
+
+# 非流式请求
+curl -k -X POST "https://${cleanUrl}/v1/chat/completions" \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${apiKey}" \\
+  -d '{
+    "model": "${modelName}",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "max_tokens": 1024
+  }'
+
+# 流式请求
+curl -k -X POST "https://${cleanUrl}/v1/chat/completions" \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${apiKey}" \\
+  -d '{
+    "model": "${modelName}",
+    "messages": [{"role": "user", "content": "Write a quick sort in python"}],
+    "max_tokens": 4096,
+    "stream": true
+  }'
+
+# 查看可用模型
+curl -k "https://${cleanUrl}/v1/models" \\
+  -H "Authorization: Bearer ${apiKey}"
+\`\`\`
+`;
+};
 
 const codeSample = `
 \`\`\`python
@@ -87,10 +284,7 @@ payload = {
     "messages": [
     {
         "role": "user",
-        "content": """已知函数f(x)=ln(x/(2-x))+ax+b(x-1)³
-(1) 若b=0，且f'(x)≥0，求a的最小值
-(2) 证明:曲线y=f(x)是中心对称图形
-(3) 若f(x)>-2，当且仅当1<x<2，求b的取值范围"""
+        "content": "Solve: What is 25 * 37?"
     }
     ],
     "max_tokens": 8000,
@@ -217,32 +411,69 @@ const MarkdownToHtml = ({ text }: { text: string }) => {
   };
 
 export const ViewCodeModal = ({
-    extraActions = null,
     selectedItems,
     visible,
     setVisible,
-    ...props
   }: PageHeaderProps) => {
-    const { t } = useTranslation();
-    const endpoint_name = selectedItems[0].endpoint_name
-    const onConfirm =()=>{
+    const [activeTabId, setActiveTabId] = useState("python");
+    const item = selectedItems[0];
+    const endpoint_name = item.endpoint_name;
+    const isHyperPod = item.deployment_target === 'hyperpod';
+
+    // Get HyperPod specific config
+    const extraConfig = parseExtraConfig(item);
+    const albUrl = extraConfig.alb_url || extraConfig.endpoint_url || '<ALB_URL>';
+    const apiKey = extraConfig.api_key || '<API_KEY>';
+    // Use the served model name (short name without org prefix)
+    // vLLM/SGLang use --served-model-name which extracts just the model name part
+    const rawModelName = item.model_name || '<MODEL_NAME>';
+    const modelName = rawModelName.includes('/') ? rawModelName.split('/').pop() : rawModelName;
+
+    const onConfirm = () => {
        setVisible(false);
     }
+
+    // Render HyperPod code samples with tabs
+    const renderHyperPodSamples = () => (
+      <Tabs
+        activeTabId={activeTabId}
+        onChange={({ detail }) => setActiveTabId(detail.activeTabId)}
+        tabs={[
+          {
+            id: "python",
+            label: "Python (OpenAI SDK)",
+            content: <MarkdownToHtml text={getHyperPodCodeSample(albUrl, apiKey, modelName)} key={`python-${endpoint_name}`} />
+          },
+          {
+            id: "curl",
+            label: "cURL",
+            content: <MarkdownToHtml text={getHyperPodCurlSample(albUrl, apiKey, modelName)} key={`curl-${endpoint_name}`} />
+          }
+        ]}
+      />
+    );
+
+    // Render SageMaker code sample
+    const renderSageMakerSample = () => (
+      <MarkdownToHtml text={codeSample.replace("<endpoint>", endpoint_name)} key={`markdown-${endpoint_name}`} />
+    );
+
     return (
       <Modal
         onDismiss={() => setVisible(false)}
         visible={visible}
+        size={isHyperPod ? "large" : "medium"}
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={()=> setVisible(false)}>Cancel</Button>
+              <Button variant="link" onClick={() => setVisible(false)}>Cancel</Button>
               <Button variant="primary" onClick={onConfirm}>Confirm</Button>
             </SpaceBetween>
           </Box>
         }
-        header="Endpoint Invoke Sample Code"
+        header={isHyperPod ? "HyperPod Endpoint - OpenAI Compatible API" : "SageMaker Endpoint Invoke Sample Code"}
       >
-        <MarkdownToHtml text={codeSample.replace("<endpoint>",endpoint_name)} key={`markdown-${endpoint_name}`} /> 
+        {isHyperPod ? renderHyperPodSamples() : renderSageMakerSample()}
       </Modal>
     );
   }

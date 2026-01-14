@@ -25,13 +25,12 @@ else
     partition="aws"
 fi
 
+VERSION=0.3.2.fd9a5d9
 # Public ECR image
-public_ecr_image=public.ecr.aws/f8g1z3n8/llm-modelhub-easyr1:latest
-
+public_ecr_image=public.ecr.aws/f8g1z3n8/llm-modelhub-easyr1:${VERSION}
 # Private ECR configuration
-VERSION=latest
 inference_image=sagemaker/easyr1
-inference_fullname=${account}.dkr.ecr.${region}.amazonaws.${suffix}/${inference_image}:${VERSION}
+inference_fullname=${account}.dkr.ecr.${region}.amazonaws.${suffix}/${inference_image}:latest
 
 # If the repository doesn't exist in ECR, create it.
 aws  ecr describe-repositories --repository-names "${inference_image}" --region ${region} || aws ecr create-repository --repository-name "${inference_image}" --region ${region}

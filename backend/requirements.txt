@@ -8,8 +8,12 @@ datasets>=2.16.0,<=3.5.0
 peft>=0.14.0,<=0.15.1
 python-dotenv
 mysql-connector-python
-sagemaker==2.244.0
+sagemaker>=2.244.0,<3.0
 PyJWT
 sentencepiece
 modelscope
 tiktoken
+kubernetes
+boto3>=1.42.2
+openai>=1.0.0
+httpx>=0.24.0

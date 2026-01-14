@@ -21,6 +21,7 @@ import { useLocalStorage } from "../commons/use-local-storage";
 import StepLabel from '@mui/material/StepLabel';
 import Step from '@mui/material/Step';
 import Stepper from '@mui/material/Stepper';
+import { useTranslation } from 'react-i18next';
 
 
 
@@ -44,8 +45,8 @@ const theme = createTheme({
   // },  
 });
 
-const SignUpSteps = ({activeStep}) =>{
-  const steps = ['Get your confirm code from email', 'Input your confirm code','Registeration Success'];
+const SignUpSteps = ({activeStep, t}) =>{
+  const steps = [t('signup_step1'), t('signup_step2'), t('signup_step3')];
 
   return (
     <Stepper activeStep={activeStep} alternativeLabel>
@@ -61,20 +62,17 @@ const SignUpSteps = ({activeStep}) =>{
 }
 
 const LoginPage = ()=>{
-  const [session, setSession] = useState();
-  const [signType, setSignType] = useState('signin');
   const [username, setUsername] = useState('demo_user');
   const [password, setPassword] = useState('demo_user');
   return (
-    // signType === 'signin'?
-    <SignIn setSession={setSession} setSignType={setSignType} username={username} setUsername={setUsername} password={password} setPassword={setPassword}/>
-    // :<SignUp setSession={setSession} setSignType={setSignType} username={username} setUsername={setUsername} password={password} setPassword={setPassword}/>
+    <SignIn username={username} setUsername={setUsername} password={password} setPassword={setPassword}/>
   )
 }
 
 const SignUp = ({setSignType,username,setUsername,password,setPassword}) =>{
   const auth = useAuth();
-  const [local_stored_crediential,setLocalStoredCred] = useLocalStorage('chatbot-local-credentials',null)
+  const { t } = useTranslation();
+  const [,setLocalStoredCred] = useLocalStorage('chatbot-local-credentials',null)
   const [errorstate, setErrorState] = useState(false);
   const [errormsg, setErrMsg] = useState('');
   // const [username, setUsername] = useState();
@@ -100,7 +98,7 @@ const SignUp = ({setSignType,username,setUsername,password,setPassword}) =>{
     if (activeStep === 0){
       if (!formdata.get('username') || !formdata.get('email')){
         setErrorState(true);
-        setErrMsg('Need username and email address');
+        setErrMsg(t('need_username_email'));
         return;
       }
       setLoading(true);
@@ -122,7 +120,7 @@ const SignUp = ({setSignType,username,setUsername,password,setPassword}) =>{
     }else if (activeStep === 1){
       if (!formdata.get('confirmcode')){
         setErrorState(true);
-        setErrMsg('Need confrim code from you email');
+        setErrMsg(t('need_confirm_code'));
         return;
       }
       setLoading(true);
@@ -160,9 +158,9 @@ const SignUp = ({setSignType,username,setUsername,password,setPassword}) =>{
             <LockOutlinedIcon />
           </Avatar>
           <Typography component="h1" variant="h5">
-            Sign Up
+            {t('sign_up')}
           </Typography>
-         
+
           <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1 }}>
           <FormControl sx={{width:360}}>
             <TextField
@@ -171,7 +169,7 @@ const SignUp = ({setSignType,username,setUsername,password,setPassword}) =>{
               required
               fullWidth
               id="username"
-              label="Username"
+              label={t('username')}
               name="username"
               value ={username??''}
               onChange = {(event) => { setUsername(event.target.value);}}
@@ -183,7 +181,7 @@ const SignUp = ({setSignType,username,setUsername,password,setPassword}) =>{
               required
               fullWidth
               id="email"
-              label="Email"
+              label={t('email')}
               name="email"
               type="email"
               value ={email??''}
@@ -197,14 +195,14 @@ const SignUp = ({setSignType,username,setUsername,password,setPassword}) =>{
               required
               fullWidth
               name="password"
-              label="Password"
+              label={t('password')}
               type="password"
               id="password"
               value ={password??''}
               onChange = {(event) => { setPassword(event.target.value);}}
               autoComplete="current-password"
             />
-            {activeStep? 
+            {activeStep?
               <TextField
               error = {errorstate}
               helperText ={errormsg}
@@ -212,14 +210,14 @@ const SignUp = ({setSignType,username,setUsername,password,setPassword}) =>{
               required
               fullWidth
               name="confirmcode"
-              label="Confirm code"
+              label={t('confirm_code')}
               id="confirmcode"
               value ={confirmCode??''}
               onChange = {(event) => { setConfirmCode(event.target.value);}}
             />:<div/>
- 
+
             }
-            <SignUpSteps activeStep={activeStep}/>
+            <SignUpSteps activeStep={activeStep} t={t}/>
             {
               activeStep === 0?
               <LoadingButton
@@ -230,7 +228,7 @@ const SignUp = ({setSignType,username,setUsername,password,setPassword}) =>{
               color='secondary'
               sx={{ mt: 3, mb: 2,}}
             >
-              {"Sign Up"}
+              {t('sign_up')}
             </LoadingButton>
             :
             <LoadingButton
@@ -241,19 +239,19 @@ const SignUp = ({setSignType,username,setUsername,password,setPassword}) =>{
               color='warning'
               sx={{ mt: 3, mb: 2,}}
             >
-              {"Confirm"}
+              {t('confirm')}
             </LoadingButton>
             }
-            
+
             <Grid container>
               <Grid item xs>
                 <Link href="#" variant="body2">
-                  Forgot password?
+                  {t('forgot_password')}
                 </Link>
               </Grid>
               <Grid item>
                 <Link href="#" variant="body2" onClick={()=>setSignType('signin')}>
-                  {"Already have an account. Sign In"}
+                  {t('already_have_account')}
                 </Link>
               </Grid>
             </Grid>
@@ -267,8 +265,9 @@ const SignUp = ({setSignType,username,setUsername,password,setPassword}) =>{
   );
 }
 
-const SignIn = ({setSession,setSignType,username,setUsername,password,setPassword}) => {
+const SignIn = ({username,setUsername,password,setPassword}) => {
   const auth = useAuth();
+  const { t } = useTranslation();
   const [checked, setChecked] = useState(false);
   const [local_stored_crediential,setLocalStoredCred] = useLocalStorage('modelhub_login_credentials',null)
   const [errorstate, setErrorState] = useState(false);
@@ -342,9 +341,9 @@ const SignIn = ({setSession,setSignType,username,setUsername,password,setPasswor
             <LockOutlinedIcon />
           </Avatar>
           <Typography component="h1" variant="h5">
-            Sign in
+            {t('sign_in')}
           </Typography>
-         
+
           <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1 }}>
           <FormControl sx={{width:360}}>
             <TextField
@@ -353,7 +352,7 @@ const SignIn = ({setSession,setSignType,username,setUsername,password,setPasswor
               required
               fullWidth
               id="username"
-              label="Username"
+              label={t('username')}
               name="username"
               value ={username??''}
               onChange = {(event) => { setUsername(event.target.value);}}
@@ -366,7 +365,7 @@ const SignIn = ({setSession,setSignType,username,setUsername,password,setPasswor
               required
               fullWidth
               name="password"
-              label="Password"
+              label={t('password')}
               type="password"
               id="password"
               value ={password??''}
@@ -374,14 +373,14 @@ const SignIn = ({setSession,setSignType,username,setUsername,password,setPasswor
               autoComplete="current-password"
             />
             <FormControlLabel
-              control={<Checkbox 
+              control={<Checkbox
                 checked={checked}
                 onChange={(event) =>{
                   setChecked(event.target.checked);
                   setLocalStoredCred({checked:event.target.checked});
                 }}
                color="primary" />}
-              label="Remember me"
+              label={t('remember_me')}
             />
             <LoadingButton
               type="submit"
@@ -390,7 +389,7 @@ const SignIn = ({setSession,setSignType,username,setUsername,password,setPasswor
               variant="contained"
               sx={{ mt: 3, mb: 2}}
             >
-              {"Sign In"}
+              {t('sign_in')}
             </LoadingButton>
             {/* <Button
              fullWidth

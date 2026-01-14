@@ -3,6 +3,13 @@
 import React from 'react';
 import BreadcrumbGroup, { BreadcrumbGroupProps } from '@cloudscape-design/components/breadcrumb-group';
 
+export const dashboardBreadcrumbs = [
+  {
+    text: 'Dashboard',
+    href: '/',
+  },
+];
+
 export const jobsBreadcrumbs = [
   {
     text: 'Jobs',
@@ -32,11 +39,26 @@ export const chatBreadcrumbs = [
   },
 ];
 
+export const clustersBreadcrumbs = [
+  {
+    text: 'HyperPod Clusters',
+    href: '/clusters',
+  },
+];
+
+export const createClusterBreadcrumbs = [
+  ...clustersBreadcrumbs,
+  {
+    text: 'Create Cluster',
+    href: '/clusters/create',
+  },
+];
+
 
 export function Breadcrumbs({ items }: { items: BreadcrumbGroupProps['items'] }) {
   return (
     <BreadcrumbGroup
-      items={[{ text: 'Model Hub', href: '/jobs' }, ...items]}
+      items={[{ text: 'Model Hub', href: '/' }, ...items]}
       expandAriaLabel="Show path"
       ariaLabel="Breadcrumbs"
     />

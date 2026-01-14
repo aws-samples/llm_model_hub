@@ -19,9 +19,11 @@ fi
 account=$(aws sts  get-caller-identity --query Account --output text)
 partition=$(aws sts get-caller-identity --query 'Arn' --output text | cut -d: -f2)
 
-VLLM_VERSION=v0.11.0
+VLLM_VERSION=0.13.0
 # Public ECR image
-public_ecr_image=public.ecr.aws/f8g1z3n8/llm-modelhub-byoc-vllm:${VLLM_VERSION}
+# https://gallery.ecr.aws/deep-learning-containers/
+public_ecr_image=public.ecr.aws/deep-learning-containers/vllm:${VLLM_VERSION}-gpu-py312-cu129-ubuntu22.04-sagemaker-v1.0-soci
+hp_vllm_image=public.ecr.aws/deep-learning-containers/vllm:0.13.0-gpu-py312-cu129-ubuntu22.04-ec2-v1.0
 
 # Private ECR configuration
 inference_image=sagemaker_endpoint/vllm
@@ -65,6 +67,12 @@ docker tag ${public_ecr_image} ${inference_fullname}
 docker push ${inference_fullname}
 echo ${inference_fullname}
 # 删除 .env 文件中的 vllm_image= 这一行
-sed -i '/^vllm_image=/d' /home/ubuntu/llm_model_hub/backend/.env
-echo "" >> /home/ubuntu/llm_model_hub/backend/.env
-echo "vllm_image=${inference_fullname}" >> /home/ubuntu/llm_model_hub/backend/.env
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/../.env"
+
+sed -i '/^vllm_image=/d' "${ENV_FILE}"
+# echo "" >> "${ENV_FILE}"
+echo "vllm_image=${inference_fullname}" >> "${ENV_FILE}"
+sed -i '/^hp_vllm_image=/d' "${ENV_FILE}"
+# echo "" >> "${ENV_FILE}"
+echo "hp_vllm_image=${hp_vllm_image}" >> "${ENV_FILE}"

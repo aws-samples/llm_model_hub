@@ -30,8 +30,16 @@ CREATE TABLE IF NOT EXISTS EP_TABLE (
     endpoint_status VARCHAR(16),
     endpoint_create_time DATETIME,
     endpoint_delete_time DATETIME,
-    extra_config TEXT
+    extra_config TEXT,
+    deployment_target VARCHAR(20) DEFAULT 'sagemaker',
+    hyperpod_cluster_id VARCHAR(64) DEFAULT NULL,
+    INDEX idx_deployment_target (deployment_target),
+    INDEX idx_endpoint_status (endpoint_status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Migration script for existing installations
+-- ALTER TABLE EP_TABLE ADD COLUMN IF NOT EXISTS deployment_target VARCHAR(20) DEFAULT 'sagemaker';
+-- ALTER TABLE EP_TABLE ADD COLUMN IF NOT EXISTS hyperpod_cluster_id VARCHAR(64) DEFAULT NULL;
 
 
 CREATE TABLE IF NOT EXISTS USER_TABLE (

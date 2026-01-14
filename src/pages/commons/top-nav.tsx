@@ -8,7 +8,7 @@ import '../../styles/top-navigation.scss';
 import {useAuthUserInfo} from './use-auth';
 
 import logo from '../../resources/model-hub-high-resolution-logo-transparent.webp';
-import { useTranslation, Trans } from 'react-i18next';
+import { useTranslation } from 'react-i18next';
 import i18n from '../../common/i18n';
 import ModelSettings from './chat-settings';
  
@@ -33,7 +33,7 @@ const profileActions = [
 export const TopNav = () => {
 
   const userInfo = useAuthUserInfo();
-  const {t,i18n} = useTranslation();
+  const { t } = useTranslation();
 
 
   const [modelSettingVisible, setModelSettingVisible] = useState(false);
@@ -60,7 +60,7 @@ export const TopNav = () => {
           type: "menu-dropdown",
           iconName: "settings",
           ariaLabel: "Settings",
-          title: i18n.t('lang_settings'),
+          title: t('lang_settings'),
           onItemClick: ({ detail }) => {
             i18n.changeLanguage(detail.id);
             window.location.reload();

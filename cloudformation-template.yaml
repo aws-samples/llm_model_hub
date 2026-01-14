@@ -130,10 +130,6 @@ Resources:
               cd /home/ubuntu/llm_model_hub || error_exit "Failed to change to repository directory"
               sudo -u ubuntu yarn install || error_exit "Failed to run yarn install"
 
-              # Install pm2
-              echo "Installing pm2"
-              sudo yarn global add pm2 || error_exit "Failed to install pm2"
-
               # Wait for instance to fully start
               echo "Waiting for instance to fully start"
               sleep 30
@@ -184,7 +180,8 @@ Resources:
               echo "Running setup script"
               cd /home/ubuntu/llm_model_hub/backend || error_exit "Failed to change to backend directory"
               sudo -u ubuntu bash 01.setup.sh || error_exit "Failed to run setup script"
-              sleep 30
+              export PATH="$HOME/.local/bin:$PATH"
+              sleep 3
 
               # Start parallel builds for all Docker images
               echo "Starting parallel builds for all Docker images"
@@ -280,12 +277,12 @@ Resources:
               # Upload dummy tar.gz
               echo "Uploading dummy tar.gz"
               cd /home/ubuntu/llm_model_hub/backend/byoc || error_exit "Failed to change to byoc directory"
-              sudo -u ubuntu ../../miniconda3/envs/py311/bin/python startup.py || error_exit "Failed to upload dummy tar.gz"
+              sudo -u ubuntu ../.venv/bin/python startup.py|| error_exit "Failed to upload dummy tar.gz"
 
               # Add user to database
               echo "Adding user to database"
               cd /home/ubuntu/llm_model_hub/backend/ || error_exit "Failed to change to backend directory"
-              sudo -u ubuntu bash -c "source ../miniconda3/bin/activate py311 && python3 users/add_user.py demo_user $RANDOM_PASSWORD default" || error_exit "Failed to add user to database"
+              sudo -u ubuntu .venv/bin/python users/add_user.py demo_user $RANDOM_PASSWORD default || error_exit "Failed to add user to database"
 
               # Start backend
               echo "Starting backend"
@@ -296,7 +293,7 @@ Resources:
               # Start frontend
               echo "Starting frontend"
               cd /home/ubuntu/llm_model_hub/ || error_exit "Failed to change to repository directory"
-              sudo -u ubuntu pm2 start pm2run.config.js || error_exit "Failed to start frontend"
+              sudo -u ubuntu bash start_frontend.sh || error_exit "Failed to start frontend"
 
               # Send success signal
               echo "Sending success signal to CloudFormation"

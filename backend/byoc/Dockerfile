@@ -1,5 +1,5 @@
-ARG VLLM_VERSION
-FROM vllm/vllm-openai:$VLLM_VERSION
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
 
 # 设置工作目录
 WORKDIR /app
@@ -37,6 +37,7 @@ sed -i '/elif config_format == ConfigFormat.MISTRAL:/i\
 \                if hf_rope_scaling.get(type_key) == "default":\n\
 \                    hf_rope_scaling[type_key] = "mrope"\n\
 ' ${PYTHON_SITEPACKAGES}/vllm/transformers_utils/config.py; \
+python3 -c "import re; f=open('${PYTHON_SITEPACKAGES}/vllm/config/device.py','r'); c=f.read(); f.close(); c=re.sub(r'if not self\.device_type:\s+raise RuntimeError\([^)]+\)', 'if not self.device_type:\n                self.device_type = \"cuda\"', c, flags=re.DOTALL); c=re.sub(r'(self\.device_type = self\.device\.type\s+)(# Some device types)', r'\1\n        # Default to cuda if device_type is empty\n        if not self.device_type:\n            self.device_type = \"cuda\"\n\n        \2', c); f=open('${PYTHON_SITEPACKAGES}/vllm/config/device.py','w'); f.write(c); f.close()"; \
 chmod +x /app/serve
 
 # 让端口8080在容器外可用

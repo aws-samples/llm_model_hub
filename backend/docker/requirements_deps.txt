@@ -12,7 +12,7 @@ pandas
 wandb
 # nltk
 # swanlab
-torch==2.6.0
+# torch==2.6.0
 # flash_attn==2.7.4.post1
 accelerate>=1.10.1
 # unsloth

@@ -13,11 +13,13 @@ JobsResponse,JobStatus,DelJobsRequest,FetchLogRequest,FetchLogResponse,JobStatus
 from training.training_job import fetch_log
 from db_management.database import DatabaseWrapper
 from datetime import datetime
+from logger_config import setup_logger
+
 database = DatabaseWrapper()
 sagemaker_client = boto_sess.client('sagemaker')
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger = setup_logger('jobs.py', level=logging.INFO)
+
 
 sm_status_mapping = {
     'Pending': JobStatus.PENDING,

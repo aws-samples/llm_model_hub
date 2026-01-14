@@ -1,23 +1,181 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
-import React from 'react';
+import React, { useState } from 'react';
 import {
   CollectionPreferences,
   StatusIndicator,
   Link,
-  Select,
-  Input,
-  Autosuggest,
-  ButtonDropdown,
+  Box,
+  Button,
+  Popover,
+  Badge,
 } from '@cloudscape-design/components';
 import { createTableSortLabelFn } from '../../i18n-strings';
-import {formatDateTime} from '../../common/utils';
+
+// Helper function to mask API key for display
+const maskApiKey = (apiKey) => {
+  if (!apiKey || apiKey.length < 8) return apiKey || '-';
+  const visibleStart = 4;
+  const visibleEnd = 4;
+  return `${apiKey.substring(0, visibleStart)}...${apiKey.substring(apiKey.length - visibleEnd)}`;
+};
+
+// Helper function to parse extra_config
+const parseExtraConfig = (item) => {
+  if (!item.extra_config) return {};
+  try {
+    return typeof item.extra_config === 'string'
+      ? JSON.parse(item.extra_config)
+      : item.extra_config;
+  } catch {
+    return {};
+  }
+};
+
+// Helper function to get API key from item's extra_config
+const getApiKey = (item) => {
+  const config = parseExtraConfig(item);
+  return config.api_key || null;
+};
+
+// Helper function to get network access type (Public/Private) for HyperPod endpoints
+const getNetworkAccess = (item) => {
+  if (item.deployment_target !== 'hyperpod') return null;
+  const config = parseExtraConfig(item);
+  return config.use_public_alb ? 'Public' : 'Private';
+};
+
+// Helper function to get ALB URL from item's extra_config
+const getAlbUrl = (item) => {
+  if (item.deployment_target !== 'hyperpod') return null;
+  const config = parseExtraConfig(item);
+  return config.alb_url || config.endpoint_url || null;
+};
+
+// Helper function to get HyperPod cluster name from item's extra_config
+const getHyperpodCluster = (item) => {
+  if (item.deployment_target !== 'hyperpod') return null;
+  const config = parseExtraConfig(item);
+  return config.eks_cluster_name || null;
+};
+
+// Custom copy function with fallback for non-secure contexts
+const copyToClipboard = async (text) => {
+  // Try modern Clipboard API first
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (err) {
+      console.warn('Clipboard API failed:', err);
+    }
+  }
+
+  // Fallback: use textarea + execCommand
+  const textArea = document.createElement('textarea');
+  textArea.value = text;
+  textArea.style.position = 'fixed';
+  textArea.style.left = '-999999px';
+  textArea.style.top = '-999999px';
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+
+  try {
+    const successful = document.execCommand('copy');
+    document.body.removeChild(textArea);
+    return successful;
+  } catch (err) {
+    console.error('Fallback copy failed:', err);
+    document.body.removeChild(textArea);
+    return false;
+  }
+};
+
+// ALB URL cell component with copy functionality
+const AlbUrlCell = ({ url }) => {
+  const [copyStatus, setCopyStatus] = useState(null);
+
+  const handleCopy = async () => {
+    const success = await copyToClipboard(url);
+    setCopyStatus(success ? 'success' : 'error');
+    setTimeout(() => setCopyStatus(null), 2000);
+  };
+
+  // Truncate URL for display
+  const displayUrl = url.length > 40 ? `${url.substring(0, 40)}...` : url;
+
+  return (
+    <Box display="inline-flex" alignItems="center">
+      <span style={{ marginRight: '8px', fontFamily: 'monospace', fontSize: '12px' }} title={url}>
+        {displayUrl}
+      </span>
+      <Popover
+        dismissButton={false}
+        position="top"
+        size="small"
+        triggerType="custom"
+        visible={copyStatus !== null}
+        content={
+          <StatusIndicator type={copyStatus === 'success' ? 'success' : 'error'}>
+            {copyStatus === 'success' ? 'URL copied' : 'Failed to copy'}
+          </StatusIndicator>
+        }
+        renderWithPortal={true}
+      >
+        <Button
+          iconName="copy"
+          variant="inline-icon"
+          ariaLabel="Copy ALB URL"
+          onClick={handleCopy}
+        />
+      </Popover>
+    </Box>
+  );
+};
+
+// API Key cell component with copy functionality
+const ApiKeyCell = ({ apiKey }) => {
+  const [copyStatus, setCopyStatus] = useState(null);
+
+  const handleCopy = async () => {
+    const success = await copyToClipboard(apiKey);
+    setCopyStatus(success ? 'success' : 'error');
+    setTimeout(() => setCopyStatus(null), 2000);
+  };
+
+  return (
+    <Box display="inline-flex" alignItems="center">
+      <span style={{ marginRight: '8px', fontFamily: 'monospace' }}>{maskApiKey(apiKey)}</span>
+      <Popover
+        dismissButton={false}
+        position="top"
+        size="small"
+        triggerType="custom"
+        visible={copyStatus !== null}
+        content={
+          <StatusIndicator type={copyStatus === 'success' ? 'success' : 'error'}>
+            {copyStatus === 'success' ? 'API key copied' : 'Failed to copy'}
+          </StatusIndicator>
+        }
+        renderWithPortal={true}
+      >
+        <Button
+          iconName="copy"
+          variant="inline-icon"
+          ariaLabel="Copy API key"
+          onClick={handleCopy}
+        />
+      </Popover>
+    </Box>
+  );
+};
 
 const rawColumns = [
   {
     id: 'id',
     sortingField: 'id',
-    header: 'ID',
+    header: 'Training Job ID',
     cell: item => (
       <div>
         <Link href={`/jobs/${item.job_id}`}>{item.job_id}</Link>
@@ -40,6 +198,62 @@ const rawColumns = [
     header: 'Model',
     minWidth: 40,
     isRowHeader: true,
+  },
+  {
+    id: 'deployment_target',
+    sortingField: 'deployment_target',
+    cell: item => (
+      <Badge color={item.deployment_target === 'hyperpod' ? 'blue' : 'green'}>
+        {item.deployment_target === 'hyperpod' ? 'HyperPod' : 'SageMaker'}
+      </Badge>
+    ),
+    header: 'Target',
+    minWidth: 100,
+    isRowHeader: true,
+  },
+  {
+    id: 'hyperpod_cluster',
+    header: 'Cluster',
+    cell: item => {
+      const cluster = getHyperpodCluster(item);
+      if (!cluster) return '-';
+      return cluster;
+    },
+    minWidth: 120,
+  },
+  {
+    id: 'network_access',
+    header: 'Network',
+    cell: item => {
+      const access = getNetworkAccess(item);
+      if (!access) return '-';
+      return (
+        <Badge color={access === 'Public' ? 'green' : 'grey'}>
+          {access}
+        </Badge>
+      );
+    },
+    minWidth: 90,
+  },
+  {
+    id: 'api_key',
+    header: 'API Key',
+    cell: item => {
+      const apiKey = getApiKey(item);
+      if (!apiKey) return '-';
+      return <ApiKeyCell apiKey={apiKey} />;
+    },
+    minWidth: 180,
+  },
+  {
+    id: 'alb_url',
+    header: 'ALB URL',
+    cell: item => {
+      const albUrl = getAlbUrl(item);
+      if (!albUrl) return '-';
+      return <AlbUrlCell url={albUrl} />;
+    },
+    minWidth: 200,
   },
   {
     id: 'engine',
@@ -148,9 +362,14 @@ export const COLUMN_DEFINITIONS = rawColumns.map(column => ({ ...column, ariaLab
 export const serverSideErrorsStore = new Map();
 
 const CONTENT_DISPLAY_OPTIONS = [
-  { id: 'id', label: 'ID', alwaysVisible: true },
+  { id: 'id', label: 'Training Job ID', alwaysVisible: true },
   { id: 'status', label: 'Status' },
   { id: 'endpoint_name', label: 'Endpoint name' },
+  { id: 'deployment_target', label: 'Target' },
+  { id: 'hyperpod_cluster', label: 'Cluster' },
+  { id: 'network_access', label: 'Network' },
+  { id: 'api_key', label: 'API Key' },
+  { id: 'alb_url', label: 'ALB URL' },
   { id: 'engine', label: 'Engine' },
   { id: 'model_name', label: 'Model' },
   { id: 'instance_type', label: 'Instance type' },
@@ -175,13 +394,18 @@ export const DEFAULT_PREFERENCES = {
     { id: 'id', visible: true },
     { id: 'status', visible: true },
     { id: 'endpoint_name', visible: true },
+    { id: 'deployment_target', visible: true },
+    { id: 'hyperpod_cluster', visible: true },
+    { id: 'network_access', visible: true },
+    { id: 'api_key', visible: true },
+    { id: 'alb_url', visible: true },
     { id: 'model_name', visible: true },
     { id: 'engine', visible: true },
     { id: 'instance_type', visible: true },
     { id: 'instance_count', visible: true },
     { id: 'create_time', visible: true },
     { id: 'end_time', visible: false },
-    { id: 'model_s3_path', visible: true }
+    { id: 'model_s3_path', visible: false }
   ],
   wrapLines: false,
   stripedRows: false,

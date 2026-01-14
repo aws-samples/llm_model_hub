@@ -12,15 +12,20 @@ FROM ${BASE_IMAGE}
 RUN apt-get update && apt-get install -y \
     wget \
     git \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Install uv - fast Python package manager
+ENV UV_LINK_MODE=copy
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    mv /root/.local/bin/uv /usr/local/bin/ && \
+    mv /root/.local/bin/uvx /usr/local/bin/
 
 # Make PIP_INDEX available after FROM
 ARG PIP_INDEX
-# Install sagemaker-training toolkit that contains the common functionality necessary to create a container compatible with SageMaker and the Python SDK.
-RUN pip3 install sagemaker-training
 
-
+# Install sagemaker-training toolkit
+RUN uv pip install --system sagemaker-training
 
 # Install the requirements
 COPY requirements_deps.txt /opt/ml/code/
@@ -28,25 +33,32 @@ COPY s5cmd /opt/ml/code/
 COPY train.py /opt/ml/code/
 COPY LLaMA-Factory/ /opt/ml/code/
 
-
 # Set the working directory
 WORKDIR /opt/ml/code/
-RUN pip install "unsloth[cu126-torch260]"
-RUN pip config set global.index-url "$PIP_INDEX" && \
-    pip config set global.extra-index-url "$PIP_INDEX" && \
-    python -m pip install --upgrade pip && \
-    python -m pip install -r requirements.txt && pip install -e ".[metrics,bitsandbytes,deepspeed,liger-kernel,awq,qwen,modelscope,swanlab]"
-# remove the requirements.txt in docker to prevent reinstallation
-RUN rm requirements.txt setup.py
+
+# Install unsloth
+RUN uv pip install --system unsloth
+
+# Install LLaMA-Factory dependencies
+RUN uv pip install --system --index-url "$PIP_INDEX" --extra-index-url https://pypi.org/simple -e. 
+RUN uv pip install --system  -r requirements/metrics.txt && \
+    uv pip install --system  -r requirements/bitsandbytes.txt && \
+    uv pip install --system  -r requirements/deepspeed.txt && \
+    uv pip install --system  -r requirements/liger-kernel.txt && \
+    uv pip install --system -e ".[awq,qwen,modelscope,swanlab]"
+
+# Remove the requirements.txt in docker to prevent reinstallation
+RUN rm pyproject.toml
 ENV DISABLE_VERSION_CHECK=1
-# Instal extral dependencies
+
 # Install flash_attn separately with torch already available
-RUN python -m pip install --no-build-isolation flash-attn==2.7.4.post1
-# Install remaining dependencies (excluding flash_attn which is already installed)
-RUN python -m pip install -r requirements_deps.txt 
-RUN pip uninstall -y intel-extension-for-pytorch
+RUN uv pip install --system --no-build-isolation flash-attn>=2.7.4.post1
 
+# Install remaining dependencies
+RUN uv pip install --system -r requirements_deps.txt
 
+# Uninstall intel-extension-for-pytorch if exists
+RUN uv pip uninstall --system intel-extension-for-pytorch || true
 
 # 定义环境变量
 ENV PATH="/opt/ml/code:${PATH}"
