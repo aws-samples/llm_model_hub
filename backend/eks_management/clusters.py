@@ -388,7 +388,7 @@ class ClusterJobExecutor:
                 raise ValueError("lifecycle_script_s3_uri is required for creating HyperPod cluster")
 
             # Kubernetes labels
-            k8s_labels = ig.get('kubernetes_labels', {})
+            k8s_labels = ig.get('kubernetes_labels') or {}
             if ig.get('use_spot'):
                 k8s_labels['sagemaker.amazonaws.com/node-lifecycle'] = 'spot'
 
@@ -585,7 +585,7 @@ class ClusterJobExecutor:
                 raise ValueError("lifecycle_script_s3_uri is required for updating HyperPod cluster instance groups")
 
             # Kubernetes labels
-            k8s_labels = ig.get('kubernetes_labels', {})
+            k8s_labels = ig.get('kubernetes_labels') or {}
             if ig.get('use_spot'):
                 k8s_labels['sagemaker.amazonaws.com/node-lifecycle'] = 'spot'
 
