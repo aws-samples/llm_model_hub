@@ -13,7 +13,7 @@ from datetime import datetime
 from utils.config import boto_sess,role,default_bucket,sagemaker_session,DEFAULT_ENGINE,DEFAULT_REGION
 from logger_config import setup_logger
 database = DatabaseWrapper()
-logger = setup_logger('login.py', log_file='login.log', level=logging.INFO)
+logger = setup_logger('login.py',level=logging.INFO)
 
 
 def create_token(payload):

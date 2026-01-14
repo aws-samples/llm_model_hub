@@ -6,35 +6,58 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Model Hub V2 is a no-code visual platform for LLM model fine-tuning, deployment, and debugging. It enables users to quickly experiment with fine-tuning various open-source models on AWS SageMaker.
 
+## Git Workflow
+
+- Do NOT commit automatically after making changes
+- Wait for the user to explicitly ask to commit before running git commit
+- Same applies to pushing - wait for explicit instruction
+
 ## Commands
 
 ### Frontend (React)
 ```bash
+# Development mode (slower first startup, hot reload)
 npm start          # Start development server (port 3000)
+bash start_frontend.sh
+
+# Production mode (faster startup, optimized build)
+bash start_frontend.sh --prod         # or -p
+bash start_frontend.sh --prod --port 3001
+
+# Other commands
 npm run build      # Production build
 npm test           # Run tests
 ```
 
 ### Backend (Python/FastAPI)
 ```bash
-# Activate environment first (from backend/ directory)
+# Start backend services (from backend/ directory)
 cd backend
-source .venv/bin/activate
-
-# Start backend services
 bash 02.start_backend.sh
 
-# Or manually:
-pm2 start server.py --name "modelhub-server" --interpreter .venv/bin/python3 -- --host 0.0.0.0 --port 8000
-pm2 start processing_engine/main.py --name "modelhub-engine" --interpreter .venv/bin/python3
-
-# Service management
-pm2 list           # Check running processes
-pm2 restart all    # Restart all services
-pm2 logs           # View logs
-
 # Install dependencies with uv
+source .venv/bin/activate
 uv pip install -r requirements.txt
+```
+
+### Service Management
+```bash
+# Restart all services (frontend + backend)
+bash restart_all.sh              # Development mode
+bash restart_all.sh --prod       # Production mode (faster)
+
+# Frontend management
+bash start_frontend.sh           # Development mode
+bash start_frontend.sh --prod    # Production mode
+bash stop_frontend.sh
+bash status_frontend.sh
+
+# Backend management (from backend/ directory)
+bash backend/02.start_backend.sh
+bash backend/stop_backend.sh
+bash backend/status_backend.sh
+
+# Logs are stored in logs/ directory
 ```
 
 ### User Management

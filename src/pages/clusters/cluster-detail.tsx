@@ -24,6 +24,7 @@ import {
 import { CustomAppLayout, Navigation } from '../commons/common-components';
 import { Breadcrumbs } from '../commons/breadcrumbs';
 import { TopNav } from '../commons/top-nav';
+import SpotPriceInfo from '../commons/spot-price-info';
 import { getCluster, updateClusterInstanceGroups, listClusterNodes } from './hooks';
 import { useSimpleNotifications } from '../commons/use-notifications';
 import { useTranslation } from 'react-i18next';
@@ -919,6 +920,12 @@ function InstanceGroupForm({
       >
         {t('use_spot_instances')}
       </Checkbox>
+      {group.use_spot && (
+        <SpotPriceInfo
+          instanceType={group.instance_type}
+          useSpot={group.use_spot}
+        />
+      )}
       <Checkbox
         checked={group.enable_instance_stress_check || false}
         onChange={({ detail }) => setGroup({ ...group, enable_instance_stress_check: detail.checked })}
