@@ -390,7 +390,7 @@ class ClusterJobExecutor:
             # Kubernetes labels
             k8s_labels = ig.get('kubernetes_labels') or {}
             if ig.get('use_spot'):
-                k8s_labels['sagemaker.amazonaws.com/node-lifecycle'] = 'spot'
+                k8s_labels['node-lifecycle'] = 'spot'
 
             if k8s_labels:
                 ig_config['KubernetesConfig'] = {
@@ -587,7 +587,7 @@ class ClusterJobExecutor:
             # Kubernetes labels
             k8s_labels = ig.get('kubernetes_labels') or {}
             if ig.get('use_spot'):
-                k8s_labels['sagemaker.amazonaws.com/node-lifecycle'] = 'spot'
+                k8s_labels['node-lifecycle'] = 'spot'
 
             if k8s_labels:
                 ig_config['KubernetesConfig'] = {
