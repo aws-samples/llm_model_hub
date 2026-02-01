@@ -366,6 +366,7 @@ if __name__ == "__main__":
     if os.environ.get('USE_EFA') == '1':
         os.environ['FI_PROVIDER'] = 'efa'
         os.environ['FI_EFA_USE_DEVICE_RDMA'] = '1'
+        os.environ['FI_EFA_FORK_SAFE'] = '1'  # Required for multiprocessing with EFA
     else:
         os.environ['NCCL_SOCKET_IFNAME'] = os.environ["SM_NETWORK_INTERFACE_NAME"]
     
