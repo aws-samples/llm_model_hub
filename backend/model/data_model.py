@@ -273,6 +273,9 @@ class InstanceGroupConfig(BaseModel):
     storage_volume_size: int = 500  # Additional EBS volume size in GB
     enable_instance_stress_check: bool = False  # Enable InstanceStress deep health check
     enable_instance_connectivity_check: bool = False  # Enable InstanceConnectivity deep health check
+    # Override VPC config for this instance group (useful for spot instances in specific AZs)
+    override_subnet_id: Optional[str] = None  # Single subnet ID to override cluster default
+    override_security_group_ids: Optional[List[str]] = None  # Optional SG override
 
     @field_validator('instance_type')
     @classmethod
@@ -307,6 +310,15 @@ class VPCConfigModel(BaseModel):
     private_subnet_cidrs: List[str] = ["10.0.10.0/24", "10.0.20.0/24"]
     subnet_ids: Optional[List[str]] = None  # Use existing subnets
     security_group_ids: Optional[List[str]] = None  # Use existing SGs
+
+class SubnetInfo(BaseModel):
+    """Subnet information with availability zone details"""
+    subnet_id: str
+    availability_zone: str
+    availability_zone_id: str
+    cidr_block: Optional[str] = None
+    name: Optional[str] = None
+    is_public: Optional[bool] = None
 
 class EKSConfigModel(BaseModel):
     """EKS cluster configuration"""

@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
 import { useEffect, useState } from 'react';
-import { remotePost } from '../../common/api-gateway';
+import { remotePost, remoteGet } from '../../common/api-gateway';
 
 export function useClusters(params = {}) {
   const { pageSize, currentPageIndex: clientPageIndex } = params.pagination || {};
@@ -116,6 +116,28 @@ export async function listClusterNodes(clusterId) {
     return response;
   } catch (error) {
     console.error('Error listing cluster nodes:', error);
+    throw error;
+  }
+}
+
+export async function getClusterSubnets(clusterId) {
+  try {
+    const response = await remoteGet(`cluster_subnets/${clusterId}`);
+    return response;
+  } catch (error) {
+    console.error('Error getting cluster subnets:', error);
+    throw error;
+  }
+}
+
+export async function getInstanceTypeAzs(instanceType) {
+  try {
+    const response = await remotePost({
+      instance_type: instanceType
+    }, 'instance_type_azs');
+    return response;
+  } catch (error) {
+    console.error('Error getting instance type AZs:', error);
     throw error;
   }
 }
