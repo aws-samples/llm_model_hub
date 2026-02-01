@@ -73,6 +73,16 @@ interface InstanceGroup {
   enable_instance_connectivity_check?: boolean;
 }
 
+// Generate a random 6-character alphanumeric string for group names
+const generateRandomSuffix = (): string => {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < 6; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
+
 const clusterBreadcrumbs = [
   { text: 'Model Hub', href: '/' },
   { text: 'HyperPod Clusters', href: '/clusters' },
@@ -89,9 +99,9 @@ function CreateClusterContent() {
   const [clusterName, setClusterName] = useState('');
   const [eksClusterName, setEksClusterName] = useState('');
   const [kubernetesVersion, setKubernetesVersion] = useState({ label: '1.33 (Recommended)', value: '1.33' });
-  const [instanceGroups, setInstanceGroups] = useState<InstanceGroup[]>([
+  const [instanceGroups, setInstanceGroups] = useState<InstanceGroup[]>(() => [
     {
-      name: 'worker-group-1',
+      name: `worker-group-${generateRandomSuffix()}`,
       instance_type: 'ml.g5.4xlarge',
       instance_count: 1,
       min_instance_count: 0,
@@ -214,7 +224,7 @@ function CreateClusterContent() {
     setInstanceGroups([
       ...instanceGroups,
       {
-        name: `worker-group-${instanceGroups.length + 1}`,
+        name: `worker-group-${generateRandomSuffix()}`,
         instance_type: 'ml.g5.4xlarge',
         instance_count: 0,
         min_instance_count: 0,

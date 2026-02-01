@@ -127,6 +127,16 @@ interface ClusterData {
 //   { label: 'ml.p5en.48xlarge (8x H200)', value: 'ml.p5en.48xlarge' },
 // ];
 
+// Generate a random 6-character alphanumeric string for group names
+const generateRandomSuffix = (): string => {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < 6; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
+
 const emptyInstanceGroup: InstanceGroup = {
   name: '',
   instance_type: 'ml.g5.xlarge',
@@ -272,7 +282,7 @@ function ClusterDetailContent() {
   };
 
   const handleAddGroup = () => {
-    const newGroup = { ...emptyInstanceGroup, name: `worker-group-${(cluster?.instance_groups?.length || 0) + 1}` };
+    const newGroup = { ...emptyInstanceGroup, name: `worker-group-${generateRandomSuffix()}` };
     setEditingGroup(newGroup);
     // Load subnets if not already loaded
     if (id && clusterSubnets.length === 0) {
@@ -960,7 +970,7 @@ function InstanceGroupForm({
         <Input
           value={group.name}
           onChange={({ detail }) => setGroup({ ...group, name: detail.value })}
-          placeholder="worker-group-1"
+          placeholder="worker-group-abc123"
         />
       </FormField>
       <FormField label={t('instance_type')}>
