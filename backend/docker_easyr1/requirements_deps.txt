@@ -1,2 +1,0 @@
-swanlab
-# transformers @git+https://github.com/huggingface/transformers.git@main

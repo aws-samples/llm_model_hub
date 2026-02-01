@@ -1,6 +1,0 @@
-[submodule "backend/docker/LLaMA-Factory"]
-	path = backend/docker/LLaMA-Factory
-	url = https://github.com/hiyouga/LLaMA-Factory.git
-[submodule "backend/docker_easyr1/EasyR1"]
-	path = backend/docker_easyr1/EasyR1
-	url = https://github.com/hiyouga/EasyR1.git
