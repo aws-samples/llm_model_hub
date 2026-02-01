@@ -1,10 +1,43 @@
 import boto3
 from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set
 from collections import defaultdict
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def get_instance_type_availability_zones(
+    ec2_client,
+    instance_type: str
+) -> Set[str]:
+    """
+    Get the set of availability zones where an instance type is actually available.
+
+    Uses describe_instance_type_offerings API to check real availability,
+    not just spot price history which may include AZs where capacity is exhausted.
+    """
+    try:
+        # Remove 'ml.' prefix if present for EC2 API
+        ec2_instance_type = instance_type[3:] if instance_type.startswith('ml.') else instance_type
+
+        available_azs = set()
+        paginator = ec2_client.get_paginator('describe_instance_type_offerings')
+
+        for page in paginator.paginate(
+            LocationType='availability-zone',
+            Filters=[
+                {'Name': 'instance-type', 'Values': [ec2_instance_type]}
+            ]
+        ):
+            for offering in page.get('InstanceTypeOfferings', []):
+                available_azs.add(offering['Location'])
+
+        return available_azs
+    except Exception as e:
+        logger.warning(f"Failed to get instance type offerings for {instance_type}: {e}")
+        # Return empty set on error - will fall back to price-based recommendation
+        return set()
 
 
 def get_spot_price_history(
@@ -93,6 +126,11 @@ def get_spot_price_history(
                 }
                 continue
 
+            # Get AZs where instance type is actually available (not just has price history)
+            available_azs = get_instance_type_availability_zones(ec2_client, inst_type)
+            if available_azs:
+                logger.info(f"Instance type {inst_type} available in AZs: {available_azs}")
+
             az_stats = []
             all_prices = []
 
@@ -100,6 +138,9 @@ def get_spot_price_history(
                 if prices:
                     price_values = [p['price'] for p in prices]
                     all_prices.extend(price_values)
+
+                    # Check if this AZ actually supports the instance type
+                    is_available = (az in available_azs) if available_azs else True  # Fallback if API failed
 
                     # Apply 15% SageMaker markup to all prices for consistency
                     az_stats.append({
@@ -109,22 +150,36 @@ def get_spot_price_history(
                         'max_price': max(price_values) * 1.15,
                         'avg_price': round(sum(price_values) / len(price_values) * 1.15, 4),
                         'price_count': len(prices),
+                        'is_available': is_available,  # Add availability flag
                         'price_history': sorted(prices, key=lambda x: x['timestamp'], reverse=True)[:10]  # Last 10 records
                     })
 
             # Sort by current price (ascending)
             az_stats.sort(key=lambda x: x['current_price'])
 
+            # For recommended_az, only consider AZs where instance type is actually available
+            available_az_stats = [az for az in az_stats if az.get('is_available', True)]
+
             # Calculate overall statistics
-            # Sagemaker price add 15% markup 
+            # Sagemaker price add 15% markup
             if all_prices:
+                # Recommend AZ with lowest price that is actually available
+                # Fall back to cheapest AZ if none are confirmed available
+                recommended_az = None
+                if available_az_stats:
+                    recommended_az = available_az_stats[0]['availability_zone']
+                elif az_stats:
+                    recommended_az = az_stats[0]['availability_zone']
+                    logger.warning(f"No confirmed available AZs for {inst_type}, using cheapest from price history")
+
                 overall_stats = {
                     'available': True,
                     'min_price': min(all_prices)*1.15,
                     'max_price': max(all_prices)*1.15,
                     'avg_price': round(sum(all_prices) / len(all_prices), 4)*1.15,
                     'price_volatility': round((max(all_prices) - min(all_prices)) / min(all_prices) * 100, 2) if min(all_prices) > 0 else 0,
-                    'recommended_az': az_stats[0]['availability_zone'] if az_stats else None,
+                    'recommended_az': recommended_az,
+                    'available_az_count': len(available_az_stats),
                     'availability_zones': az_stats
                 }
             else:
@@ -147,6 +202,42 @@ def get_spot_price_history(
                 'region': region,
                 'days': days
             }
+        }
+
+
+def get_instance_type_available_azs(
+    instance_type: str,
+    region: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Get the list of availability zones where an instance type is available.
+
+    Args:
+        instance_type: EC2/SageMaker instance type (e.g., 'ml.p5en.48xlarge')
+        region: AWS region (optional)
+
+    Returns:
+        Dictionary with available AZs and instance type info
+    """
+    try:
+        if region:
+            ec2_client = boto3.client('ec2', region_name=region)
+        else:
+            ec2_client = boto3.client('ec2')
+
+        available_azs = get_instance_type_availability_zones(ec2_client, instance_type)
+
+        return {
+            'instance_type': instance_type,
+            'available_azs': sorted(list(available_azs)),
+            'region': region or boto3.Session().region_name
+        }
+    except Exception as e:
+        logger.error(f"Error getting instance type AZs: {e}")
+        return {
+            'instance_type': instance_type,
+            'available_azs': [],
+            'error': str(e)
         }
 
 

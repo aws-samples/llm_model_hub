@@ -29,26 +29,28 @@ import { useTranslation } from 'react-i18next';
 export const instanceTypeOptions = [
   { label: 'ml.c5.large (CPU)', value: 'ml.c5.large' },
   { label: 'ml.c5.xlarge (CPU)', value: 'ml.c5.xlarge' },
-  { label: 'ml.g5.4xlarge (1x A10G)', value: 'ml.g5.4xlarge' },
-  { label: 'ml.g5.8xlarge (1x A10G)', value: 'ml.g5.8xlarge' },
-  { label: 'ml.g5.12xlarge (4x A10G)', value: 'ml.g5.12xlarge' },
-  { label: 'ml.g5.24xlarge (4x A10G)', value: 'ml.g5.24xlarge' },
-  { label: 'ml.g5.48xlarge (8x A10G)', value: 'ml.g5.48xlarge' },
-  { label: 'ml.g6e.4xlarge (1x L40s 48GB)', value: 'ml.g6e.4xlarge' },
-  { label: 'ml.g6e.8xlarge (1x L40s 48GB)', value: 'ml.g6e.8xlarge' },
-  { label: 'ml.g6e.12xlarge (4x L40s 48GB)', value: 'ml.g6e.12xlarge' },
-  { label: 'ml.g6e.24xlarge (4x L40s 48GB)', value: 'ml.g6e.24xlarge' },
-  { label: 'ml.g6e.48xlarge (8x L40s 48GB)', value: 'ml.g6e.48xlarge' },
-  { label: 'ml.g6.4xlarge (1x L40 24G)', value: 'ml.g6.4xlarge' },
-  { label: 'ml.g6.8xlarge (1x L40 24G)', value: 'ml.g6.8xlarge' },
-  { label: 'ml.g6.12xlarge (4x L40 24G)', value: 'ml.g6.12xlarge' },
-  { label: 'ml.g6.24xlarge (4x L40 24G)', value: 'ml.g6.24xlarge' },
-  { label: 'ml.g6.48xlarge (8x L40 24G)', value: 'ml.g6.48xlarge' },
+  { label: 'ml.g5.4xlarge (1x A10G 24GB)', value: 'ml.g5.4xlarge' },
+  { label: 'ml.g5.8xlarge (1x A10G 24GB)', value: 'ml.g5.8xlarge' },
+  { label: 'ml.g5.12xlarge (4x A10G 24GB)', value: 'ml.g5.12xlarge' },
+  { label: 'ml.g5.24xlarge (4x A10G 24GB)', value: 'ml.g5.24xlarge' },
+  { label: 'ml.g5.48xlarge (8x A10G 24GB)', value: 'ml.g5.48xlarge' },
+  { label: 'ml.g6.4xlarge (1x L4 24GB)', value: 'ml.g6.4xlarge' },
+  { label: 'ml.g6.8xlarge (1x L4 24GB)', value: 'ml.g6.8xlarge' },
+  { label: 'ml.g6.12xlarge (4x L4 24GB)', value: 'ml.g6.12xlarge' },
+  { label: 'ml.g6.24xlarge (4x L4 24GB)', value: 'ml.g6.24xlarge' },
+  { label: 'ml.g6.48xlarge (8x L4 24GB)', value: 'ml.g6.48xlarge' },
+  { label: 'ml.g6e.4xlarge (1x L40S 48GB)', value: 'ml.g6e.4xlarge' },
+  { label: 'ml.g6e.8xlarge (1x L40S 48GB)', value: 'ml.g6e.8xlarge' },
+  { label: 'ml.g6e.12xlarge (4x L40S 48GB)', value: 'ml.g6e.12xlarge' },
+  { label: 'ml.g6e.24xlarge (4x L40S 48GB)', value: 'ml.g6e.24xlarge' },
+  { label: 'ml.g6e.48xlarge (8x L40S 48GB)', value: 'ml.g6e.48xlarge' },
   { label: 'ml.p4d.24xlarge (8x A100 40GB)', value: 'ml.p4d.24xlarge' },
   { label: 'ml.p4de.24xlarge (8x A100 80GB)', value: 'ml.p4de.24xlarge' },
-  { label: 'ml.p5.48xlarge (8x H100)', value: 'ml.p5.48xlarge' },
-  { label: 'ml.p5e.48xlarge (8x H200)', value: 'ml.p5e.48xlarge' },
-  { label: 'ml.p5en.48xlarge (8x H200)', value: 'ml.p5en.48xlarge' },
+  { label: 'ml.p5.48xlarge (8x H100 80GB)', value: 'ml.p5.48xlarge' },
+  { label: 'ml.p5e.48xlarge (8x H200 141GB)', value: 'ml.p5e.48xlarge' },
+  { label: 'ml.p5en.48xlarge (8x H200 141GB)', value: 'ml.p5en.48xlarge' },
+  { label: 'ml.p6-b200.48xlarge (8x B200 179GB)', value: 'ml.p6-b200.48xlarge' },
+  { label: 'ml.p6-b300.48xlarge (8x B300 268GB)', value: 'ml.p6-b300.48xlarge' },
 ];
 
 const kubernetesVersionOptions = [
@@ -71,6 +73,16 @@ interface InstanceGroup {
   enable_instance_connectivity_check?: boolean;
 }
 
+// Generate a random 6-character alphanumeric string for group names
+const generateRandomSuffix = (): string => {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < 6; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
+
 const clusterBreadcrumbs = [
   { text: 'Model Hub', href: '/' },
   { text: 'HyperPod Clusters', href: '/clusters' },
@@ -87,9 +99,9 @@ function CreateClusterContent() {
   const [clusterName, setClusterName] = useState('');
   const [eksClusterName, setEksClusterName] = useState('');
   const [kubernetesVersion, setKubernetesVersion] = useState({ label: '1.33 (Recommended)', value: '1.33' });
-  const [instanceGroups, setInstanceGroups] = useState<InstanceGroup[]>([
+  const [instanceGroups, setInstanceGroups] = useState<InstanceGroup[]>(() => [
     {
-      name: 'worker-group-1',
+      name: `worker-group-${generateRandomSuffix()}`,
       instance_type: 'ml.g5.4xlarge',
       instance_count: 1,
       min_instance_count: 0,
@@ -212,7 +224,7 @@ function CreateClusterContent() {
     setInstanceGroups([
       ...instanceGroups,
       {
-        name: `worker-group-${instanceGroups.length + 1}`,
+        name: `worker-group-${generateRandomSuffix()}`,
         instance_type: 'ml.g5.4xlarge',
         instance_count: 0,
         min_instance_count: 0,

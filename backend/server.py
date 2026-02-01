@@ -22,7 +22,7 @@ from pydantic import BaseModel,Field
 from model.data_model import *
 import asyncio
 from training.jobs import create_job,list_jobs,get_job_by_id,delete_job_by_id,fetch_training_log,get_job_status,stop_and_delete_job
-from training.spot_price_history import get_spot_price_history, get_spot_interruption_rate
+from training.spot_price_history import get_spot_price_history, get_spot_interruption_rate, get_instance_type_available_azs
 from eks_management.clusters import (
     create_cluster as create_eks_cluster,
     list_clusters as list_eks_clusters,
@@ -32,6 +32,7 @@ from eks_management.clusters import (
     get_cluster_status as get_eks_cluster_status,
     list_cluster_nodes as list_eks_cluster_nodes,
     get_cluster_instance_types as get_eks_cluster_instance_types,
+    get_cluster_subnets as get_eks_cluster_subnets,
 )
 from processing_engine.cluster_processor import sync_cluster_status_with_aws, sync_all_cluster_statuses
 from utils.get_factory_config import get_factory_config
@@ -227,7 +228,23 @@ async def handle_spot_interruption_rate(request:SpotInterruptionRateRequest):
         region=request.region
     )
     return CommonResponse(response_id=str(uuid.uuid4()), response=result)
-    
+
+
+@app.post("/v1/instance_type_azs",dependencies=[Depends(check_api_key)])
+async def handle_instance_type_azs(request:SpotInterruptionRateRequest):
+    """
+    Get list of availability zones where an instance type is available.
+    Useful for selecting the right subnet when certain instance types
+    are only available in specific AZs.
+    """
+    result = await asyncio.to_thread(
+        get_instance_type_available_azs,
+        instance_type=request.instance_type,
+        region=request.region
+    )
+    return CommonResponse(response_id=str(uuid.uuid4()), response=result)
+
+
 @app.post('/v1/deploy_endpoint',dependencies=[Depends(check_api_key)])
 async def handle_deploy_endpoint(request:DeployModelRequest):
     logger.info(f"Deploy endpoint request received: {request}")
@@ -476,6 +493,24 @@ async def handle_get_cluster_instance_types(cluster_id: str):
                 'cluster_id': cluster_id,
                 'instance_types': result.get('instance_types', []),
                 'instance_type_details': result.get('instance_type_details', [])
+            }
+        }
+    )
+
+
+@app.get('/v1/cluster_subnets/{cluster_id}', dependencies=[Depends(check_api_key)])
+async def handle_get_cluster_subnets(cluster_id: str):
+    """Get subnet information with availability zones for a HyperPod cluster."""
+    logger.info(f"Getting cluster subnets for cluster: {cluster_id}")
+    result = await get_eks_cluster_subnets(cluster_id)
+    return CommonResponse(
+        response_id=str(uuid.uuid4()),
+        response={
+            'statusCode': 200,
+            'body': {
+                'cluster_id': cluster_id,
+                'subnets': result.get('subnets', []),
+                'security_group_ids': result.get('security_group_ids', [])
             }
         }
     )

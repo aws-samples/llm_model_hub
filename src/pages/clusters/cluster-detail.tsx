@@ -25,7 +25,7 @@ import { CustomAppLayout, Navigation } from '../commons/common-components';
 import { Breadcrumbs } from '../commons/breadcrumbs';
 import { TopNav } from '../commons/top-nav';
 import SpotPriceInfo from '../commons/spot-price-info';
-import { getCluster, updateClusterInstanceGroups, listClusterNodes } from './hooks';
+import { getCluster, updateClusterInstanceGroups, listClusterNodes, getClusterSubnets, getInstanceTypeAzs } from './hooks';
 import { useSimpleNotifications } from '../commons/use-notifications';
 import { useTranslation } from 'react-i18next';
 import {instanceTypeOptions} from './create-cluster';
@@ -60,6 +60,17 @@ interface InstanceGroup {
   storage_volume_size?: number;
   enable_instance_stress_check?: boolean;
   enable_instance_connectivity_check?: boolean;
+  override_subnet_id?: string;
+  override_security_group_ids?: string[];
+}
+
+interface SubnetInfo {
+  subnet_id: string;
+  availability_zone: string;
+  availability_zone_id: string;
+  cidr_block?: string;
+  name?: string;
+  is_public?: boolean;
 }
 
 interface ClusterNode {
@@ -116,6 +127,16 @@ interface ClusterData {
 //   { label: 'ml.p5en.48xlarge (8x H200)', value: 'ml.p5en.48xlarge' },
 // ];
 
+// Generate a random 6-character alphanumeric string for group names
+const generateRandomSuffix = (): string => {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < 6; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
+
 const emptyInstanceGroup: InstanceGroup = {
   name: '',
   instance_type: 'ml.g5.xlarge',
@@ -126,6 +147,8 @@ const emptyInstanceGroup: InstanceGroup = {
   storage_volume_size: 500,
   enable_instance_stress_check: false,
   enable_instance_connectivity_check: false,
+  override_subnet_id: '',
+  override_security_group_ids: [],
 };
 
 // Helper function to extract account ID and region from ARN
@@ -173,6 +196,11 @@ function ClusterDetailContent() {
   const [nodesLoading, setNodesLoading] = useState(false);
   const [nodesLastUpdated, setNodesLastUpdated] = useState<Date | null>(null);
   const [errorDismissed, setErrorDismissed] = useState(false);
+
+  // Subnet info state for override selection
+  const [clusterSubnets, setClusterSubnets] = useState<SubnetInfo[]>([]);
+  const [subnetsLoading, setSubnetsLoading] = useState(false);
+  const [instanceTypeAzs, setInstanceTypeAzs] = useState<string[]>([]);
 
   useEffect(() => {
     if (id) {
@@ -227,14 +255,54 @@ function ClusterDetailContent() {
     }
   };
 
+  const loadSubnets = async (clusterId: string) => {
+    setSubnetsLoading(true);
+    try {
+      const response = await getClusterSubnets(clusterId);
+      const body = response?.response?.body ?? response?.body ?? response;
+      const subnets = body?.subnets || [];
+      setClusterSubnets(subnets);
+    } catch (error) {
+      console.error('Error loading cluster subnets:', error);
+      setClusterSubnets([]);
+    } finally {
+      setSubnetsLoading(false);
+    }
+  };
+
+  const loadInstanceTypeAzs = async (instanceType: string) => {
+    try {
+      const response = await getInstanceTypeAzs(instanceType);
+      const azs = response?.response?.available_azs || [];
+      setInstanceTypeAzs(azs);
+    } catch (error) {
+      console.error('Error loading instance type AZs:', error);
+      setInstanceTypeAzs([]);
+    }
+  };
+
   const handleAddGroup = () => {
-    setEditingGroup({ ...emptyInstanceGroup, name: `worker-group-${(cluster?.instance_groups?.length || 0) + 1}` });
+    const newGroup = { ...emptyInstanceGroup, name: `worker-group-${generateRandomSuffix()}` };
+    setEditingGroup(newGroup);
+    // Load subnets if not already loaded
+    if (id && clusterSubnets.length === 0) {
+      loadSubnets(id);
+    }
+    // Load instance type AZs for the default instance type
+    loadInstanceTypeAzs(newGroup.instance_type);
     setShowAddModal(true);
   };
 
   const handleEditGroup = () => {
     if (selectedInstanceGroups.length === 1) {
-      setEditingGroup({ ...selectedInstanceGroups[0] });
+      const groupToEdit = { ...selectedInstanceGroups[0] };
+      setEditingGroup(groupToEdit);
+      // Load subnets if not already loaded
+      if (id && clusterSubnets.length === 0) {
+        loadSubnets(id);
+      }
+      // Load instance type AZs for the group's instance type
+      loadInstanceTypeAzs(groupToEdit.instance_type);
       setShowEditModal(true);
     }
   };
@@ -805,7 +873,7 @@ function ClusterDetailContent() {
           </Box>
         }
       >
-        <InstanceGroupForm group={editingGroup} setGroup={setEditingGroup} t={t} />
+        <InstanceGroupForm group={editingGroup} setGroup={setEditingGroup} t={t} subnets={clusterSubnets} subnetsLoading={subnetsLoading} instanceTypeAzs={instanceTypeAzs} onInstanceTypeChange={loadInstanceTypeAzs} />
       </Modal>
 
       {/* Edit Instance Group Modal */}
@@ -826,7 +894,7 @@ function ClusterDetailContent() {
           </Box>
         }
       >
-        <InstanceGroupForm group={editingGroup} setGroup={setEditingGroup} t={t} />
+        <InstanceGroupForm group={editingGroup} setGroup={setEditingGroup} t={t} subnets={clusterSubnets} subnetsLoading={subnetsLoading} instanceTypeAzs={instanceTypeAzs} onInstanceTypeChange={loadInstanceTypeAzs} />
       </Modal>
 
       {/* Delete Confirmation Modal */}
@@ -863,24 +931,56 @@ function InstanceGroupForm({
   group,
   setGroup,
   t,
+  subnets,
+  subnetsLoading,
+  instanceTypeAzs,
+  onInstanceTypeChange,
 }: {
   group: InstanceGroup;
   setGroup: React.Dispatch<React.SetStateAction<InstanceGroup>>;
   t: (key: string) => string;
+  subnets: SubnetInfo[];
+  subnetsLoading: boolean;
+  instanceTypeAzs: string[];
+  onInstanceTypeChange: (instanceType: string) => void;
 }) {
+  // Build subnet options for dropdown, marking which ones support the instance type
+  // Filter out public subnets - only show private subnets for instance groups
+  // Check both is_public flag and subnet name for "public" keyword
+  const privateSubnets = subnets.filter(subnet =>
+    !subnet.is_public && !(subnet.name?.toLowerCase().includes('public'))
+  );
+  const subnetOptions = [
+    { label: t('use_cluster_default'), value: '', description: '' },
+    ...privateSubnets.map(subnet => {
+      const isSupported = instanceTypeAzs.length === 0 || instanceTypeAzs.includes(subnet.availability_zone);
+      const supportLabel = isSupported ? '' : ' [NOT SUPPORTED]';
+      return {
+        label: `${subnet.name || subnet.subnet_id} (${subnet.availability_zone})${supportLabel}`,
+        value: subnet.subnet_id,
+        description: `${subnet.subnet_id} - ${subnet.cidr_block || ''}`,
+        disabled: !isSupported,
+      };
+    }),
+  ];
+
   return (
     <SpaceBetween size="l">
       <FormField label={t('group_name')}>
         <Input
           value={group.name}
           onChange={({ detail }) => setGroup({ ...group, name: detail.value })}
-          placeholder="worker-group-1"
+          placeholder="worker-group-abc123"
         />
       </FormField>
       <FormField label={t('instance_type')}>
         <Select
           selectedOption={instanceTypeOptions.find(opt => opt.value === group.instance_type) || null}
-          onChange={({ detail }) => setGroup({ ...group, instance_type: detail.selectedOption?.value || 'ml.g5.xlarge' })}
+          onChange={({ detail }) => {
+            const newInstanceType = detail.selectedOption?.value || 'ml.g5.xlarge';
+            setGroup({ ...group, instance_type: newInstanceType, override_subnet_id: '' });
+            onInstanceTypeChange(newInstanceType);
+          }}
           options={instanceTypeOptions}
         />
       </FormField>
@@ -925,6 +1025,30 @@ function InstanceGroupForm({
           instanceType={group.instance_type}
           useSpot={group.use_spot}
         />
+      )}
+      {/* Override Subnet/AZ selection - especially useful for spot instances */}
+      {group.use_spot && (
+        <>
+          {instanceTypeAzs.length > 0 && (
+            <Box variant="small" color="text-body-secondary">
+              <StatusIndicator type="info">
+                {t('instance_type_az_info')}{instanceTypeAzs.join(', ')}
+              </StatusIndicator>
+            </Box>
+          )}
+          <FormField
+            label={t('override_subnet')}
+            description={t('override_subnet_desc')}
+          >
+            <Select
+              selectedOption={subnetOptions.find(opt => opt.value === (group.override_subnet_id || '')) || subnetOptions[0]}
+              onChange={({ detail }) => setGroup({ ...group, override_subnet_id: detail.selectedOption?.value || '' })}
+              options={subnetOptions}
+              statusType={subnetsLoading ? 'loading' : 'finished'}
+              loadingText={t('loading')}
+            />
+          </FormField>
+        </>
       )}
       <Checkbox
         checked={group.enable_instance_stress_check || false}

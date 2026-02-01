@@ -43,6 +43,42 @@ database = DatabaseWrapper()
 # Cluster table name
 CLUSTER_TABLE = 'CLUSTER_TABLE'
 
+# HyperPod status mapping: AWS status -> internal ClusterStatus
+HYPERPOD_STATUS_MAPPING = {
+    'Creating': ClusterStatus.CREATING,
+    'Updating': ClusterStatus.UPDATING,
+    'InService': ClusterStatus.ACTIVE,
+    'Deleting': ClusterStatus.DELETING,
+    'Failed': ClusterStatus.FAILED,
+    'RollingBack': ClusterStatus.UPDATING,
+    'NOTFOUND': ClusterStatus.DELETED,
+    'ERROR': ClusterStatus.FAILED
+}
+
+
+def sync_cluster_status_on_error(
+    cluster_id: str,
+    cluster_name: str,
+    original_error: Exception
+) -> None:
+    """
+    Sync database status with actual AWS cluster status when an operation fails.
+
+    Instead of blindly setting status to FAILED, this function queries AWS
+    for the real cluster status and updates the database accordingly.
+    The error message is recorded separately without affecting the status.
+    """
+    try:
+        executor = ClusterJobExecutor(cluster_id)
+        aws_status, _ = executor.get_hyperpod_cluster_status(cluster_name)
+        real_status = HYPERPOD_STATUS_MAPPING.get(aws_status, ClusterStatus.PENDING)
+        database.set_cluster_status(cluster_id, real_status)
+        database.set_cluster_error_message(cluster_id, str(original_error))
+        logger.info(f"Synced cluster status to {real_status.value} (AWS: {aws_status}), recorded error: {original_error}")
+    except Exception as sync_error:
+        logger.error(f"Failed to sync cluster status from AWS: {sync_error}")
+        database.update_cluster_error(cluster_id, str(original_error))
+
 
 class ClusterJobExecutor:
     """
@@ -333,6 +369,107 @@ class ClusterJobExecutor:
             logger.error(f"Error installing HyperPod dependencies: {e}")
             return False
 
+    def _build_instance_group_config(
+        self,
+        ig: Dict[str, Any],
+        execution_role_arn: str,
+        lifecycle_script_s3_uri: Optional[str],
+        node_provisioning_mode: str = "Continuous",
+        is_new_group: bool = True,
+        default_security_group_ids: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Build instance group configuration for HyperPod API calls.
+
+        This helper method consolidates the instance group config building logic
+        used by both create_hyperpod_cluster and update_hyperpod_cluster.
+
+        Args:
+            is_new_group: If True, sets CapacityRequirements. If False (existing group),
+                         only sets CapacityRequirements if use_spot is explicitly True.
+                         This is because AWS doesn't allow changing CapacityType for existing groups.
+            default_security_group_ids: Default security group IDs from cluster config,
+                         used when override_subnet_id is set but override_security_group_ids is not.
+        """
+        ig_config = {
+            'InstanceGroupName': ig['name'],
+            'InstanceType': ig['instance_type'],
+            'InstanceCount': ig.get('instance_count', 0),
+            'ExecutionRole': execution_role_arn,
+            'ThreadsPerCore': ig.get('threads_per_core', 1),
+        }
+
+        # MinInstanceCount is only supported when NodeProvisioningMode is Continuous
+        if node_provisioning_mode == 'Continuous' and ig.get('min_instance_count') is not None:
+            ig_config['MinInstanceCount'] = ig['min_instance_count']
+
+        # LifeCycleConfig is REQUIRED
+        if not lifecycle_script_s3_uri:
+            raise ValueError("lifecycle_script_s3_uri is required for HyperPod cluster operations")
+
+        lifecycle_config = {
+            'SourceS3Uri': lifecycle_script_s3_uri,
+            'OnCreate': 'on_create.sh'
+        }
+
+        # Add deep health checks if enabled
+        health_checks = []
+        if ig.get('enable_instance_stress_check', False):
+            health_checks.append('InstanceStress')
+        if ig.get('enable_instance_connectivity_check', False):
+            health_checks.append('InstanceConnectivity')
+        if health_checks:
+            lifecycle_config['OnStartDeepHealthChecks'] = health_checks
+
+        ig_config['LifeCycleConfig'] = lifecycle_config
+
+        # Capacity requirements for Spot or On-Demand instances
+        # Note: AWS doesn't allow changing CapacityType for existing instance groups
+        # So we only set this for new groups, or if user explicitly wants spot for existing group
+        if is_new_group:
+            # New group - always set CapacityRequirements
+            if ig.get('use_spot'):
+                ig_config['CapacityRequirements'] = {'Spot': {}}
+            else:
+                ig_config['CapacityRequirements'] = {'OnDemand': {}}
+        elif ig.get('use_spot'):
+            # Existing group with use_spot=True - try to set Spot (may fail if group was OnDemand)
+            ig_config['CapacityRequirements'] = {'Spot': {}}
+
+        # Kubernetes labels
+        k8s_labels = ig.get('kubernetes_labels') or {}
+        if ig.get('use_spot'):
+            k8s_labels['node-lifecycle'] = 'spot'
+        if k8s_labels:
+            ig_config['KubernetesConfig'] = {'Labels': k8s_labels}
+
+        # Training Plan ARN for capacity reservation
+        if ig.get('training_plan_arn'):
+            ig_config['TrainingPlanArn'] = ig['training_plan_arn']
+
+        # Additional storage volume (EBS) per instance
+        storage_volume_size = ig.get('storage_volume_size', 500)
+        if storage_volume_size and storage_volume_size > 0:
+            ig_config['InstanceStorageConfigs'] = [{
+                'EbsVolumeConfig': {'VolumeSizeInGB': storage_volume_size}
+            }]
+
+        # Override VPC config for this instance group (useful for spot instances in specific AZs)
+        override_subnet_id = ig.get('override_subnet_id')
+        if override_subnet_id:
+            # Use override security groups if provided, otherwise fall back to cluster default
+            override_sg_ids = ig.get('override_security_group_ids') or default_security_group_ids
+            if override_sg_ids:
+                ig_config['OverrideVpcConfig'] = {
+                    'Subnets': [override_subnet_id],
+                    'SecurityGroupIds': override_sg_ids
+                }
+                logger.info(f"Instance group {ig['name']} using OverrideVpcConfig: subnet={override_subnet_id}")
+            else:
+                logger.warning(f"Instance group {ig['name']} has override_subnet_id but no security groups available")
+
+        return ig_config
+
     def create_hyperpod_cluster(
         self,
         cluster_name: str,
@@ -351,67 +488,17 @@ class ClusterJobExecutor:
         """Create HyperPod cluster."""
         logger.info(f"Creating HyperPod cluster: {cluster_name}")
 
-        # Build instance groups config
-        instance_groups_config = []
-        for ig in instance_groups:
-            ig_config = {
-                'InstanceGroupName': ig['name'],
-                'InstanceType': ig['instance_type'],
-                'InstanceCount': ig['instance_count'],
-                'ExecutionRole': execution_role_arn,
-                'ThreadsPerCore': ig.get('threads_per_core', 1),
-            }
-
-            # MinInstanceCount is only supported when NodeProvisioningMode is Continuous
-            if node_provisioning_mode == 'Continuous' and ig.get('min_instance_count') is not None:
-                ig_config['MinInstanceCount'] = ig['min_instance_count']
-
-            # LifeCycleConfig is REQUIRED - must always be set
-            if lifecycle_script_s3_uri:
-                lifecycle_config = {
-                    'SourceS3Uri': lifecycle_script_s3_uri,
-                    'OnCreate': 'on_create.sh'
-                }
-
-                # Add deep health checks if enabled
-                health_checks = []
-                if ig.get('enable_instance_stress_check', False):
-                    health_checks.append('InstanceStress')
-                if ig.get('enable_instance_connectivity_check', False):
-                    health_checks.append('InstanceConnectivity')
-
-                if health_checks:
-                    lifecycle_config['OnStartDeepHealthChecks'] = health_checks
-
-                ig_config['LifeCycleConfig'] = lifecycle_config
-            else:
-                raise ValueError("lifecycle_script_s3_uri is required for creating HyperPod cluster")
-
-            # Kubernetes labels
-            k8s_labels = ig.get('kubernetes_labels') or {}
-            if ig.get('use_spot'):
-                k8s_labels['node-lifecycle'] = 'spot'
-
-            if k8s_labels:
-                ig_config['KubernetesConfig'] = {
-                    'Labels': k8s_labels
-                }
-
-            # Training Plan ARN for capacity reservation
-            training_plan_arn = ig.get('training_plan_arn')
-            if training_plan_arn:
-                ig_config['TrainingPlanArn'] = training_plan_arn
-
-            # Additional storage volume (EBS) per instance
-            storage_volume_size = ig.get('storage_volume_size', 500)
-            if storage_volume_size and storage_volume_size > 0:
-                ig_config['InstanceStorageConfigs'] = [{
-                    'EbsVolumeConfig': {
-                        'VolumeSizeInGB': storage_volume_size
-                    }
-                }]
-
-            instance_groups_config.append(ig_config)
+        # Build instance groups config using helper method
+        instance_groups_config = [
+            self._build_instance_group_config(
+                ig=ig,
+                execution_role_arn=execution_role_arn,
+                lifecycle_script_s3_uri=lifecycle_script_s3_uri,
+                node_provisioning_mode=node_provisioning_mode,
+                default_security_group_ids=security_group_ids
+            )
+            for ig in instance_groups
+        ]
 
         # Build cluster config
         cluster_config = {
@@ -473,6 +560,23 @@ class ClusterJobExecutor:
         except Exception as e:
             logger.error(f"Error getting cluster status: {e}")
             return 'ERROR', str(e)
+
+    def get_hyperpod_instance_groups(self, cluster_name: str) -> Dict[str, str]:
+        """
+        Get current instance groups from AWS HyperPod cluster.
+
+        Returns a dict mapping instance group name to instance type.
+        """
+        try:
+            response = self.sagemaker.describe_cluster(ClusterName=cluster_name)
+            instance_groups = response.get('InstanceGroups', [])
+            return {
+                ig['InstanceGroupName']: ig['InstanceType']
+                for ig in instance_groups
+            }
+        except Exception as e:
+            logger.error(f"Error getting instance groups: {e}")
+            return {}
 
     def wait_for_hyperpod_cluster(self, cluster_name: str, timeout: int = 3600) -> Dict[str, Any]:
         """Wait for HyperPod cluster to become InService."""
@@ -542,73 +646,29 @@ class ClusterJobExecutor:
         node_recovery: Optional[str] = None,
         enable_tiered_storage: Optional[bool] = None,
         tiered_storage_memory_percentage: Optional[int] = None,
+        instance_groups_to_delete: Optional[List[str]] = None,
+        existing_group_names: Optional[List[str]] = None,
+        default_security_group_ids: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Update HyperPod cluster instance groups and/or tiered storage config."""
         # Validate: HyperPod clusters require at least 1 instance group
         if not instance_groups or len(instance_groups) == 0:
             raise ValueError("HyperPod clusters require at least 1 instance group. Cannot delete all instance groups.")
 
-        # Build instance groups config
-        instance_groups_config = []
-        for ig in instance_groups:
-            ig_config = {
-                'InstanceGroupName': ig['name'],
-                'InstanceType': ig['instance_type'],
-                'InstanceCount': ig.get('instance_count', 0),
-                'ExecutionRole': execution_role_arn,
-                'ThreadsPerCore': ig.get('threads_per_core', 1),
-            }
+        existing_names_set = set(existing_group_names) if existing_group_names else set()
 
-            # MinInstanceCount is only supported when NodeProvisioningMode is Continuous
-            if node_provisioning_mode == 'Continuous' and ig.get('min_instance_count') is not None:
-                ig_config['MinInstanceCount'] = ig['min_instance_count']
-
-            # LifeCycleConfig is required
-            if lifecycle_script_s3_uri:
-                lifecycle_config = {
-                    'SourceS3Uri': lifecycle_script_s3_uri,
-                    'OnCreate': 'on_create.sh'
-                }
-
-                # Add deep health checks if enabled
-                health_checks = []
-                if ig.get('enable_instance_stress_check', False):
-                    health_checks.append('InstanceStress')
-                if ig.get('enable_instance_connectivity_check', False):
-                    health_checks.append('InstanceConnectivity')
-
-                if health_checks:
-                    lifecycle_config['OnStartDeepHealthChecks'] = health_checks
-
-                ig_config['LifeCycleConfig'] = lifecycle_config
-            else:
-                raise ValueError("lifecycle_script_s3_uri is required for updating HyperPod cluster instance groups")
-
-            # Kubernetes labels
-            k8s_labels = ig.get('kubernetes_labels') or {}
-            if ig.get('use_spot'):
-                k8s_labels['node-lifecycle'] = 'spot'
-
-            if k8s_labels:
-                ig_config['KubernetesConfig'] = {
-                    'Labels': k8s_labels
-                }
-
-            # Training Plan ARN
-            training_plan_arn = ig.get('training_plan_arn')
-            if training_plan_arn:
-                ig_config['TrainingPlanArn'] = training_plan_arn
-
-            # Storage volume
-            storage_volume_size = ig.get('storage_volume_size', 500)
-            if storage_volume_size and storage_volume_size > 0:
-                ig_config['InstanceStorageConfigs'] = [{
-                    'EbsVolumeConfig': {
-                        'VolumeSizeInGB': storage_volume_size
-                    }
-                }]
-
-            instance_groups_config.append(ig_config)
+        # Build instance groups config using helper method
+        instance_groups_config = [
+            self._build_instance_group_config(
+                ig=ig,
+                execution_role_arn=execution_role_arn,
+                lifecycle_script_s3_uri=lifecycle_script_s3_uri,
+                node_provisioning_mode=node_provisioning_mode,
+                is_new_group=(ig['name'] not in existing_names_set),
+                default_security_group_ids=default_security_group_ids
+            )
+            for ig in instance_groups
+        ]
 
         try:
             # Build update params
@@ -616,6 +676,11 @@ class ClusterJobExecutor:
                 'ClusterName': cluster_name,
                 'InstanceGroups': instance_groups_config
             }
+
+            # Add InstanceGroupsToDelete if specified
+            if instance_groups_to_delete:
+                update_params['InstanceGroupsToDelete'] = instance_groups_to_delete
+                logger.info(f"Deleting instance groups: {instance_groups_to_delete}")
 
             # Add NodeRecovery if specified
             if node_recovery:
@@ -967,22 +1032,11 @@ async def update_cluster(request: UpdateClusterRequest) -> CommonResponse:
             }
         )
 
-    # Update config in database
+    # Get current cluster config
     cluster_config = cluster.cluster_config or {}
 
-    if request.instance_groups is not None:
-        instance_groups_dict = [ig.dict() for ig in request.instance_groups]
-        cluster_config['instance_groups'] = instance_groups_dict
-        # Also update the instance_groups column for proper retrieval
-        database.update_cluster_instance_groups(request.cluster_id, instance_groups_dict)
-
-    if request.hyperpod_config:
-        cluster_config['hyperpod_config'] = request.hyperpod_config.dict()
-
-    database.update_cluster_config(request.cluster_id, cluster_config)
-
-    # If instance groups are being updated, call AWS API
-    # Use 'is not None' to handle empty list case (when all groups are deleted)
+    # If instance groups are being updated and cluster is ACTIVE, call AWS API first
+    # Database update happens AFTER successful AWS validation and API call
     if request.instance_groups is not None and cluster_status_str == ClusterStatus.ACTIVE.value:
         # Validate: HyperPod clusters require at least 1 instance group
         if len(request.instance_groups) == 0:
@@ -994,9 +1048,47 @@ async def update_cluster(request: UpdateClusterRequest) -> CommonResponse:
                 }
             )
 
-        logger.info(f"Calling AWS API to update instance groups for cluster {cluster.cluster_name}, groups: {[ig.dict() for ig in request.instance_groups]}")
         try:
             executor = ClusterJobExecutor(request.cluster_id)
+
+            # Validate and compute instance group changes
+            current_instance_groups = executor.get_hyperpod_instance_groups(cluster.cluster_name)
+            instance_groups_to_delete = []
+
+            if current_instance_groups:
+                requested_group_names = {ig.name for ig in request.instance_groups}
+                current_group_names = set(current_instance_groups.keys())
+
+                # Compute instance groups to delete (using InstanceGroupsToDelete API parameter)
+                groups_to_delete = current_group_names - requested_group_names
+                if groups_to_delete:
+                    instance_groups_to_delete = list(groups_to_delete)
+                    logger.info(f"Instance groups to delete: {instance_groups_to_delete}")
+
+                # Check: Attempting to change instance type (not supported by AWS)
+                instance_type_changes = []
+                for ig in request.instance_groups:
+                    if ig.name in current_instance_groups:
+                        current_type = current_instance_groups[ig.name]
+                        if ig.instance_type != current_type:
+                            instance_type_changes.append(
+                                f"{ig.name}: {current_type} -> {ig.instance_type}"
+                            )
+                if instance_type_changes:
+                    error_msg = (
+                        f"Cannot change instance type for existing instance groups. "
+                        f"AWS HyperPod does not support this operation. "
+                        f"Attempted changes: {', '.join(instance_type_changes)}. "
+                        f"To use a different instance type, create a new instance group."
+                    )
+                    logger.warning(error_msg)
+                    return CommonResponse(
+                        response_id=str(uuid.uuid4()),
+                        response={
+                            'statusCode': 400,
+                            'body': error_msg
+                        }
+                    )
 
             # Get execution role ARN (should be stored or derived)
             hyperpod_role_name = f'{cluster.cluster_name}-hyperpod-role'
@@ -1019,6 +1111,18 @@ async def update_cluster(request: UpdateClusterRequest) -> CommonResponse:
                 enable_tiered_storage = request.hyperpod_config.enable_tiered_storage
                 tiered_storage_memory_percentage = request.hyperpod_config.tiered_storage_memory_percentage
 
+            # Get list of existing group names for proper handling of CapacityRequirements
+            existing_group_names = list(current_instance_groups.keys()) if current_instance_groups else []
+
+            # Get security group IDs for OverrideVpcConfig
+            # Check both vpc_config.security_group_ids and cluster_config.security_group_ids
+            vpc_config = cluster_config.get('vpc_config', {})
+            default_security_group_ids = vpc_config.get('security_group_ids', []) if vpc_config else []
+            if not default_security_group_ids:
+                default_security_group_ids = cluster_config.get('security_group_ids', [])
+
+            logger.info(f"Calling AWS API to update instance groups for cluster {cluster.cluster_name}, groups: {instance_groups_dict}, delete: {instance_groups_to_delete or []}, existing: {existing_group_names}")
+
             # Call AWS API to update cluster
             executor.update_hyperpod_cluster(
                 cluster_name=cluster.cluster_name,
@@ -1026,9 +1130,18 @@ async def update_cluster(request: UpdateClusterRequest) -> CommonResponse:
                 execution_role_arn=execution_role_arn,
                 lifecycle_script_s3_uri=lifecycle_script_s3_uri,
                 enable_tiered_storage=enable_tiered_storage,
-                tiered_storage_memory_percentage=tiered_storage_memory_percentage
+                tiered_storage_memory_percentage=tiered_storage_memory_percentage,
+                instance_groups_to_delete=instance_groups_to_delete if instance_groups_to_delete else None,
+                existing_group_names=existing_group_names,
+                default_security_group_ids=default_security_group_ids
             )
 
+            # AWS call succeeded - now update database
+            cluster_config['instance_groups'] = instance_groups_dict
+            if request.hyperpod_config:
+                cluster_config['hyperpod_config'] = request.hyperpod_config.dict()
+            database.update_cluster_config(request.cluster_id, cluster_config)
+            database.update_cluster_instance_groups(request.cluster_id, instance_groups_dict)
             database.set_cluster_status(request.cluster_id, ClusterStatus.UPDATING)
 
             return CommonResponse(
@@ -1043,7 +1156,7 @@ async def update_cluster(request: UpdateClusterRequest) -> CommonResponse:
             )
         except Exception as e:
             logger.error(f"Failed to update cluster: {e}")
-            database.update_cluster_error(request.cluster_id, str(e))
+            sync_cluster_status_on_error(request.cluster_id, cluster.cluster_name, e)
             return CommonResponse(
                 response_id=str(uuid.uuid4()),
                 response={
@@ -1052,9 +1165,21 @@ async def update_cluster(request: UpdateClusterRequest) -> CommonResponse:
                 }
             )
 
-    # Just update database config (no AWS API call needed)
+    # Just update database config (no AWS API call needed when cluster is not ACTIVE)
     if request.instance_groups is not None and cluster_status_str != ClusterStatus.ACTIVE.value:
-        logger.warning(f"Cluster {cluster.cluster_name} is not ACTIVE (status: {cluster_status_str}), skipping AWS API call for instance groups update")
+        logger.warning(f"Cluster {cluster.cluster_name} is not ACTIVE (status: {cluster_status_str}), updating database only")
+        instance_groups_dict = [ig.dict() for ig in request.instance_groups]
+        cluster_config['instance_groups'] = instance_groups_dict
+        if request.hyperpod_config:
+            cluster_config['hyperpod_config'] = request.hyperpod_config.dict()
+        database.update_cluster_config(request.cluster_id, cluster_config)
+        database.update_cluster_instance_groups(request.cluster_id, instance_groups_dict)
+
+    # Handle case where only hyperpod_config is being updated (without instance groups, when not ACTIVE)
+    elif request.instance_groups is None and request.hyperpod_config and cluster_status_str != ClusterStatus.ACTIVE.value:
+        logger.warning(f"Cluster {cluster.cluster_name} is not ACTIVE (status: {cluster_status_str}), updating database only")
+        cluster_config['hyperpod_config'] = request.hyperpod_config.dict()
+        database.update_cluster_config(request.cluster_id, cluster_config)
 
     # Handle case where only tiered storage config is being updated (without instance groups)
     if request.instance_groups is None and request.hyperpod_config and cluster_status_str == ClusterStatus.ACTIVE.value:
@@ -1086,13 +1211,25 @@ async def update_cluster(request: UpdateClusterRequest) -> CommonResponse:
                     )
 
                 # Call AWS API with current instance groups and new tiered storage config
+                # All groups are existing since we're only updating tiered storage
+                existing_group_names = [ig.get('name') for ig in current_instance_groups if ig.get('name')]
+
+                # Get security group IDs for OverrideVpcConfig
+                # Check both vpc_config.security_group_ids and cluster_config.security_group_ids
+                vpc_config = cluster_config.get('vpc_config', {})
+                default_security_group_ids = vpc_config.get('security_group_ids', []) if vpc_config else []
+                if not default_security_group_ids:
+                    default_security_group_ids = cluster_config.get('security_group_ids', [])
+
                 executor.update_hyperpod_cluster(
                     cluster_name=cluster.cluster_name,
                     instance_groups=current_instance_groups,
                     execution_role_arn=execution_role_arn,
                     lifecycle_script_s3_uri=lifecycle_script_s3_uri,
                     enable_tiered_storage=request.hyperpod_config.enable_tiered_storage,
-                    tiered_storage_memory_percentage=request.hyperpod_config.tiered_storage_memory_percentage
+                    tiered_storage_memory_percentage=request.hyperpod_config.tiered_storage_memory_percentage,
+                    existing_group_names=existing_group_names,
+                    default_security_group_ids=default_security_group_ids
                 )
 
                 database.set_cluster_status(request.cluster_id, ClusterStatus.UPDATING)
@@ -1109,7 +1246,7 @@ async def update_cluster(request: UpdateClusterRequest) -> CommonResponse:
                 )
             except Exception as e:
                 logger.error(f"Failed to update cluster tiered storage: {e}")
-                database.update_cluster_error(request.cluster_id, str(e))
+                sync_cluster_status_on_error(request.cluster_id, cluster.cluster_name, e)
                 return CommonResponse(
                     response_id=str(uuid.uuid4()),
                     response={
@@ -1141,21 +1278,90 @@ def get_cluster_status(cluster_id: str) -> ClusterStatus:
     # Check HyperPod cluster status
     hp_status, error_msg = executor.get_hyperpod_cluster_status(cluster.cluster_name)
 
-    status_mapping = {
-        'Creating': ClusterStatus.CREATING,
-        'Updating': ClusterStatus.UPDATING,
-        'InService': ClusterStatus.ACTIVE,
-        'Deleting': ClusterStatus.DELETING,
-        'Failed': ClusterStatus.FAILED,
-        'NOTFOUND': ClusterStatus.DELETED,
-        'ERROR': ClusterStatus.FAILED
-    }
-
-    new_status = status_mapping.get(hp_status, ClusterStatus.PENDING)
+    # Use global status mapping constant
+    new_status = HYPERPOD_STATUS_MAPPING.get(hp_status, ClusterStatus.PENDING)
 
     # Update database
     database.set_cluster_status(cluster_id, new_status)
     if error_msg:
-        database.update_cluster_error(cluster_id, error_msg)
+        # Only set error message, don't change status (status already set above)
+        database.set_cluster_error_message(cluster_id, error_msg)
 
     return new_status
+
+
+async def get_cluster_subnets(cluster_id: str) -> Dict[str, Any]:
+    """
+    Get subnet information for a cluster with availability zone details.
+
+    Returns a dict with:
+    - subnets: list of SubnetInfo dicts containing subnet_id, availability_zone, etc.
+    - security_group_ids: list of security group IDs from cluster config
+    """
+    cluster = database.get_cluster_by_id(cluster_id)
+
+    if not cluster:
+        return {'subnets': [], 'security_group_ids': []}
+
+    # Get subnet IDs from cluster config
+    subnet_ids = cluster.subnet_ids or []
+    if not subnet_ids:
+        # Try to get from cluster_config.vpc_config
+        cluster_config = cluster.cluster_config or {}
+        vpc_config = cluster_config.get('vpc_config', {})
+        if vpc_config:
+            subnet_ids = vpc_config.get('subnet_ids', [])
+
+    if not subnet_ids:
+        return {'subnets': [], 'security_group_ids': []}
+
+    try:
+        executor = ClusterJobExecutor(cluster_id)
+
+        # Describe subnets using EC2 API
+        response = executor.ec2.describe_subnets(SubnetIds=subnet_ids)
+
+        subnets = []
+        for subnet in response.get('Subnets', []):
+            # Extract Name tag
+            name = None
+            for tag in subnet.get('Tags', []):
+                if tag['Key'] == 'Name':
+                    name = tag['Value']
+                    break
+
+            # Determine if public (has route to IGW - approximation based on MapPublicIpOnLaunch)
+            is_public = subnet.get('MapPublicIpOnLaunch', False)
+
+            subnet_info = {
+                'subnet_id': subnet['SubnetId'],
+                'availability_zone': subnet['AvailabilityZone'],
+                'availability_zone_id': subnet['AvailabilityZoneId'],
+                'cidr_block': subnet.get('CidrBlock'),
+                'name': name,
+                'is_public': is_public
+            }
+            subnets.append(subnet_info)
+
+        # Sort by availability zone
+        subnets.sort(key=lambda x: x['availability_zone'])
+
+        # Get security group IDs from cluster config
+        # Check both vpc_config.security_group_ids and cluster_config.security_group_ids
+        security_group_ids = []
+        cluster_config = cluster.cluster_config or {}
+        vpc_config = cluster_config.get('vpc_config', {})
+        if vpc_config:
+            security_group_ids = vpc_config.get('security_group_ids', [])
+        # Also check top-level security_group_ids in cluster_config
+        if not security_group_ids:
+            security_group_ids = cluster_config.get('security_group_ids', [])
+
+        return {
+            'subnets': subnets,
+            'security_group_ids': security_group_ids
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get cluster subnets: {e}")
+        return {'subnets': [], 'security_group_ids': []}
